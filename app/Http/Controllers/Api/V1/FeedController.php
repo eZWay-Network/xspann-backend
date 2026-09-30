@@ -3,42 +3,32 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\VideoResource;
 use App\Models\Video;
-use App\Services\PaginatesApiResponses;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use App\Http\Resources\VideoResource;
+use Spark\Http\{Request, Resources\JsonResource};
 
 class FeedController extends Controller
 {
-    use PaginatesApiResponses;
-
-    public function index(Request $request): JsonResponse
+    public function index(Request $request): JsonResource
     {
-        $videos = Video::query()
-            ->published()
+        $videos = Video::published()
             ->visibleTo($request->user())
-            ->withViewerState($request->user())
-            ->with('user')
-            ->orderByDesc('created_at')
-            ->paginate($request->integer('limit', 10));
+            ->withApiData($request->user())
+            ->latest()
+            ->paginate(max(1, min(100, $request->integer('limit', 10))));
 
-        return $this->paginated($videos, fn ($video) => new VideoResource($video, $request->user()), $request);
+        return VideoResource::collection($videos);
     }
 
-    public function following(Request $request): JsonResponse
+    public function following(Request $request): JsonResource
     {
-        $followingIds = $request->user()->following()->pluck('users.id');
-
-        $videos = Video::query()
-            ->published()
+        $videos = Video::published()
             ->visibleTo($request->user())
-            ->whereIn('user_id', $followingIds)
-            ->withViewerState($request->user())
-            ->with('user')
+            ->whereIn('videos.user_id', $request->user()->following()->select('users.id'))
+            ->withApiData($request->user())
             ->latest()
-            ->paginate($request->integer('limit', 10));
+            ->paginate(max(1, min(100, $request->integer('limit', 10))));
 
-        return $this->paginated($videos, fn ($video) => new VideoResource($video, $request->user()), $request);
+        return VideoResource::collection($videos);
     }
 }

@@ -3,38 +3,56 @@
 namespace App\Jobs;
 
 use App\Models\Video;
-use App\Services\VideoMetadataExtractor;
-use App\Services\VideoStorage;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Queue\Queueable;
+use App\Services\{VideoMetadataExtractor, StorageService};
+use Spark\Facades\Lock;
+use Spark\Queue\Contracts\JobInterface;
+use Spark\Queue\Dispatchable;
 use Throwable;
+use function sprintf;
 
-class ProcessVideo implements ShouldQueue
+class ProcessVideo implements JobInterface
 {
-    use Queueable;
+    use Dispatchable;
 
-    public function __construct(public int $videoId) {}
+    public int $tries = 1;
+
+    public function __construct(public int $videoId)
+    {
+    }
 
     public function handle(): void
     {
-        $video = Video::find($this->videoId);
+        $key = sprintf('videos.process.%d', $this->videoId);
 
-        if (! $video || $video->status !== Video::STATUS_PROCESSING) {
-            return;
-        }
+        Lock::withLock($key, function (): void {
+            $video = Video::find($this->videoId);
 
-        try {
-            $publicUrl = $video->video_url ?: app(VideoStorage::class)->publicUrl($video->storage_path);
+            if (!$video || $video->status !== Video::STATUS_PROCESSING) {
+                return;
+            }
+
             $metadata = app(VideoMetadataExtractor::class)->extract($video);
 
-            $video->forceFill([
-                'video_url' => $publicUrl,
-                'thumbnail_url' => $video->thumbnail_url ?: ($metadata['thumbnail_url'] ?? null),
-                'duration' => $video->duration ?: ($metadata['duration'] ?? null),
-                'status' => Video::STATUS_PUBLISHED,
-            ])->save();
-        } catch (Throwable) {
-            $video->forceFill(['status' => Video::STATUS_FAILED])->save();
-        }
+            // Keep an owner deletion from being overwritten by a running job.
+            $updated = Video::whereKey($video->id)
+                ->where('status', Video::STATUS_PROCESSING)
+                ->update([
+                    'thumbnail_url' => $video->thumbnail_url ?: ($metadata['thumbnail_url'] ?? null),
+                    'duration' => $video->duration ?: ($metadata['duration'] ?? null),
+                    'status' => Video::STATUS_PUBLISHED,
+                    'updated_at' => now(),
+                ]);
+
+            if ((!$updated || $video->thumbnail_url) && isset($metadata['thumbnail_path'])) {
+                StorageService::disk()->delete($metadata['thumbnail_path']);
+            }
+        }, timeout: 1800, waitTimeout: 5);
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        Video::whereKey($this->videoId)
+            ->where('status', Video::STATUS_PROCESSING)
+            ->update(['status' => Video::STATUS_FAILED, 'updated_at' => now()]);
     }
 }

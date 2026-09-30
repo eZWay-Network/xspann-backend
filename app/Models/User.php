@@ -2,26 +2,14 @@
 
 namespace App\Models;
 
-use Database\Factories\UserFactory;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
+use Spark\Database\Model;
+use Spark\Database\QueryBuilder;
+use Spark\Database\Relation\HasMany;
+use Spark\Database\Relation\BelongsToMany;
 
-#[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements MustVerifyEmail
+class User extends Model
 {
-    /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
-
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
+    protected array $fillable = [
         'name',
         'username',
         'email',
@@ -32,22 +20,62 @@ class User extends Authenticatable implements MustVerifyEmail
         'email_verified_at',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    protected array $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
+
+    protected array $hidden = ['password', 'remember_token'];
+
+    public function authIdentities(): HasMany
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        return $this->hasMany(AuthIdentity::class);
     }
 
     public function videos(): HasMany
     {
         return $this->hasMany(Video::class);
+    }
+
+    public function scopeVisibleTo(QueryBuilder $query, ?User $viewer): QueryBuilder
+    {
+        return $query->where('users.status', 'active')
+            ->when(
+                $viewer,
+                fn($query) => $query
+                    ->whereNotIn('users.id', Block::select('blocked_id')->where('blocker_id', $viewer->id))
+                    ->whereNotIn('users.id', Block::select('blocker_id')->where('blocked_id', $viewer->id))
+            );
+    }
+
+    public function scopeWithApiData(QueryBuilder $query, ?User $viewer, bool $profile = false): QueryBuilder
+    {
+        $query->withCount('followers')
+            ->withCount('following');
+
+        if ($viewer) {
+            $query->withExists('followers as viewer_following', fn($query) => $query->whereKey($viewer->id));
+        }
+
+        if ($profile) {
+            return $query
+                ->withCount('videos', fn($query) => $query->published()->visibleTo($viewer))
+                ->withSum('videos as likes_count', 'likes_count', fn($query) => $query->published()->visibleTo($viewer));
+        }
+
+        foreach (['thumbnail_url' => 'cover_url', 'storage_path' => 'cover_video_url'] as $column => $alias) {
+            $query->selectSub(
+                Video::select($column)
+                    ->published()->visibleTo($viewer)
+                    ->whereColumn('videos.user_id', 'users.id')
+                    ->latest()
+                    ->orderBy('videos.id', 'DESC')
+                    ->limit(1),
+                $alias
+            );
+        }
+
+        return $query;
     }
 
     public function likes(): HasMany
@@ -72,23 +100,36 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function followers(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'follows', 'following_id', 'follower_id')
-            ->withTimestamps();
+        return $this->belongsToMany(User::class, 'follows', 'following_id', 'follower_id');
     }
 
     public function following(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'follows', 'follower_id', 'following_id')
-            ->withTimestamps();
+        return $this->belongsToMany(User::class, 'follows', 'follower_id', 'following_id');
     }
 
     public function likedVideos(): BelongsToMany
     {
-        return $this->belongsToMany(Video::class, 'likes')->withTimestamps();
+        return $this->belongsToMany(Video::class, 'likes');
     }
 
     public function savedVideos(): BelongsToMany
     {
-        return $this->belongsToMany(Video::class, 'saves')->withTimestamps();
+        return $this->belongsToMany(Video::class, 'saves');
+    }
+
+    public function setAvatarAttribute(?string $value): ?string
+    {
+        return \App\Services\StorageService::storedValue($value);
+    }
+
+    public function getNameAttribute(): string
+    {
+        return $this->attributes['name'] ?? $this->attributes['username'];
+    }
+
+    public function hasVerifiedEmail(): bool
+    {
+        return !empty($this->attributes['email_verified_at']);
     }
 }

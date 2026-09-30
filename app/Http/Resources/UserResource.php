@@ -2,40 +2,25 @@
 
 namespace App\Http\Resources;
 
-use App\Models\User;
-use App\Services\VideoStorage;
-use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\JsonResource;
+use App\Services\StorageService;
+use Spark\Http\Request;
+use Spark\Http\Resources\JsonResource;
 
 class UserResource extends JsonResource
 {
-    public function __construct($resource, private readonly ?User $viewer = null)
+    public function toArray(?Request $request = null): array
     {
-        parent::__construct($resource);
-    }
-
-    public function toArray(Request $request): array
-    {
-        $storage = app(VideoStorage::class);
-        $coverVideo = $this->videos()
-            ->published()
-            ->visibleTo($this->viewer)
-            ->latest()
-            ->first(['thumbnail_url', 'video_url']);
-
         return [
             'id' => $this->id,
             'name' => $this->name,
             'username' => $this->username,
-            'avatar' => $this->avatar,
+            'avatar' => StorageService::publicUrl($this->avatar),
             'bio' => $this->bio,
-            'followers_count' => $this->followers()->count(),
-            'following_count' => $this->following()->count(),
-            'following' => $this->viewer
-                ? $this->viewer->following()->whereKey($this->id)->exists()
-                : false,
-            'cover_url' => $storage->normalizeLocalPublicUrl($coverVideo?->thumbnail_url),
-            'cover_video_url' => $storage->normalizeLocalPublicUrl($coverVideo?->video_url),
+            'followers_count' => (int) $this->followers_count,
+            'following_count' => (int) $this->following_count,
+            'following' => (bool) $this->viewer_following,
+            'cover_url' => StorageService::publicUrl($this->cover_url),
+            'cover_video_url' => StorageService::publicUrl($this->cover_video_url),
         ];
     }
 }

@@ -1,93 +1,60 @@
 {
-    "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "tinymvc/skeleton",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "TinyMvc is a minimalist PHP framework to craft blazing-fast RESTful APIs and modern web apps.",
+    "keywords": ["shahinmoyshan", "tinymvc", "tinycore", "mvc", "web framework", "php framework", "framework"],
     "license": "MIT",
     "require": {
-        "php": "^8.3",
-        "laravel/framework": "^13.17",
-        "laravel/sanctum": "^4.3",
-        "laravel/tinker": "^3.0",
-        "league/flysystem-aws-s3-v3": "^3.35"
+        "php": ">=8.2",
+        "tinymvc/tinycore": "^3.0",
+        "phpmailer/phpmailer": "^6.9",
+        "voku/portable-ascii": "^2.0"
     },
-    "require-dev": {
-        "fakerphp/faker": "^1.23",
-        "laravel/pail": "^1.2.5",
-        "laravel/pao": "^1.0.6",
-        "laravel/pint": "^1.27",
-        "mockery/mockery": "^1.6",
-        "nunomaduro/collision": "^8.6",
-        "phpunit/phpunit": "^12.5.12"
-    },
+    "authors": [
+        {
+            "name": "Shahin Moyshan",
+            "email": "shahin.moyshan2@gmail.com"
+        }
+    ],
     "autoload": {
         "psr-4": {
-            "App\\": "app/",
-            "Database\\Factories\\": "database/factories/",
-            "Database\\Seeders\\": "database/seeders/"
+            "App\\": "app/"
         }
+    },
+    "suggest": {
+        "phpmailer/phpmailer": "Required for sending emails (^6.9).",
+        "league/commonmark": "Required to use Str::markdown() and Stringable::markdown() (^2.6).",
+        "voku/portable-ascii": "Required to use on Str::slug() with non-english strings (^2.0).,",
+        "ramsey/uuid": "Required to use Str::uuid() (^4.7).",
+        "ext-curl": "Required for the HTTP client.",
+        "ext-fileinfo": "Required for upload and file MIME detection.",
+        "ext-gd": "Required for image manipulation.",
+        "ext-pdo_sqlite": "Required for the default sqlite cache, lock, and queue drivers.",
+        "ext-redis": "Required for redis cache, lock, and queue drivers."
+    },
+    "scripts": {
+        "post-root-package-install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "post-create-project-cmd": [
+            "@php spark key:generate"
+        ],
+        "setup": [
+            "composer install",
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "@php spark key:generate",
+            "@php spark migrate --seed",
+            "npm install",
+            "npm run build"
+        ],
+        "test": "@php test"
+    },
+    "config": {
+        "optimize-autoloader": true
     },
     "autoload-dev": {
         "psr-4": {
             "Tests\\": "tests/"
         }
-    },
-    "scripts": {
-        "setup": [
-            "composer install",
-            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
-            "@php artisan key:generate",
-            "@php artisan migrate --force",
-            "npm install --ignore-scripts",
-            "npm run build"
-        ],
-        "dev": [
-            "Composer\\Config::disableProcessTimeout",
-            "@php artisan dev"
-        ],
-        "serve:uploads": [
-            "Composer\\Config::disableProcessTimeout",
-            "@putenv PHP_CLI_SERVER_WORKERS=4",
-            "@php -d upload_max_filesize=512M -d post_max_size=520M -d memory_limit=1024M -d max_input_time=300 -d max_execution_time=300 -S 127.0.0.1:8000 -t public server.php"
-        ],
-        "test": [
-            "@php artisan config:clear --ansi @no_additional_args",
-            "@php artisan test"
-        ],
-        "post-autoload-dump": [
-            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
-            "@php artisan package:discover --ansi"
-        ],
-        "post-update-cmd": [
-            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
-        ],
-        "post-root-package-install": [
-            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
-        ],
-        "post-create-project-cmd": [
-            "@php artisan key:generate --ansi",
-            "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
-            "@php artisan migrate --graceful --ansi"
-        ],
-        "pre-package-uninstall": [
-            "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
-        ]
-    },
-    "extra": {
-        "laravel": {
-            "dont-discover": []
-        }
-    },
-    "config": {
-        "optimize-autoloader": true,
-        "preferred-install": "dist",
-        "sort-packages": true,
-        "allow-plugins": {
-            "pestphp/pest-plugin": true,
-            "php-http/discovery": true
-        }
-    },
-    "minimum-stability": "stable",
-    "prefer-stable": true
+    }
 }

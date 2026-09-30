@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spark\Database\Model;
+use Spark\Database\Relation\BelongsTo;
 
 class VideoView extends Model
 {
-    protected $fillable = [
+    protected const UPDATED_AT = null;
+
+    protected array $fillable = [
         'user_id',
         'video_id',
         'ip_hash',

@@ -2,15 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spark\Database\Model;
+use Spark\Database\Relation\BelongsTo;
 
 class Like extends Model
 {
-    /**
-     * @var list<string>
-     */
-    protected $fillable = ['user_id', 'video_id'];
+    protected const UPDATED_AT = null;
+
+    protected array $fillable = ['user_id', 'video_id'];
 
     public function user(): BelongsTo
     {

@@ -3,122 +3,105 @@
 namespace App\Services;
 
 use App\Models\Video;
-use Illuminate\Support\Facades\File;
-use Symfony\Component\Process\Process;
+use Spark\Console\Process;
+use Spark\Facades\Storage;
+use Spark\Utils\File;
 use Throwable;
 
 class VideoMetadataExtractor
 {
     /**
-     * @var list<string>
-     */
-    private array $temporarySources = [];
-
-    public function __construct(private readonly VideoStorage $storage) {}
-
-    /**
      * @return array{duration?: int|null, thumbnail_path?: string|null, thumbnail_url?: string|null}
      */
     public function extract(Video $video): array
     {
-        try {
-            $source = $this->sourcePath($video);
+        $temporary = [];
 
-            if (! $source) {
+        try {
+            if (!$video->storage_path) {
                 return [];
+            }
+
+            $location = StorageService::location($video->storage_path);
+            if (!$location) {
+                return [];
+            }
+
+            $disk = Storage::disk($location['disk']);
+            $key = $location['key'];
+
+            $source = $location['disk'] === 'public' ? $disk->path($key) : null;
+            if ($source !== null && !File::isFile($source)) {
+                throw new \RuntimeException('Uploaded video was not found.');
+            }
+
+            if ($source === null) {
+                $size = $disk->size($key);
+                if ($size < 1 || $size > ChunkUploads::MAX_BYTES) {
+                    throw new \RuntimeException('Uploaded video exceeds the supported size range.');
+                }
+
+                $source = $this->temporary('source');
+                $temporary[] = $source;
+                $disk->downloadFile($key, $source);
+
+                if (File::size($source) !== $size || !\in_array(File::mimeType($source), ChunkUploads::MIME_TYPES, true)) {
+                    throw new \RuntimeException('Uploaded video is incomplete or has an unsupported format.');
+                }
             }
 
             $duration = $this->duration($source);
             $coverTime = $this->coverTime($video, $duration);
             $thumbnail = $this->thumbnail($video, $source, $coverTime);
 
-            return array_filter([
-                'duration' => $duration,
-                'thumbnail_path' => $thumbnail['path'] ?? null,
-                'thumbnail_url' => $thumbnail['url'] ?? null,
-            ], fn ($value) => $value !== null);
+            return array_filter(['duration' => $duration !== null ? (int) ceil($duration) : null, ...$thumbnail], fn($value) => $value !== null);
         } finally {
-            File::delete($this->temporarySources);
-            $this->temporarySources = [];
+            File::delete($temporary);
         }
     }
 
-    private function sourcePath(Video $video): ?string
-    {
-        if ($video->storage_path) {
-            $localPath = $this->storage->localPath($video->storage_path);
-
-            if ($localPath) {
-                return $localPath;
-            }
-
-            if ($this->storage->disk()->exists($video->storage_path)) {
-                $extension = pathinfo($video->storage_path, PATHINFO_EXTENSION) ?: 'mp4';
-                $baseTemporaryPath = tempnam(sys_get_temp_dir(), 'xspann-video-');
-
-                if (! $baseTemporaryPath) {
-                    return null;
-                }
-
-                $temporaryPath = $baseTemporaryPath.'.'.$extension;
-                file_put_contents($temporaryPath, $this->storage->disk()->get($video->storage_path));
-                $this->temporarySources[] = $baseTemporaryPath;
-                $this->temporarySources[] = $temporaryPath;
-
-                return $temporaryPath;
-            }
-        }
-
-        return null;
-    }
-
-    private function duration(string $source): ?int
+    private function duration(string $source): ?float
     {
         try {
-            $process = new Process([
-                'ffprobe',
+            $probe = Process::run([
+                config('app.ffprobe', 'ffprobe'),
                 '-v',
                 'error',
+                '-protocol_whitelist',
+                'file,pipe',
                 '-show_entries',
                 'format=duration',
                 '-of',
                 'default=noprint_wrappers=1:nokey=1',
                 $source,
-            ]);
-            $process->setTimeout(30);
-            $process->run();
+            ], timeout: 30)->throw();
 
-            if (! $process->isSuccessful()) {
-                return null;
-            }
-
-            $duration = (float) trim($process->getOutput());
-
-            return $duration > 0 ? (int) ceil($duration) : null;
+            $seconds = (float) trim($probe->output());
+            return is_finite($seconds) && $seconds > 0 ? $seconds : null;
         } catch (Throwable) {
+            // Metadata is optional; decoder errors do not prevent publication.
             return null;
         }
     }
 
     /**
-     * @return array{path: string, url: string}|null
+     * @return array{thumbnail_path?: string, thumbnail_url?: string}
      */
-    private function thumbnail(Video $video, string $source, float $coverTime): ?array
+    private function thumbnail(Video $video, string $source, float $coverTime): array
     {
-        $baseThumbnail = tempnam(sys_get_temp_dir(), 'xspann-thumb-');
-
-        if (! $baseThumbnail) {
-            return null;
-        }
-
-        $thumbnail = $baseThumbnail.'.jpg';
+        $thumbnail = null;
 
         try {
-            $process = new Process([
-                'ffmpeg',
+            $thumbnail = $this->temporary('thumbnail');
+
+            Process::run([
+                config('app.ffmpeg', 'ffmpeg'),
+                '-nostdin',
                 '-y',
                 '-ss',
                 number_format($coverTime, 2, '.', ''),
+                '-protocol_whitelist',
+                'file,pipe',
                 '-i',
                 $source,
                 '-frames:v',
@@ -127,40 +110,52 @@ class VideoMetadataExtractor
                 'scale=720:-2',
                 '-q:v',
                 '3',
+                '-f',
+                'image2',
+                '-c:v',
+                'mjpeg',
                 $thumbnail,
-            ]);
-            $process->setTimeout(60);
-            $process->run();
+            ], timeout: 60)->throw();
 
-            if (! $process->isSuccessful() || ! is_file($thumbnail)) {
-                return null;
+            if (!File::isFile($thumbnail) || File::size($thumbnail) === 0) {
+                return [];
             }
 
-            $path = $this->storage->storeThumbnail($video->user_id, $thumbnail);
+            $path = StorageService::storeThumbnail((int) $video->user_id, $thumbnail);
 
             return [
-                'path' => $path,
-                'url' => $this->storage->publicUrl($path),
+                'thumbnail_path' => $path,
+                'thumbnail_url' => StorageService::storedValue($path)
             ];
         } catch (Throwable) {
-            return null;
+            return [];
         } finally {
-            File::delete([$baseThumbnail, $thumbnail]);
+            $thumbnail && File::delete($thumbnail);
         }
     }
 
-    private function coverTime(Video $video, ?int $duration): float
+    private function temporary(string $prefix): string
     {
-        if ($video->cover_time !== null) {
-            $coverTime = (float) $video->cover_time;
+        File::ensureDirectoryExists($directory = storage_dir('temp/video-processing'));
 
-            return $duration ? min(max($coverTime, 0), max($duration - 0.1, 0)) : max($coverTime, 0);
+        $path = tempnam($directory, $prefix);
+        if ($path === false) {
+            throw new \RuntimeException('Cannot create video staging file.');
         }
 
-        if ($duration && $duration > 10) {
-            return max(1, $duration * 0.1);
+        return $path;
+    }
+
+    private function coverTime(Video $video, ?float $duration): float
+    {
+        $coverTime = $video->cover_time !== null
+            ? (float) $video->cover_time
+            : ($duration !== null && $duration > 10 ? $duration * 0.1 : 1.0);
+
+        if ($duration !== null) {
+            return min(max($coverTime, 0), max($duration - 0.1, 0));
         }
 
-        return 1.0;
+        return max($coverTime, 0);
     }
 }

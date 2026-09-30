@@ -3,95 +3,108 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Videos\StoreVideoRequest;
-use App\Http\Requests\Videos\UpdateVideoRequest;
-use App\Http\Resources\VideoResource;
-use App\Jobs\ProcessVideo;
 use App\Models\Video;
-use App\Services\PaginatesApiResponses;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use App\Http\Resources\VideoResource;
+use App\Services\StorageService;
+use App\Http\Requests\Videos\{StoreVideoRequest, UpdateVideoRequest};
+use App\Jobs\{ProcessVideo, DeleteVideo};
+use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class VideoController extends Controller
 {
-    use PaginatesApiResponses;
-
-    public function index(Request $request): JsonResponse
+    public function index(Request $request): JsonResource
     {
         $videos = Video::query()
             ->published()
             ->visibleTo($request->user())
-            ->withViewerState($request->user())
-            ->with('user')
+            ->withApiData($request->user())
             ->latest()
-            ->paginate($request->integer('limit', 10));
+            ->paginate(max(1, min(100, $request->integer('limit', 10))));
 
-        return $this->paginated($videos, fn ($video) => new VideoResource($video, $request->user()), $request);
+        return VideoResource::collection($videos);
     }
 
-    public function show(Request $request, Video $video): JsonResponse
+    public function show(Request $request, Video $video): JsonResource
     {
-        abort_if($video->status === Video::STATUS_DELETED, 404);
-        abort_if($video->status !== Video::STATUS_PUBLISHED && $request->user()?->id !== $video->user_id, 404);
-        abort_unless(Video::query()->whereKey($video->id)->visibleTo($request->user())->exists(), 404);
+        abort_if(
+            $video->status === Video::STATUS_DELETED,
+            404,
+            'Video not found.'
+        );
 
-        return response()->json([
-            'data' => (new VideoResource($video, $request->user()))->resolve($request),
-        ]);
+        abort_if(
+            $video->status !== Video::STATUS_PUBLISHED && $request->user('id') !== $video->user_id,
+            404,
+            'Video not found.'
+        );
+
+        abort_unless(
+            Video::whereKey($video->id)->visibleTo($request->user())->exists(),
+            404,
+            'Video not found.'
+        );
+
+        return VideoResource::make(Video::withApiData($request->user())->findOrFail($video->id));
     }
 
-    public function store(StoreVideoRequest $request): JsonResponse
+    public function store(StoreVideoRequest $request): Response
     {
-        $video = $request->user()->videos()->create([
-            ...$request->validated(),
-            'status' => Video::STATUS_PROCESSING,
-        ]);
+        $input = $request->validated();
+
+        StorageService::validateOwner($input->storage_path, $request->user('id'), 'storage_path', 'videos', true);
+        StorageService::validateOwner($input->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
+        StorageService::validateOwner($input->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');
+
+        $input->set('status', Video::STATUS_PROCESSING);
+
+        $video = $request->user()->videos()->create($input);
 
         ProcessVideo::dispatch($video->id);
 
-        return response()->json([
-            'data' => (new VideoResource($video->fresh('user'), $request->user()))->resolve($request),
-        ], 201);
+        return VideoResource::make(Video::withApiData($request->user())->findOrFail($video->id))->response(201);
     }
 
-    public function mine(Request $request): JsonResponse
+    public function mine(Request $request): JsonResource
     {
         $videos = $request->user()
             ->videos()
             ->where('status', '!=', Video::STATUS_DELETED)
-            ->withViewerState($request->user())
-            ->with('user')
-            ->orderByDesc('pinned_at')
-            ->latest()
-            ->paginate($request->integer('limit', 20));
+            ->withApiData($request->user())
+            ->orderByRaw('pinned_at DESC, videos.created_at DESC')
+            ->paginate(max(1, min(100, $request->integer('limit', 20))));
 
-        return $this->paginated($videos, fn ($video) => new VideoResource($video, $request->user()), $request);
+        return VideoResource::collection($videos);
     }
 
-    public function update(UpdateVideoRequest $request, Video $video): JsonResponse
+    public function update(UpdateVideoRequest $request, Video $video): JsonResource
     {
-        $this->authorize('update', $video);
+        authorize('model.update', $video);
+        abort_if($video->status === Video::STATUS_DELETED, 404, 'Video not found.');
 
         $data = $request->validated();
 
-        if (array_key_exists('pinned', $data)) {
-            $data['pinned_at'] = $data['pinned'] ? now() : null;
+        StorageService::validateOwner($data->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
+        StorageService::validateOwner($data->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');
+
+        if ($data->has('pinned')) {
+            $data->set('pinned_at', $data->boolean('pinned') ? now()->toDateTimeString() : null);
+
             unset($data['pinned']);
         }
 
         $video->update($data);
 
-        return response()->json([
-            'data' => (new VideoResource($video->fresh('user'), $request->user()))->resolve($request),
-        ]);
+        return VideoResource::make(Video::withApiData($request->user())->findOrFail($video->id));
     }
 
-    public function destroy(Request $request, Video $video): JsonResponse
+    public function destroy(Video $video): Response
     {
-        $this->authorize('delete', $video);
+        authorize('model.delete', $video);
 
         $video->update(['status' => Video::STATUS_DELETED]);
 
-        return response()->json(['data' => ['message' => 'Video deleted']]);
+        DeleteVideo::dispatch((int) $video->id);
+
+        return json(['data' => ['message' => 'Video deleted']]);
     }
 }

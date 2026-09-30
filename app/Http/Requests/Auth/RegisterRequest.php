@@ -2,15 +2,10 @@
 
 namespace App\Http\Requests\Auth;
 
-use Illuminate\Foundation\Http\FormRequest;
+use Spark\Foundation\Http\FormRequest;
 
 class RegisterRequest extends FormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
-
     public function rules(): array
     {
         return [
@@ -20,6 +15,14 @@ class RegisterRequest extends FormRequest
             'name' => ['nullable', 'string', 'max:255'],
             'avatar' => ['nullable', 'url', 'max:2048'],
             'bio' => ['nullable', 'string', 'max:120'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'unique' => 'The %s has already been taken.',
+            'password.confirmed' => 'The password confirmation does not match.',
         ];
     }
 }

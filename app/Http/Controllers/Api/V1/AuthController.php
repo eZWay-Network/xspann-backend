@@ -3,203 +3,212 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Auth\LoginRequest;
-use App\Http\Requests\Auth\ProfileUpdateRequest;
-use App\Http\Requests\Auth\RegisterRequest;
-use App\Http\Resources\ProfileResource;
+use App\Http\Requests\Auth\{LoginRequest, RegisterRequest, ProfileUpdateRequest};
 use App\Models\User;
-use Illuminate\Auth\Events\PasswordReset;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
+use App\Http\Resources\ProfileResource;
+use App\Services\AccountNotifications;
+use App\Services\StorageService;
+use App\Services\Social\GoogleAuth;
+use Spark\Carbon;
+use Spark\Facades\Auth;
+use Spark\Facades\DB;
+use Spark\Facades\Hash;
+use Spark\Facades\Lock;
+use Spark\Foundation\Exceptions\ValidationException;
+use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class AuthController extends Controller
 {
-    public function register(RegisterRequest $request): JsonResponse
+    public function register(RegisterRequest $request, AccountNotifications $notifications): Response
     {
-        $data = $request->validated();
+        $user = DB::transaction(function () use ($request) {
+            $user = User::create($request->validated());
+            StorageService::validateOwner($user->avatar, $user->id, 'avatar', 'avatars');
 
-        $user = User::create([
-            'name' => $data['name'] ?? $data['username'],
-            'username' => $data['username'],
-            'email' => $data['email'],
-            'password' => $data['password'],
-            'avatar' => $data['avatar'] ?? null,
-            'bio' => $data['bio'] ?? null,
-        ]);
+            return $user;
+        });
 
-        return response()->json(['data' => $this->authPayload($request, $user)], 201);
+        $notifications->verify($user);
+
+        return json([
+            'data' => [
+                'user' => ProfileResource::make(User::withApiData($user, true)->findOrFail($user->id)),
+                'token' => null,
+                'token_expires_at' => null,
+                'message' => 'We have sent you an email to verify your account. Please check your inbox or spam folder.',
+            ]
+        ], 201);
     }
 
-    public function login(LoginRequest $request): JsonResponse
+    public function login(LoginRequest $request): Response
     {
-        $user = User::where('email', $request->validated('email'))->first();
+        $user = User::where('email', $request->validated()->email())->first();
 
-        if (! $user || ! Hash::check($request->validated('password'), $user->password)) {
+        if (!$user || !$user->password || !Hash::password($request->validated('password'), $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+                'email' => ['The provided credentials are incorrect.']
             ]);
         }
 
-        return response()->json(['data' => $this->authPayload($request, $user)]);
+        abort_unless($user->status === 'active', 403, 'This account is not active.');
+        abort_unless($user->hasVerifiedEmail(), 403, 'Please verify your email address before logging in.');
+
+        return json(['data' => $this->payload($user)]);
     }
 
-    public function logout(Request $request): JsonResponse
+    public function logout(): Response
     {
-        $request->user()->currentAccessToken()?->delete();
+        Auth::revokeToken();
 
-        return response()->json(['data' => ['message' => 'Logged out']]);
+        return json(['data' => ['message' => 'Logged out']]);
     }
 
-    public function me(Request $request): JsonResponse
+    public function me(): JsonResource
     {
-        return response()->json([
-            'data' => (new ProfileResource($request->user(), $request->user()))->resolve($request),
-        ]);
+        return ProfileResource::make(
+            User::with('authIdentities')->withApiData(Auth::user(), true)->findOrFail(Auth::id())
+        );
     }
 
-    public function update(ProfileUpdateRequest $request): JsonResponse
+    public function update(ProfileUpdateRequest $request): JsonResource
     {
+        StorageService::validateOwner($request->validated('avatar'), $request->user('id'), 'avatar', 'avatars');
+
         $request->user()->update($request->validated());
 
-        return response()->json([
-            'data' => (new ProfileResource($request->user()->fresh(), $request->user()))->resolve($request),
-        ]);
+        return ProfileResource::make(User::withApiData($request->user(), true)->findOrFail($request->user('id')));
     }
 
-    public function forgotPassword(Request $request): JsonResponse
+    public function forgotPassword(Request $request, AccountNotifications $notifications): Response
     {
-        $data = $request->validate([
-            'email' => ['required', 'email'],
-        ]);
+        $data = $request->validate(['email' => ['required', 'email']]);
+        $user = User::where('email', $data->email())->first();
 
-        $status = Password::sendResetLink($data);
-
-        if ($status === Password::RESET_THROTTLED) {
-            throw ValidationException::withMessages([
-                'email' => [__($status)],
-            ]);
+        if ($user) {
+            $notifications->reset($user);
         }
 
-        return response()->json([
-            'data' => [
-                'message' => 'If that email exists, a password reset link has been sent.',
-            ],
-        ]);
+        return json(['data' => ['message' => 'If that email exists, a password reset link has been sent.']]);
     }
 
-    public function resetPassword(Request $request): JsonResponse
+    public function resetPassword(Request $request): Response
     {
-        $data = $request->validate([
+        $input = $request->validate([
             'email' => ['required', 'email'],
             'token' => ['required', 'string'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $status = Password::reset(
-            $data,
-            function (User $user, string $password): void {
-                $user->forceFill([
-                    'password' => Hash::make($password),
-                    'remember_token' => Str::random(60),
-                ])->save();
+        Lock::withLock('accounts.reset.' . hash('sha256', $input->email()), function () use ($input) {
+            DB::transaction(function () use ($input) {
+                $reset = query('password_reset_tokens')
+                    ->where('email', $input->email())
+                    ->first();
 
-                $user->tokens()->delete();
+                $user = User::where('email', $input->email())->first();
+                if (
+                    !$reset || !$user || !Hash::password($input->token, $reset->token)
+                    || Carbon::parse($reset->created_at)->addMinutes(config('app.password_reset_expiration_minutes', 60))->isPast()
+                ) {
+                    abort(422, 'This password reset token is invalid.');
+                }
 
-                event(new PasswordReset($user));
-            }
-        );
+                $user->update(['password' => $input->password(), 'remember_token' => null]);
 
-        if ($status !== Password::PASSWORD_RESET) {
-            throw ValidationException::withMessages([
-                'email' => [__($status)],
-            ]);
-        }
+                query('jwt_access_tokens')->where('user_id', $user->id)->delete();
+                query('password_reset_tokens')->where('email', $user->email)->delete();
+            });
+        }, timeout: 10, waitTimeout: 5);
 
-        return response()->json([
-            'data' => ['message' => 'Password reset successfully. Please log in again.'],
-        ]);
+        return json(['data' => ['message' => 'Password reset successfully. Please log in again.']]);
     }
 
-    public function changePassword(Request $request): JsonResponse
+    public function changePassword(Request $request): Response
     {
         $data = $request->validate([
             'current_password' => ['required', 'string'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        if (! Hash::check($data['current_password'], $request->user()->password)) {
+        if (!$request->user('password') || !Hash::password($data['current_password'], $request->user('password'))) {
             throw ValidationException::withMessages([
-                'current_password' => ['The current password is incorrect.'],
+                'current_password' => ['The current password is incorrect.']
             ]);
         }
 
-        $request->user()->forceFill([
-            'password' => Hash::make($data['password']),
-            'remember_token' => Str::random(60),
-        ])->save();
+        DB::transaction(function () use ($request) {
+            $request->user()->update(['password' => $request->validated('password'), 'remember_token' => null]);
 
-        $request->user()->tokens()
-            ->where('id', '!=', $request->user()->currentAccessToken()?->id)
-            ->delete();
+            query('jwt_access_tokens')
+                ->where('user_id', $request->user('id'))
+                ->where('token_hash', '!=', Auth::token())
+                ->delete();
+        });
 
-        return response()->json([
-            'data' => ['message' => 'Password changed successfully.'],
-        ]);
+        return json(['data' => ['message' => 'Password changed successfully.']]);
     }
 
-    public function resendVerification(Request $request): JsonResponse
+    public function resendVerification(Request $request, AccountNotifications $notifications): Response
     {
-        if ($request->user()->hasVerifiedEmail()) {
-            return response()->json([
-                'data' => ['message' => 'Email is already verified.'],
-            ]);
+        $input = $request->validate(['email' => ['required', 'email']]);
+        $user = User::where('email', $input->email())
+            ->where('status', 'active')
+            ->first();
+
+        if ($user && !$user->hasVerifiedEmail()) {
+            $notifications->verify($user);
         }
 
-        $request->user()->sendEmailVerificationNotification();
-
-        return response()->json([
-            'data' => ['message' => 'Verification email sent.'],
-        ]);
+        return json(['data' => ['message' => 'If verification is needed, an email has been sent.']]);
     }
 
-    public function verifyEmail(Request $request, User $user, string $hash): JsonResponse
+    public function verifyEmail(User $user, string $hash, Request $request, AccountNotifications $notifications): Response
     {
-        if (! hash_equals($hash, sha1($user->getEmailForVerification()))) {
-            abort(403);
+        if (!$notifications->validVerification($request)) {
+            abort(403, 'Invalid signature.');
         }
 
-        if (! $user->hasVerifiedEmail()) {
-            $user->markEmailAsVerified();
+        if (!hash_equals(sha1($user->email), $hash)) {
+            abort(403, 'Invalid signature.');
         }
 
-        return response()->json([
-            'data' => ['message' => 'Email verified successfully.'],
-        ]);
+        if (!$user->hasVerifiedEmail()) {
+            $user->update(['email_verified_at' => now()]);
+        }
+
+        return view('verified', compact('user'));
     }
 
-    public function refreshToken(Request $request): JsonResponse
+    public function refreshToken(Request $request): Response
     {
-        $request->user()->currentAccessToken()?->delete();
+        $payload = DB::transaction(function () use ($request) {
+            Auth::revokeToken();
+            return $this->payload($request->user());
+        });
 
-        return response()->json([
-            'data' => $this->authPayload($request, $request->user()->fresh()),
-        ]);
+        return json(['data' => $payload]);
     }
 
-    private function authPayload(Request $request, User $user): array
+    public function social(Request $request, string $provider): Response
     {
-        $expirationMinutes = config('sanctum.expiration');
+        $service = match ($provider) {
+            'google' => app(GoogleAuth::class),
+            default => abort(404, 'This sign-in provider is not supported.'),
+        };
+
+        $request->validate(['token' => 'required|string|max:8192']);
+
+        return json(['data' => $this->payload($service->user($request->validated('token')))]);
+    }
+
+    private function payload(User $user): array
+    {
+        $expires = time() + max(1, config('app.api_token_expiration_minutes')) * 60;
 
         return [
-            'user' => (new ProfileResource($user, $user))->resolve($request),
-            'token' => $user->createToken($request->input('device_name', 'api'))->plainTextToken,
-            'token_expires_at' => $expirationMinutes
-                ? now()->addMinutes((int) $expirationMinutes)->toISOString()
-                : null,
+            'user' => ProfileResource::make(User::withApiData($user, true)->findOrFail($user->id)),
+            'token' => Auth::createToken($user, ['exp' => $expires]),
+            'token_expires_at' => Carbon::parse($expires)
         ];
     }
 }

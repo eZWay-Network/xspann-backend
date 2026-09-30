@@ -3,70 +3,63 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\VideoResource;
 use App\Models\Video;
-use App\Services\PaginatesApiResponses;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use App\Http\Resources\VideoResource;
+use App\Services\VideoActions;
+use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class SaveController extends Controller
 {
-    use PaginatesApiResponses;
-
-    public function index(Request $request): JsonResponse
+    public function index(Request $request): JsonResource
     {
         $videos = $request->user()
             ->savedVideos()
             ->published()
             ->visibleTo($request->user())
-            ->withViewerState($request->user())
-            ->with('user')
+            ->withApiData($request->user())
             ->latest('saves.created_at')
-            ->paginate($request->integer('limit', 10));
+            ->paginate(max(1, min(100, $request->integer('limit', 10))));
 
-        return $this->paginated($videos, fn ($video) => new VideoResource($video, $request->user()), $request);
+        return VideoResource::collection($videos);
     }
 
-    public function store(Request $request, Video $video): JsonResponse
+    public function store(Request $request, Video $video): Response
     {
-        abort_unless($video->status === Video::STATUS_PUBLISHED, 404);
-        abort_unless(Video::query()->whereKey($video->id)->visibleTo($request->user())->exists(), 404);
+        VideoActions::visible($video);
 
-        $created = false;
+        $created = VideoActions::transaction($video->id, function (Video $video) use ($request): bool {
+            $save = $video->saves()->firstOrCreate(['user_id' => $request->user('id')]);
 
-        DB::transaction(function () use ($request, $video, &$created): void {
-            $save = $video->saves()->firstOrCreate(['user_id' => $request->user()->id]);
-            $created = $save->wasRecentlyCreated;
-
-            if ($created) {
+            if ($created = $save->wasCreated()) {
                 $video->increment('saves_count');
             }
+
+            return $created;
         });
 
-        return response()->json([
+        return json([
             'data' => [
                 'saved' => true,
-                'saves_count' => $video->fresh()->saves_count,
+                'saves_count' => $video->refresh()->saves_count,
                 'created' => $created,
             ],
         ], $created ? 201 : 200);
     }
 
-    public function destroy(Request $request, Video $video): JsonResponse
+    public function destroy(Request $request, Video $video): Response
     {
-        DB::transaction(function () use ($request, $video): void {
-            $deleted = $video->saves()->where('user_id', $request->user()->id)->delete();
+        VideoActions::transaction($video->id, function (Video $video) use ($request): void {
+            $deleted = $video->saves()->where('user_id', $request->user('id'))->delete();
 
             if ($deleted && $video->saves_count > 0) {
                 $video->decrement('saves_count');
             }
         });
 
-        return response()->json([
+        return json([
             'data' => [
                 'saved' => false,
-                'saves_count' => $video->fresh()->saves_count,
+                'saves_count' => $video->refresh()->saves_count,
             ],
         ]);
     }

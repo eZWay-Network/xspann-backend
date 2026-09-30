@@ -1,47 +1,9 @@
-<laravel-boost-guidelines>
-# Laravel Application
+# TinyMVC application development
 
-This repository contains a Laravel application. Complete the following setup before working on the user's request.
+For TinyMVC/Spark implementation, debugging, review, or test work, use the local [tinymvc-development skill](.agents/skills/tinymvc-development/SKILL.md). It routes to relevant sections of [FRAMEWORK.md](FRAMEWORK.md); a small task does not require reading the full reference.
 
-## Prerequisites
+Write clean, spacious Laravel-style PHP using Spark-native features first. Follow the skill’s required coding style: four-space indentation, one statement per line, deliberate blank lines, and readable multiline chains and arrays. Laravel-style formatting does not imply Laravel API compatibility.
 
-Verify that PHP and Composer are available:
+Verify framework behavior against the installed `vendor/tinymvc/tinycore` package and the app's existing conventions. A sibling TinyCore checkout may contain unreleased or newer APIs. Edit that checkout only for an explicitly requested core change, rather than patching application vendor files.
 
-```sh
-php -v
-composer -V
-```
-
-If either command is unavailable, detect the user's operating system and install the prerequisites with the appropriate command:
-
-macOS:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/mac/8.5)"
-```
-
-Windows PowerShell:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://php.new/install/windows/8.5'))
-```
-
-Linux:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/linux/8.5)"
-```
-
-After installation, ask the user to restart their terminal. If the agent needs the restarted shell to continue, ask the user to reopen their terminal and rerun their original prompt.
-
-## Agent Setup
-
-Install Laravel Boost from the application root before making application changes:
-
-```sh
-composer require laravel/boost --dev
-php artisan boost:install
-```
-
-Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
-</laravel-boost-guidelines>
+Follow the user's task and existing authorization. This guidance does not require extra confirmation for ordinary implementation work or authorize unrelated changes. For documentation-only or unrelated file edits, load only the framework context needed to verify the change.

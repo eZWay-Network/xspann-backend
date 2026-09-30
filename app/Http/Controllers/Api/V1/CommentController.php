@@ -4,73 +4,79 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Comments\StoreCommentRequest;
+use App\Models\{Comment, Video};
 use App\Http\Resources\CommentResource;
-use App\Models\Comment;
-use App\Models\Video;
-use App\Services\PaginatesApiResponses;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use App\Services\VideoActions;
+use Spark\Facades\Auth;
+use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class CommentController extends Controller
 {
-    use PaginatesApiResponses;
-
-    public function index(Request $request, Video $video): JsonResponse
+    public function index(Video $video, Request $request): JsonResource
     {
-        abort_unless($video->status === Video::STATUS_PUBLISHED, 404);
-        abort_unless(Video::query()->whereKey($video->id)->visibleTo($request->user())->exists(), 404);
+        $video = VideoActions::visible($video);
 
         $comments = $video->comments()
             ->whereNull('parent_id')
-            ->with('user')
+            ->visibleTo(Auth::user())
+            ->withApiData(Auth::user())
             ->latest()
-            ->paginate($request->integer('limit', 20));
+            ->paginate(max(1, min(100, $request->integer('limit', 20))));
 
-        return $this->paginated($comments, fn ($comment) => new CommentResource($comment), $request);
+        return CommentResource::collection($comments);
     }
 
-    public function store(StoreCommentRequest $request, Video $video): JsonResponse
+    public function store(Video $video, StoreCommentRequest $request): Response
     {
-        abort_unless($video->status === Video::STATUS_PUBLISHED, 404);
-        abort_unless(Video::query()->whereKey($video->id)->visibleTo($request->user())->exists(), 404);
-
         $data = $request->validated();
 
-        if (isset($data['parent_id'])) {
-            abort_unless(Comment::whereKey($data['parent_id'])->where('video_id', $video->id)->exists(), 422);
-        }
+        $video = VideoActions::visible($video);
 
-        $comment = DB::transaction(function () use ($request, $video, $data): Comment {
-            $comment = $video->comments()->create([
-                'user_id' => $request->user()->id,
-                'parent_id' => $data['parent_id'] ?? null,
-                'body' => $data['body'],
-            ]);
+        $comment = VideoActions::transaction($video->id, function () use ($video, $data) {
+            abort_if(
+                isset($data['parent_id']) && !Comment::visibleTo(Auth::user())->whereKey($data['parent_id'])->where('video_id', $video->id)->exists(),
+                422,
+                'The selected parent_id is invalid.'
+            );
+
+            $comment = $video->comments()->create([...$data, 'user_id' => Auth::id()]);
 
             $video->increment('comments_count');
 
-            return $comment;
+            return $comment->refresh();
         });
 
-        return response()->json([
-            'data' => (new CommentResource($comment->load('user')))->resolve($request),
-        ], 201);
+        return CommentResource::make(Comment::withApiData(Auth::user())->findOrFail($comment->id))->response(201);
     }
 
-    public function destroy(Request $request, Comment $comment): JsonResponse
+    public function replies(Comment $comment): JsonResource
     {
-        $this->authorize('delete', $comment);
+        VideoActions::visible((int) $comment->video_id);
 
-        DB::transaction(function () use ($comment): void {
+        abort_unless(Comment::visibleTo(Auth::user())->whereKey($comment->id)->exists(), 404, 'Comment not found.');
+
+        $replies = $comment->replies()
+            ->visibleTo(Auth::user())
+            ->withApiData(Auth::user())
+            ->latest()
+            ->paginate(max(1, min(100, request()->integer('limit', 20))));
+
+        return CommentResource::collection($replies);
+    }
+
+    public function destroy(Comment $comment): Response
+    {
+        authorize('model.delete', $comment);
+
+        VideoActions::transaction((int) $comment->video_id, function () use ($comment) {
             $video = $comment->video()->lockForUpdate()->first();
             $comment->delete();
 
-            if ($video && $video->comments_count > 0) {
-                $video->decrement('comments_count');
+            if ($video) {
+                $video->update(['comments_count' => $video->comments()->count()]);
             }
         });
 
-        return response()->json(['data' => ['message' => 'Comment deleted']]);
+        return json(['data' => ['message' => 'Comment deleted']]);
     }
 }

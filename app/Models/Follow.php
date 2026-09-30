@@ -2,15 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spark\Database\Model;
+use Spark\Database\Relation\BelongsTo;
 
 class Follow extends Model
 {
-    /**
-     * @var list<string>
-     */
-    protected $fillable = ['follower_id', 'following_id'];
+    protected const UPDATED_AT = null;
+
+    protected array $fillable = ['follower_id', 'following_id'];
 
     public function follower(): BelongsTo
     {

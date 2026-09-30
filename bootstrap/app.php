@@ -1,25 +1,43 @@
 <?php
 
-use App\Http\Middleware\AuthenticateOptionalSanctum;
-use Illuminate\Foundation\Application;
-use Illuminate\Foundation\Configuration\Exceptions;
-use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Http\Request;
+use Spark\Foundation\Application;
 
-return Application::configure(basePath: dirname(__DIR__))
-    ->withRouting(
-        web: __DIR__.'/../routes/web.php',
-        api: __DIR__.'/../routes/api.php',
-        commands: __DIR__.'/../routes/console.php',
-        health: '/up',
+/**
+ * This file is the entry point of the web application.
+ *
+ * It uses the tinymvc framework to create the application instance, register
+ * service providers, middleware, and routes.
+ */
+
+/**
+ * Create the application instance.
+ *
+ * @param string $path
+ *   The root directory path of the application.
+ */
+return Application::create(path: dirname(__DIR__))
+    /**
+     * Register middleware in the application.
+     *
+     * @param Middleware $middleware
+     *   The middleware service.
+     *
+     * @return void
+     */
+    ->withMiddleware(
+        load: __DIR__ . '/middlewares.php',
+        queue: ['cors', 'csrf']
     )
-    ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias([
-            'auth.optional' => AuthenticateOptionalSanctum::class,
-        ]);
-    })
-    ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
-        );
-    })->create();
+
+    /**
+     * Register routes in the application.
+     *
+     * @param Router $router
+     *   The router service.
+     *
+     * @return void
+     */
+    ->withRouting(
+        web: __DIR__ . '/../routes/web.php',
+        api: __DIR__ . '/../routes/api.php'
+    );

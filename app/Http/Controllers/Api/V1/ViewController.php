@@ -4,48 +4,49 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Video;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use App\Services\VideoActions;
+use Spark\Http\{Request, Response};
 
 class ViewController extends Controller
 {
-    public function store(Request $request, Video $video): JsonResponse
+    public function store(Request $request, Video $video): Response
     {
-        abort_unless($video->status === Video::STATUS_PUBLISHED, 404);
-        abort_unless(Video::query()->whereKey($video->id)->visibleTo($request->user())->exists(), 404);
+        VideoActions::visible($video);
 
-        $user = $request->user();
-        $ipHash = hash('sha256', (string) $request->ip());
-        $userAgentHash = hash('sha256', (string) $request->userAgent());
-        $recentThreshold = now()->subHours(6);
+        $created = VideoActions::transaction($video->id, function (Video $video) use ($request): bool {
+            $user = $request->user();
+            $ipHash = hash('sha256', (string) $request->ip());
+            $userAgentHash = hash('sha256', (string) $request->useragent());
 
-        $exists = $video->views()
-            ->where('created_at', '>=', $recentThreshold)
-            ->when(
-                $user,
-                fn ($query) => $query->where('user_id', $user->id),
-                fn ($query) => $query->where('ip_hash', $ipHash)->where('user_agent_hash', $userAgentHash),
-            )
-            ->exists();
+            $exists = $video->views()
+                ->where('created_at', '>=', now()->subHours(6))
+                ->when(
+                    $user,
+                    fn($query) => $query->where('user_id', $user->id),
+                    fn($query) => $query->where(['ip_hash' => $ipHash, 'user_agent_hash' => $userAgentHash]),
+                )
+                ->exists();
 
-        if (! $exists) {
-            DB::transaction(function () use ($video, $user, $ipHash, $userAgentHash): void {
-                $video->views()->create([
-                    'user_id' => $user?->id,
-                    'ip_hash' => $ipHash,
-                    'user_agent_hash' => $userAgentHash,
-                ]);
+            if ($exists) {
+                return false;
+            }
 
-                $video->increment('views_count');
-            });
-        }
+            $video->views()->create([
+                'user_id' => $user?->id,
+                'ip_hash' => $ipHash,
+                'user_agent_hash' => $userAgentHash,
+            ]);
 
-        return response()->json([
+            $video->increment('views_count');
+
+            return true;
+        });
+
+        return json([
             'data' => [
                 'viewed' => true,
-                'views_count' => $video->fresh()->views_count,
+                'views_count' => $video->refresh()->views_count,
             ],
-        ], $exists ? 200 : 201);
+        ], $created ? 201 : 200);
     }
 }

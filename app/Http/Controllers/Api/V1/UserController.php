@@ -3,68 +3,85 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\ProfileResource;
-use App\Http\Resources\UserResource;
-use App\Http\Resources\VideoResource;
 use App\Models\User;
-use App\Services\PaginatesApiResponses;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use App\Http\Resources\{ProfileResource, UserResource, VideoResource};
+use Spark\Http\{Request, Resources\JsonResource};
 
 class UserController extends Controller
 {
-    use PaginatesApiResponses;
-
-    public function suggestions(Request $request): JsonResponse
+    public function suggestions(Request $request): JsonResource
     {
         $viewer = $request->user();
-        $followingIds = $viewer
-            ? $viewer->following()->select('users.id')
-            : null;
 
         $users = User::query()
-            ->where('status', 'active')
-            ->when($viewer, fn ($query) => $query->whereKeyNot($viewer->id))
-            ->when($followingIds, fn ($query) => $query->whereNotIn('id', $followingIds))
-            ->withCount('followers')
-            ->orderByDesc('followers_count')
-            ->latest()
-            ->paginate($request->integer('limit', 18));
+            ->visibleTo($viewer)
+            ->when(
+                $viewer,
+                fn($query) => $query
+                    ->where('users.id', '!=', $viewer->id)
+                    ->whereNotIn('users.id', $viewer->following()->select('users.id'))
+            )
+            ->withApiData($viewer)
+            ->orderByRaw('followers_count DESC, users.created_at DESC')
+            ->paginate(max(1, min(100, $request->integer('limit', 18))));
 
-        return $this->paginated($users, fn ($user) => new UserResource($user, $viewer), $request);
+        return UserResource::collection($users);
     }
 
-    public function show(Request $request, User $user): JsonResponse
+    public function show(Request $request, User $user): JsonResource
     {
-        return response()->json([
-            'data' => (new ProfileResource($user, $request->user()))->resolve($request),
-        ]);
+        return ProfileResource::make(
+            User::visibleTo($request->user())->withApiData($request->user(), true)->findOrFail($user->id)
+        );
     }
 
-    public function videos(Request $request, User $user): JsonResponse
+    public function videos(Request $request, User $user): JsonResource
     {
+        abort_unless(
+            User::visibleTo($request->user())->whereKey($user->id)->exists(),
+            404,
+            'User not found.'
+        );
+
         $videos = $user->videos()
             ->published()
             ->visibleTo($request->user())
-            ->withViewerState($request->user())
-            ->with('user')
+            ->withApiData($request->user())
             ->latest()
-            ->paginate($request->integer('limit', 10));
+            ->paginate(max(1, min(100, $request->integer('limit', 10))));
 
-        return $this->paginated($videos, fn ($video) => new VideoResource($video, $request->user()), $request);
+        return VideoResource::collection($videos);
     }
 
-    public function followers(Request $request, User $user): JsonResponse
+    public function followers(Request $request, User $user): JsonResource
     {
-        $followers = $user->followers()->paginate($request->integer('limit', 20));
+        abort_unless(
+            User::visibleTo($request->user())->whereKey($user->id)->exists(),
+            404,
+            'User not found.'
+        );
 
-        return $this->paginated($followers, fn ($follower) => new UserResource($follower, $request->user()), $request);
+        $followers = $user->followers()
+            ->visibleTo($request->user())
+            ->withApiData($request->user())
+            ->paginate(max(1, min(100, $request->integer('limit', 20))));
+
+        return UserResource::collection($followers);
     }
 
-    public function following(Request $request, User $user): JsonResponse
+    public function following(Request $request, User $user): JsonResource
     {
-        $following = $user->following()->paginate($request->integer('limit', 20));
+        abort_unless(
+            User::visibleTo($request->user())->whereKey($user->id)->exists(),
+            404,
+            'User not found.'
+        );
 
-        return $this->paginated($following, fn ($followed) => new UserResource($followed, $request->user()), $request);
+        $following = $user->following()
+            ->visibleTo($request->user())
+            ->withApiData($request->user())
+            ->paginate(max(1, min(100, $request->integer('limit', 20))));
+
+        return UserResource::collection($following);
     }
 }

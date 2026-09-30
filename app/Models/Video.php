@@ -2,33 +2,22 @@
 
 namespace App\Models;
 
-use Database\Factories\VideoFactory;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\DB;
+use App\Services\StorageService;
+use Spark\Database\DB;
+use Spark\Database\Model;
+use Spark\Database\QueryBuilder;
+use Spark\Database\Relation\BelongsTo;
+use Spark\Database\Relation\HasMany;
 
 class Video extends Model
 {
-    /** @use HasFactory<VideoFactory> */
-    use HasFactory;
+    public const STATUS_PROCESSING = "processing";
+    public const STATUS_PUBLISHED = "published";
+    public const STATUS_FAILED = "failed";
+    public const STATUS_DELETED = "deleted";
 
-    public const STATUS_PROCESSING = 'processing';
-
-    public const STATUS_PUBLISHED = 'published';
-
-    public const STATUS_FAILED = 'failed';
-
-    public const STATUS_DELETED = 'deleted';
-
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
+    protected array $fillable = [
         'user_id',
-        'video_url',
         'storage_path',
         'thumbnail_url',
         'caption',
@@ -60,26 +49,38 @@ class Video extends Model
         'shares_count',
     ];
 
-    protected function casts(): array
+    protected array $casts = [
+        'duration' => 'integer',
+        'high_quality_upload' => 'boolean',
+        'scheduled_at' => 'datetime',
+        'pinned_at' => 'datetime',
+        'trim_start' => 'decimal:2',
+        'trim_end' => 'decimal:2',
+        'cut_points' => 'array',
+        'cover_time' => 'decimal:2',
+        'original_audio_muted' => 'boolean',
+        'filter_settings' => 'array',
+        'effect_settings' => 'array',
+        'views_count' => 'integer',
+        'likes_count' => 'integer',
+        'comments_count' => 'integer',
+        'saves_count' => 'integer',
+        'shares_count' => 'integer',
+    ];
+
+    public function setThumbnailUrlAttribute(?string $value): ?string
     {
-        return [
-            'duration' => 'integer',
-            'high_quality_upload' => 'boolean',
-            'scheduled_at' => 'datetime',
-            'pinned_at' => 'datetime',
-            'trim_start' => 'decimal:2',
-            'trim_end' => 'decimal:2',
-            'cut_points' => 'array',
-            'cover_time' => 'decimal:2',
-            'original_audio_muted' => 'boolean',
-            'filter_settings' => 'array',
-            'effect_settings' => 'array',
-            'views_count' => 'integer',
-            'likes_count' => 'integer',
-            'comments_count' => 'integer',
-            'saves_count' => 'integer',
-            'shares_count' => 'integer',
-        ];
+        return StorageService::storedValue($value);
+    }
+
+    public function setSoundPreviewUrlAttribute(?string $value): ?string
+    {
+        return StorageService::storedValue($value);
+    }
+
+    public function setStoragePathAttribute(?string $value): ?string
+    {
+        return StorageService::storedValue($value);
     }
 
     public function user(): BelongsTo
@@ -112,38 +113,40 @@ class Video extends Model
         return $this->hasMany(VideoView::class);
     }
 
-    public function scopePublished(Builder $query): Builder
+    public function scopePublished(QueryBuilder $query): QueryBuilder
     {
         return $query->where('videos.status', self::STATUS_PUBLISHED);
     }
 
-    public function scopeVisibleTo(Builder $query, ?User $viewer): Builder
+    public function scopeVisibleTo(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
-        return $query->where(function (Builder $query) use ($viewer): void {
-            $query->where('videos.visibility', 'public');
+        return $query->whereIn('videos.user_id', User::select('users.id')->visibleTo($viewer))
+            ->where(function (QueryBuilder $query) use ($viewer): void {
+                $query->where('videos.visibility', 'public');
 
-            if (! $viewer) {
-                return;
-            }
+                if (!$viewer) {
+                    return;
+                }
 
-            $query->orWhere('videos.user_id', $viewer->id)
-                ->orWhere(function (Builder $query) use ($viewer): void {
-                    $query->where('videos.visibility', 'followers')
-                        ->whereIn('videos.user_id', $viewer->following()->select('users.id'));
-                });
-        });
+                $query->orWhere('videos.user_id', $viewer->id)
+                    ->orWhere(function (QueryBuilder $query) use ($viewer): void {
+                        $query->where('videos.visibility', 'followers')
+                            ->whereIn('videos.user_id', $viewer->following()->select('users.id'));
+                    });
+            });
     }
 
-    public function scopeWithViewerState(Builder $query, ?User $viewer): Builder
+    public function scopeWithViewerState(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
-        if (! $viewer) {
+        if (!$viewer) {
             return $query;
         }
 
         return $query
+            ->select('videos.*')
             ->withExists([
-                'likes as viewer_liked' => fn (Builder $query) => $query->where('user_id', $viewer->id),
-                'saves as viewer_saved' => fn (Builder $query) => $query->where('user_id', $viewer->id),
+                'likes as viewer_liked' => fn(QueryBuilder $query) => $query->where('user_id', $viewer->id),
+                'saves as viewer_saved' => fn(QueryBuilder $query) => $query->where('user_id', $viewer->id),
             ])
             ->selectSub(
                 DB::table('follows')
@@ -153,5 +156,12 @@ class Video extends Model
                     ->limit(1),
                 'viewer_following',
             );
+
+    }
+
+    public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
+    {
+        return $query->withViewerState($viewer)
+            ->with(['user' => fn($query) => $query->withApiData($viewer)]);
     }
 }

@@ -2,23 +2,17 @@
 
 namespace App\Http\Requests\Videos;
 
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
+use Spark\Foundation\Http\FormRequest;
 
 class UpdateVideoRequest extends FormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
-
     public function rules(): array
     {
         return [
             'caption' => ['nullable', 'string', 'max:2200'],
             'thumbnail_url' => ['nullable', 'url', 'max:2048'],
             'location_name' => ['nullable', 'string', 'max:180'],
-            'visibility' => ['nullable', 'string', Rule::in(['public', 'followers', 'private'])],
+            'visibility' => ['nullable', 'string', ['in' => ['public', 'followers', 'private']]],
             'high_quality_upload' => ['nullable', 'boolean'],
             'scheduled_at' => ['nullable', 'date'],
             'pinned' => ['nullable', 'boolean'],
@@ -27,7 +21,7 @@ class UpdateVideoRequest extends FormRequest
             'cut_points' => ['nullable', 'array', 'max:20'],
             'cut_points.*' => ['numeric', 'min:0'],
             'cover_time' => ['nullable', 'numeric', 'min:0'],
-            'crop_mode' => ['nullable', 'string', Rule::in(['fit', 'fill'])],
+            'crop_mode' => ['nullable', 'string', ['in' => ['fit', 'fill']]],
             'text_overlay' => ['nullable', 'string', 'max:120'],
             'original_audio_muted' => ['nullable', 'boolean'],
             'filter_settings' => ['nullable', 'array'],
@@ -38,7 +32,7 @@ class UpdateVideoRequest extends FormRequest
             'filter_settings.preset' => ['nullable', 'string', 'max:60'],
             'sound_name' => ['nullable', 'string', 'max:120'],
             'sound_artist' => ['nullable', 'string', 'max:120'],
-            'sound_provider' => ['nullable', 'string', Rule::in(['original', 'jamendo', 'local'])],
+            'sound_provider' => ['nullable', 'string', ['in' => ['original', 'jamendo', 'local']]],
             'sound_external_id' => ['nullable', 'string', 'max:120'],
             'sound_preview_url' => ['nullable', 'url', 'max:2048'],
         ];

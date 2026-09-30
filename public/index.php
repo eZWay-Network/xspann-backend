@@ -1,20 +1,31 @@
 <?php
+/**
+ * Entry point for the application.
+ *
+ * This file is the entry point for the entire application. It sets up
+ * the application environment, loads the Composer autoloader, and
+ * runs the bootstrap process.
+ * 
+ * @return void
+ */
 
-use Illuminate\Foundation\Application;
-use Illuminate\Http\Request;
+define('APP_START', microtime(true));
 
-define('LARAVEL_START', microtime(true));
-
-// Determine if the application is in maintenance mode...
-if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
-    require $maintenance;
+// Check if the Composer autoloader exists; if not, prompt the user to run composer install.
+if (!is_file($autoload = dirname(__DIR__) . '/vendor/autoload.php')) {
+    die("Run composer install before running the application.");
 }
 
-// Register the Composer autoloader...
-require __DIR__.'/../vendor/autoload.php';
+require $autoload; // Load the Composer autoloader for the application
 
-// Bootstrap Laravel and handle the request...
-/** @var Application $app */
-$app = require_once __DIR__.'/../bootstrap/app.php';
-
-$app->handleRequest(Request::capture());
+/**
+ * Runs the bootstrap process.
+ *
+ * This function is responsible for loading the application's
+ * bootstrap file, which sets up the application environment and
+ * runs the application.
+ *
+ * @return void
+ */
+(require dirname(__DIR__) . '/bootstrap/app.php')
+    ->run();

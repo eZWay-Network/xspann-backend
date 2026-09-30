@@ -2,15 +2,10 @@
 
 namespace App\Http\Requests\Uploads;
 
-use Illuminate\Foundation\Http\FormRequest;
+use Spark\Foundation\Http\FormRequest;
 
 class AvatarUploadRequest extends FormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
-
     public function rules(): array
     {
         return [

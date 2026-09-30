@@ -1,0 +1,28 @@
+<?php
+
+/**
+ * Run all tests in the project/tests directory.
+ *
+ * Usage:
+ *   Run: php test
+ *   Flags: --filter=SomeTestClass
+ *          --testsuite=Unit|Feature|Integration
+ *          --help, --list-tests
+ */
+
+$autoload = __DIR__ . '/vendor/autoload.php';
+
+if (!is_file($autoload)) {
+    fwrite(STDERR, "Run composer install before running tests.\n");
+    exit(2);
+}
+
+require $autoload;
+
+// Applied before application creation; .env and compiled config stay untouched.
+$_ENV['APP_ENV'] = 'testing';
+
+$runner = new \Spark\Testing\Runner();
+$result = $runner->run(__DIR__ . '/tests', array_slice($argv, 1));
+
+exit($result);

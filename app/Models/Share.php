@@ -2,15 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spark\Database\Model;
+use Spark\Database\Relation\BelongsTo;
 
 class Share extends Model
 {
-    /**
-     * @var list<string>
-     */
-    protected $fillable = ['user_id', 'video_id', 'channel'];
+    protected const UPDATED_AT = null;
+
+    protected array $fillable = ['user_id', 'video_id', 'channel'];
 
     public function user(): BelongsTo
     {

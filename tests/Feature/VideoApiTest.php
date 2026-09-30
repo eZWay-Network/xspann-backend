@@ -2,267 +2,137 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\ProcessVideo;
-use App\Models\User;
-use App\Models\Video;
-use App\Services\VideoMetadataExtractor;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Queue;
-use Laravel\Sanctum\Sanctum;
+use App\Models\{Video, Follow};
 use Tests\TestCase;
 
 class VideoApiTest extends TestCase
 {
-    use RefreshDatabase;
-
-    public function test_user_can_view_public_feed(): void
+    public function testPublicFeedVisibilityOptionalViewerAndPagination(): void
     {
-        $localVideo = Video::factory()->create([
-            'storage_path' => 'videos/1/local.mp4',
-            'thumbnail_url' => 'http://localhost/storage/thumbnails/1/local.jpg',
-            'sound_preview_url' => 'http://localhost/storage/sounds/1/local.mp3',
-        ]);
-        Video::factory()->create();
-        Video::factory()->processing()->create();
-        Video::factory()->create(['visibility' => 'private']);
-        Video::factory()->create(['visibility' => 'followers']);
-
-        $this->getJson('/api/v1/feed')
-            ->assertOk()
-            ->assertJsonCount(2, 'data')
-            ->assertJsonFragment([
-                'id' => $localVideo->id,
-                'video_url' => 'http://localhost:8000/media/videos/1/local.mp4',
-                'thumbnail_url' => 'http://localhost:8000/media/thumbnails/1/local.jpg',
-                'sound_preview_url' => 'http://localhost:8000/media/sounds/1/local.mp3',
-            ])
-            ->assertJsonStructure([
-                'data' => [
-                    ['id', 'video_url', 'thumbnail_url', 'caption', 'duration', 'user', 'stats', 'viewer'],
-                ],
-                'meta',
-            ]);
-
-        $this->getJson('/api/v1/videos')
-            ->assertOk()
-            ->assertJsonCount(2, 'data');
+        $owner = $this->makeUser();
+        $viewer = $this->makeUser('bob');
+        $public = $this->makeVideo($owner);
+        $followers = $this->makeVideo($owner, ['visibility' => 'followers']);
+        $private = $this->makeVideo($owner, ['visibility' => 'private']);
+        $processing = $this->makeVideo($owner, ['status' => 'processing']);
+        $this->makeVideo($owner, ['status' => 'deleted']);
+        $this->getJson('/api/v1/feed')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.tags.0', '#world');
+        $this->getJson('/api/v1/videos/' . $followers->id)->assertStatus(404);
+        $this->getJson('/api/v1/videos/' . $processing->id)->assertStatus(404);
+        Follow::create(['follower_id' => $viewer->id, 'following_id' => $owner->id]);
+        $this->asUser($viewer);
+        $this->getJson('/api/v1/feed?limit=1')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.total', 2)->assertJsonPath('meta.last_page', 2)->assertJsonPath('data.0.viewer.following', true);
+        $this->getJson('/api/v1/feed/following')->assertOk()->assertJsonCount(2, 'data');
+        $this->getJson('/api/v1/users/alice/videos')->assertOk()->assertJsonCount(2, 'data');
+        $this->getJson('/api/v1/videos/' . $private->id)->assertStatus(404);
+        $this->asUser($owner);
+        $this->getJson('/api/v1/videos/' . $processing->id)->assertOk();
+        $this->getJson('/api/v1/me/videos')->assertOk()->assertJsonCount(4, 'data');
     }
 
-    public function test_followers_visibility_is_enforced_in_feed_and_profile_videos(): void
+    public function testCreatePersistsEditorMetadataAndDispatchesQueue(): void
     {
-        $creator = User::factory()->create();
-        $follower = User::factory()->create();
-        $stranger = User::factory()->create();
-        $publicVideo = Video::factory()->for($creator)->create(['visibility' => 'public', 'caption' => 'Public']);
-        $followersVideo = Video::factory()->for($creator)->create(['visibility' => 'followers', 'caption' => 'Followers']);
-        $privateVideo = Video::factory()->for($creator)->create(['visibility' => 'private', 'caption' => 'Private']);
-
-        $follower->following()->attach($creator->id);
-
-        $this->getJson('/api/v1/feed')
-            ->assertOk()
-            ->assertJsonFragment(['id' => $publicVideo->id])
-            ->assertJsonMissing(['id' => $followersVideo->id])
-            ->assertJsonMissing(['id' => $privateVideo->id]);
-
-        Sanctum::actingAs($stranger);
-        $this->getJson("/api/v1/users/{$creator->username}/videos")
-            ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonMissing(['caption' => 'Followers']);
-
-        Sanctum::actingAs($follower);
-        $this->getJson("/api/v1/users/{$creator->username}/videos")
-            ->assertOk()
-            ->assertJsonCount(2, 'data')
-            ->assertJsonFragment(['caption' => 'Followers']);
-
-        Sanctum::actingAs($creator);
-        $this->getJson("/api/v1/videos/{$privateVideo->id}")
-            ->assertOk();
-    }
-
-    public function test_public_routes_accept_optional_bearer_viewer(): void
-    {
-        $creator = User::factory()->create();
-        $follower = User::factory()->create();
-        $publicVideo = Video::factory()->for($creator)->create(['visibility' => 'public', 'caption' => 'Public']);
-        $followersVideo = Video::factory()->for($creator)->create(['visibility' => 'followers', 'caption' => 'Followers']);
-        $follower->following()->attach($creator->id);
-
-        $token = $follower->createToken('api')->plainTextToken;
-
-        $this->withToken($token)->getJson('/api/v1/feed')
-            ->assertOk()
-            ->assertJsonFragment(['id' => $publicVideo->id])
-            ->assertJsonFragment(['id' => $followersVideo->id]);
-
-        $this->withToken($token)->getJson("/api/v1/users/{$creator->username}")
-            ->assertOk()
-            ->assertJsonPath('data.following', true);
-    }
-
-    public function test_video_view_tracking_increments_once_per_recent_viewer(): void
-    {
-        $video = Video::factory()->create(['views_count' => 0]);
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
-
-        $this->postJson("/api/v1/videos/{$video->id}/view")
-            ->assertCreated()
-            ->assertJsonPath('data.views_count', 1);
-
-        $this->postJson("/api/v1/videos/{$video->id}/view")
-            ->assertOk()
-            ->assertJsonPath('data.views_count', 1);
-    }
-
-    public function test_user_can_create_video_record_and_dispatch_processing_job(): void
-    {
-        Queue::fake();
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
-
-        $response = $this->postJson('/api/v1/videos', [
-            'storage_path' => 'videos/1/example.mp4',
-            'caption' => 'First upload #xspannrnb',
-            'sound_name' => 'Royal Pulse',
-            'sound_artist' => 'XSpann RNB Sounds',
-            'sound_provider' => 'local',
-            'location_name' => 'Dhaka',
-            'visibility' => 'public',
-            'high_quality_upload' => true,
+        $user = $this->makeUser();
+        $this->asUser($user);
+        $data = [
+            'storage_path' => "videos/$user->id/example.mp4",
+            'caption' => '#test',
+            'visibility' => 'followers',
             'trim_start' => 1.5,
-            'trim_end' => 12.5,
-            'cover_time' => 3.2,
+            'trim_end' => 9.5,
+            'cut_points' => [2, 4],
+            'cover_time' => 3,
             'crop_mode' => 'fill',
-            'text_overlay' => 'New drop',
-            'original_audio_muted' => false,
-        ]);
-
-        $response->assertCreated()
-            ->assertJsonPath('data.status', Video::STATUS_PROCESSING)
-            ->assertJsonPath('data.sound_name', 'Royal Pulse')
-            ->assertJsonPath('data.sound_artist', 'XSpann RNB Sounds')
-            ->assertJsonPath('data.sound_provider', 'local')
-            ->assertJsonPath('data.location_name', 'Dhaka')
-            ->assertJsonPath('data.visibility', 'public')
-            ->assertJsonPath('data.edit.trim_start', 1.5)
-            ->assertJsonPath('data.edit.crop_mode', 'fill')
-            ->assertJsonPath('data.edit.text_overlay', 'New drop')
-            ->assertJsonPath('data.tags.0', '#xspannrnb');
-
-        Queue::assertPushed(ProcessVideo::class);
+            'original_audio_muted' => true,
+            'filter_settings' => ['brightness' => 110],
+            'effect_settings' => ['arFace' => 'Smile'],
+            'sound_provider' => 'local',
+            'sound_name' => 'My audio'
+        ];
+        $response = $this->postJson('/api/v1/videos', $data)->assertStatus(201)->assertJsonPath('data.status', 'processing')
+            ->assertJsonPath('data.edit.trim_start', 1.5)->assertJsonPath('data.edit.effect_settings.arFace', 'Smile');
+        $this->assertDatabaseHas('videos', ['id' => $response->json('data.id'), 'user_id' => $user->id, 'visibility' => 'followers']);
+        $queue = app(\Spark\Queue\Queue::class)->getConnection();
+        $this->assertSame(1, (int) $queue->query("SELECT COUNT(*) FROM jobs WHERE queue = 'default'")->fetchColumn());
     }
 
-    public function test_video_processing_job_publishes_video(): void
+    public function testEditorValidationAndOwnership(): void
     {
-        $video = Video::factory()->processing()->create(['storage_path' => 'videos/test.mp4']);
-
-        app()->bind(VideoMetadataExtractor::class, fn () => new class
-        {
-            public function extract(Video $video): array
-            {
-                return [
-                    'duration' => 17,
-                    'thumbnail_url' => 'http://localhost/storage/thumbnails/test.jpg',
-                ];
-            }
-        });
-
-        (new ProcessVideo($video->id))->handle();
-
-        $video->refresh();
-
-        $this->assertSame(Video::STATUS_PUBLISHED, $video->status);
-        $this->assertNotNull($video->video_url);
-        $this->assertSame(17, $video->duration);
-        $this->assertSame('http://localhost/storage/thumbnails/test.jpg', $video->thumbnail_url);
+        $owner = $this->makeUser();
+        $video = $this->makeVideo($owner);
+        $this->asUser($this->makeUser('bob'));
+        $this->patchJson('/api/v1/videos/' . $video->id, ['caption' => 'attack'])->assertStatus(403);
+        $this->deleteJson('/api/v1/videos/' . $video->id)->assertStatus(403);
+        $this->asUser($owner);
+        $this->postJson('/api/v1/videos', ['storage_path' => 'videos/999/file.mp4'])->assertStatus(422);
+        $this->patchJson('/api/v1/videos/' . $video->id, ['trim_start' => 4, 'trim_end' => 2, 'cut_points' => [-1], 'filter_settings' => ['brightness' => 999]])
+            ->assertStatus(422)->assertJsonValidationErrors(['cut_points.0', 'filter_settings.brightness']);
+        $this->patchJson('/api/v1/videos/' . $video->id, ['trim_start' => 4, 'trim_end' => 2])
+            ->assertStatus(422)->assertJsonValidationErrors(['trim_end']);
+        $this->patchJson('/api/v1/videos/' . $video->id, ['pinned' => true, 'caption' => 'Updated', 'status' => 'deleted'])->assertOk()->assertJsonPath('data.caption', 'Updated')->assertJsonPath('data.status', 'published');
+        $this->assertTrue(Video::find($video->id)->pinned_at !== null);
+        $this->deleteJson('/api/v1/videos/' . $video->id)->assertOk();
+        $this->getJson('/api/v1/videos/' . $video->id)->assertStatus(404);
+        $this->assertDatabaseHas('videos', ['id' => $video->id, 'status' => 'deleted']);
     }
 
-    public function test_user_can_list_all_own_videos_for_posts_manager(): void
+    public function testUserSuggestionsProfilesAndFollowLists(): void
     {
-        $owner = User::factory()->create();
-        $other = User::factory()->create();
-        Video::factory()->for($owner)->create(['caption' => 'Published post', 'created_at' => now()->subDay()]);
-        Video::factory()->for($owner)->create(['caption' => 'Pinned post', 'pinned_at' => now()->subMinute(), 'created_at' => now()->subWeek()]);
-        Video::factory()->for($owner)->processing()->create(['caption' => 'Processing post', 'visibility' => 'private']);
-        Video::factory()->for($owner)->create(['caption' => 'Deleted post', 'status' => Video::STATUS_DELETED]);
-        Video::factory()->for($other)->create(['caption' => 'Other creator post']);
-
-        Sanctum::actingAs($owner);
-
-        $this->getJson('/api/v1/me/videos?limit=10')
-            ->assertOk()
-            ->assertJsonCount(3, 'data')
-            ->assertJsonPath('data.0.caption', 'Pinned post')
-            ->assertJsonPath('meta.total', 3)
-            ->assertJsonMissing(['caption' => 'Deleted post'])
-            ->assertJsonMissing(['caption' => 'Other creator post']);
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $carol = $this->makeUser('carol');
+        $this->makeVideo($alice, ['likes_count' => 3]);
+        Follow::create(['follower_id' => $bob->id, 'following_id' => $alice->id]);
+        $this->getJson('/api/v1/users/suggestions')->assertOk()->assertJsonPath('data.0.username', 'alice');
+        $this->getJson('/api/v1/users/alice')->assertOk()->assertJsonPath('data.likes_count', 3)->assertJsonPath('data.followers_count', 1);
+        $this->getJson('/api/v1/users/alice/followers')->assertOk()->assertJsonPath('data.0.username', 'bob');
+        $this->getJson('/api/v1/users/bob/following')->assertOk()->assertJsonPath('data.0.username', 'alice');
+        $this->asUser($bob);
+        $this->getJson('/api/v1/users/suggestions')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.username', 'carol');
+        $this->getJson('/api/v1/users/alice')->assertJsonPath('data.following', true);
     }
 
-    public function test_user_can_only_update_own_video_editor_metadata(): void
+    public function testAllProtectedRoutesRejectGuests(): void
     {
-        $owner = User::factory()->create();
-        $other = User::factory()->create();
-        $video = Video::factory()->for($owner)->create([
-            'caption' => 'Before',
-            'visibility' => 'public',
-            'filter_settings' => null,
-        ]);
-
-        Sanctum::actingAs($other);
-        $this->patchJson("/api/v1/videos/{$video->id}", ['caption' => 'Nope'])->assertForbidden();
-
-        Sanctum::actingAs($owner);
-        $this->patchJson("/api/v1/videos/{$video->id}", [
-            'caption' => 'After',
-            'visibility' => 'private',
-            'pinned' => true,
-            'trim_start' => 2,
-            'trim_end' => 14,
-            'crop_mode' => 'fill',
-            'filter_settings' => [
-                'brightness' => 106,
-                'contrast' => 118,
-                'saturation' => 92,
-                'warmth' => 12,
-                'preset' => 'custom',
-            ],
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.caption', 'After')
-            ->assertJsonPath('data.visibility', 'private')
-            ->assertJsonPath('data.pinned_at', fn ($value) => is_string($value))
-            ->assertJsonPath('data.edit.trim_start', 2)
-            ->assertJsonPath('data.edit.trim_end', 14)
-            ->assertJsonPath('data.edit.crop_mode', 'fill')
-            ->assertJsonPath('data.edit.filter_settings.brightness', 106);
-
-        $video->refresh();
-        $this->assertSame('After', $video->caption);
-        $this->assertSame('private', $video->visibility);
-        $this->assertNotNull($video->pinned_at);
-
-        $this->patchJson("/api/v1/videos/{$video->id}", ['pinned' => false])
-            ->assertOk()
-            ->assertJsonPath('data.pinned_at', null);
-
-        $this->assertNull($video->fresh()->pinned_at);
-    }
-
-    public function test_user_can_only_delete_own_video(): void
-    {
-        $owner = User::factory()->create();
-        $other = User::factory()->create();
-        $video = Video::factory()->for($owner)->create();
-
-        Sanctum::actingAs($other);
-        $this->deleteJson("/api/v1/videos/{$video->id}")->assertForbidden();
-
-        Sanctum::actingAs($owner);
-        $this->deleteJson("/api/v1/videos/{$video->id}")->assertOk();
-
-        $this->assertSame(Video::STATUS_DELETED, $video->fresh()->status);
+        $routes = [
+            ['POST', '/auth/logout'],
+            ['GET', '/auth/me'],
+            ['PUT', '/auth/profile'],
+            ['PUT', '/auth/password'],
+            ['POST', '/auth/token/refresh'],
+            ['GET', '/feed/following'],
+            ['POST', '/uploads/avatar'],
+            ['POST', '/uploads/videos/signed-url'],
+            ['POST', '/uploads/videos/local'],
+            ['POST', '/uploads/videos/chunk'],
+            ['POST', '/uploads/videos/complete'],
+            ['POST', '/uploads/sounds/local'],
+            ['GET', '/me/videos'],
+            ['POST', '/videos'],
+            ['PATCH', '/videos/1'],
+            ['DELETE', '/videos/1'],
+            ['GET', '/me/liked-videos'],
+            ['POST', '/videos/1/like'],
+            ['DELETE', '/videos/1/like'],
+            ['POST', '/videos/1/comments'],
+            ['DELETE', '/comments/1'],
+            ['GET', '/me/saved-videos'],
+            ['POST', '/videos/1/save'],
+            ['DELETE', '/videos/1/save'],
+            ['POST', '/users/1/follow'],
+            ['DELETE', '/users/1/follow'],
+            ['GET', '/me/blocks'],
+            ['POST', '/users/1/block'],
+            ['DELETE', '/users/1/block'],
+            ['POST', '/comments/1/reaction'],
+            ['DELETE', '/comments/1/reaction'],
+            ['POST', '/reports'],
+            ['GET', '/notifications'],
+            ['PATCH', '/notifications/read-all'],
+            ['PATCH', '/notifications/1/read'],
+        ];
+        foreach ($routes as [$method, $path]) {
+            $this->request($method, "/api/v1$path", json: true)->assertStatus(401);
+        }
     }
 }
