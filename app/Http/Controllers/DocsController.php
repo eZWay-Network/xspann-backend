@@ -14,7 +14,7 @@ class DocsController extends Controller
     {
         $catalog = self::catalog();
         $schemas = self::schemas();
-        $groups = array_fill_keys(['Authentication', 'Feed', 'Videos', 'Uploads', 'Users', 'Comments', 'Social actions', 'Safety', 'Notifications'], []);
+        $groups = array_fill_keys(['Authentication', 'Feed', 'Discover', 'Videos', 'Uploads', 'Users', 'Comments', 'Social actions', 'Safety', 'Notifications'], []);
         foreach (router()->getRoutes() as $route) {
             if (!str_starts_with($route['path'], '/api/v1/')) {
                 continue;
@@ -50,6 +50,25 @@ class DocsController extends Controller
             if ($entry['limit'] !== null) {
                 $entry['parameters'][] = ['name' => 'page', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Page number; default 1.'];
                 $entry['parameters'][] = ['name' => 'limit', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Items per page; default ' . $entry['limit'] . '. Clamped to 1–100.'];
+            }
+            if (str_starts_with($key, 'DiscoverController@')) {
+                $entry['parameters'] = [
+                    ['name' => 'q', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'Optional search text, at most 100 characters. Surrounding whitespace is ignored. SQL wildcard characters are literal. Omit or clear to browse.'],
+                    ['name' => 'page', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Page number, 1–100000; default 1.'],
+                    ['name' => 'limit', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Items per page, 1–100; default 18. Invalid values return 422.'],
+                ];
+
+                if ($action === 'index') {
+                    $entry['parameters'][] = [
+                        'name' => 'sort',
+                        'in' => 'query',
+                        'type' => 'string',
+                        'required' => false,
+                        'description' => 'popular (default) or latest. Popular sorts by total likes/comments/saves/shares, then views, creation time and ID descending. Latest sorts by creation time and ID descending.',
+                    ];
+                }
+
+                $entry['errors']['422'] = 'Invalid query, page, limit or sort.';
             }
             if ($action === 'verifyEmail') {
                 foreach (['expires' => 'Unix timestamp from the signed link.', 'signature' => 'HMAC from the signed link. Preserve every query parameter exactly.'] as $name => $description) {
@@ -117,9 +136,31 @@ class DocsController extends Controller
         $add('AuthController@update', 'Authentication', 'Update your profile', 'Updates only submitted fields. Username must be unique. Nullable profile fields can be cleared with null. Managed avatar URLs must belong to you.', '$Profile', '200', ProfileUpdateRequest::class, ['name' => 'Alex Morgan', 'bio' => 'Making something new.']);
         $add('AuthController@changePassword', 'Authentication', 'Change your password', 'Requires the existing password. Revokes other access tokens while preserving the current token.', $message('Password changed successfully.'), '200', ['current_password' => ['required', 'string']] + $password, ['current_password' => 'example-password', 'password' => 'new-example-password', 'password_confirmation' => 'new-example-password']);
         $add('AuthController@refreshToken', 'Authentication', 'Rotate the access token', 'Requires a still-valid bearer token. Revokes that token and returns a replacement. Replace the stored token atomically; an expired token cannot be refreshed.', $session);
-        foreach (['FeedController@index' => ['Feed', 'Get the discovery feed', 'Published videos visible to the viewer, newest first.'], 'FeedController@following' => ['Feed', 'Get the following feed', 'Published videos from accounts you follow, newest first.'], 'VideoController@index' => ['Videos', 'List published videos', 'Published, visible videos ordered newest first.'], 'VideoController@mine' => ['Videos', 'List your videos', 'Your non-deleted videos, including processing and failed uploads. Pinned videos appear first, then newest first.'], 'UserController@videos' => ['Users', 'List a user’s videos', 'Published videos from the requested username, filtered by viewer visibility.'], 'LikeController@index' => ['Social actions', 'List your liked videos', 'Visible, published videos ordered by when you liked them.'], 'SaveController@index' => ['Social actions', 'List your saved videos', 'Visible, published videos ordered by when you saved them.']] as $action => [$group, $title, $description]) {
+        foreach (['FeedController@index' => ['Feed', 'Get the home feed', 'Published videos visible to the viewer, newest first. Use GET /discover for video search and popularity sorting.'], 'FeedController@following' => ['Feed', 'Get the following feed', 'Published videos from accounts you follow, newest first.'], 'VideoController@index' => ['Videos', 'List published videos', 'Published, visible videos ordered newest first.'], 'VideoController@mine' => ['Videos', 'List your videos', 'Your non-deleted videos, including processing and failed uploads. Pinned videos appear first, then newest first.'], 'UserController@videos' => ['Users', 'List a user’s videos', 'Published videos from the requested username, filtered by viewer visibility.'], 'LikeController@index' => ['Social actions', 'List your liked videos', 'Visible, published videos ordered by when you liked them.'], 'SaveController@index' => ['Social actions', 'List your saved videos', 'Visible, published videos ordered by when you saved them.']] as $action => [$group, $title, $description]) {
             $add($action, $group, $title, $description, '$Video', '200', [], [], $action === 'VideoController@mine' ? 20 : 10);
         }
+        $add(
+            'DiscoverController@index',
+            'Discover',
+            'Discover and search videos',
+            'Public, published videos from active, visible accounts. q matches a literal phrase in captions (including hashtags), creator usernames or names; @ prefixes are removed for creator matching. Private and followers-only videos are excluded even for their owner. Optional JWT adds viewer state and hides blocks in either direction. Popular is an all-time engagement ordering, not a trending or personalized recommendation algorithm. Search runs before pagination; ordering has a stable ID tie-break.',
+            '$Video',
+            '200',
+            [],
+            [],
+            18,
+        );
+        $add(
+            'DiscoverController@people',
+            'Discover',
+            'Discover and search people',
+            'q partially matches usernames or display names; a leading @ is optional. Exact username matches rank first, then follower count, creation time and ID descending. With no search, suggests active accounts by follower count and recency; signed-in viewers exclude themselves and accounts they follow. Search includes matching followed accounts and self. Blocks in both directions and inactive accounts are always hidden from the viewer. Returns public User resources without email or credentials.',
+            '$User',
+            '200',
+            [],
+            [],
+            18,
+        );
         $add('VideoController@show', 'Videos', 'Get a video', 'Returns one visible video. Only its owner can retrieve processing or failed videos. Deleted or inaccessible videos return 404.', '$Video');
         $add('VideoController@store', 'Videos', 'Create a video post', 'First upload the media, then submit its storage_path. The file must exist and belong to you. Creates a processing video and queues processing. Poll GET /videos/{video} until published or failed. Managed thumbnail and sound URLs must also belong to you. Editing times are in seconds.', '$ProcessingVideo', '201', StoreVideoRequest::class, ['storage_path' => 'videos/1/example.mp4', 'caption' => 'Hello #world', 'visibility' => 'public']);
         $add('VideoController@update', 'Videos', 'Update your video', 'Owner only (403 otherwise). Updates submitted metadata and edit settings; this endpoint does not dispatch a new processing job. pinned=true sets pinned_at; false clears it. effect_settings is accepted only during creation.', '$Video', '200', UpdateVideoRequest::class, ['caption' => 'An updated caption', 'pinned' => true]);

@@ -15,6 +15,8 @@ class ApiContractTest extends TestCase
         'POST /api/v1/auth/reset-password',
         'GET /api/v1/auth/email/verify/{user}/{hash}',
         'GET /api/v1/feed',
+        'GET /api/v1/discover',
+        'GET /api/v1/discover/people',
         'GET /api/v1/videos',
         'GET /api/v1/videos/{video}',
         'GET /api/v1/users/suggestions',
@@ -118,7 +120,15 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(54, count($entries));
+        $this->assertSame(56, count($entries));
+        $this->assertFalse($entries['discovercontroller-index']['auth']);
+        $this->assertFalse($entries['discovercontroller-people']['auth']);
+        $this->assertSame(120, $entries['discovercontroller-index']['rate']);
+        $this->assertSame(null, $entries['discovercontroller-index']['contentType']);
+        $this->assertSame(['q', 'page', 'limit', 'sort'], array_column($entries['discovercontroller-index']['parameters'], 'name'));
+        $this->assertSame(['q', 'page', 'limit'], array_column($entries['discovercontroller-people']['parameters'], 'name'));
+        $this->assertSame(['query'], array_values(array_unique(array_column($entries['discovercontroller-index']['parameters'], 'in'))));
+        $this->assertSame(18, $entries['discovercontroller-index']['response']['meta']['per_page']);
         $this->assertFalse($entries['authcontroller-login']['auth']);
         $this->assertTrue($entries['authcontroller-me']['auth']);
         $this->assertSame(5, $entries['authcontroller-login']['rate']);

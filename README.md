@@ -11,7 +11,7 @@ php -d upload_max_filesize=512M -d post_max_size=520M -S 127.0.0.1:8080 -t publi
 
 For a new installation, copy `.env.example` to `.env` and run `php spark key:generate`. For an existing installation, keep `APP_KEY` stable and configure the existing database. The tables are already supplied; `composer setup` is the skeleton's fresh-install command and runs migrations/seeders. Tests use disposable databases.
 
-Open `/api-docs` for the Blade route reference and `/up` for the health response. The docs group registered endpoints and show their controllers, middleware, storage disk, and queue driver. No frontend asset build is needed for this page.
+Open `/` for the Blade route reference and `/up` for the health response. The docs group registered endpoints and show their controllers, middleware, storage disk, and queue driver. No frontend asset build is needed for this page.
 
 Run a queue worker under your process supervisor:
 
@@ -20,6 +20,26 @@ php spark queue:work --sleep=1
 ```
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
+
+## Discover API
+
+- `GET /api/v1/discover`: public, published videos with optional caption/hashtag/creator search (`q`) and `sort=popular|latest` (default `popular`). Popular orders by total likes, comments, saves and shares, then views; both sorts break ties by creation time and ID. This is all-time popularity, not a time-window trending or personalized ranking.
+- `GET /api/v1/discover/people`: suggested accounts when `q` is blank, or partial username/display-name search when present. A leading `@` is optional. Exact username matches rank first, then follower count, creation time and ID. Searching includes matching followed accounts and self; default suggestions exclude them for signed-in viewers.
+- Both support guests and optional JWT viewer state, exclude inactive accounts and blocks in both directions, and use the existing `Video`/`User` resources with `data`, `links`, and `meta`. Discover videos exclude private and followers-only posts even when the viewer owns or follows them. User results contain no email or credentials.
+- Query parameters: `q` up to 100 characters, `page` from 1–100000 (default 1), and `limit` from 1–100 (default 18). Invalid values return 422 rather than being clamped. Whitespace-only queries browse normally. Search is a literal substring; `%`, `_`, and `!` are escaped, and hashtags match caption text. Case folding follows the database's `LOWER`/collation behavior; Unicode text can be searched without transliteration. Empty matches return a normal 200 response with an empty list.
+- Search is applied before pagination. Clients must preserve `q`, `sort`, and `limit` when loading the next page. The ID tie-break stabilizes equal results; as with the existing page-based feeds, concurrent posts or engagement changes may shift pages, so clients should deduplicate by ID.
+
+```sh
+curl -G 'https://dash-xspann.webermelon.dev/api/v1/discover' \
+  -H 'Accept: application/json' --data-urlencode 'q=#travel' \
+  --data-urlencode 'sort=latest' --data-urlencode 'limit=18'
+curl -G 'https://dash-xspann.webermelon.dev/api/v1/discover/people' \
+  -H 'Accept: application/json' --data-urlencode 'q=alex'
+```
+
+The route-generated docs at `/` and their **Export JSON** action include both endpoints. A generated snapshot is in [`docs/api-reference.json`](docs/api-reference.json). No migration, dependency update, or email-verification change is required. Publish the controller, routes, and docs together before switching the mobile client from its current `/videos` and `/users/suggestions` implementation. The new endpoints use a 120-request throttle, matching the route's native middleware semantics.
+
+Run `php test --filter=DiscoverApiTest` for isolated search, ranking, privacy, pagination, validation, docs-export and bounded-query checks. The pre-existing email-verification expectations are intentionally unchanged.
 
 ## Configuration
 

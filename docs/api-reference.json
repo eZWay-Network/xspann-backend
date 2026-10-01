@@ -1,0 +1,4092 @@
+{
+    "title": "XSpann API reference",
+    "version": "v1",
+    "baseUrl": "https://dash-xspann.webermelon.dev/api/v1",
+    "groups": {
+        "Authentication": [
+            {
+                "group": "Authentication",
+                "title": "Create an account",
+                "description": "Creates an account and queues a verification email. No access token is issued until the account is verified and signs in. Managed avatar URLs must belong to the newly created account; normally upload an avatar after login.",
+                "response": {
+                    "data": {
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "email": "alex@example.com",
+                            "email_verified_at": null,
+                            "likes_count": 0,
+                            "videos_count": 0
+                        },
+                        "token": null,
+                        "token_expires_at": null,
+                        "message": "We have sent you an email to verify your account. Please check your inbox or spam folder."
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "username": "alex",
+                    "email": "alex@example.com",
+                    "password": "example-password",
+                    "password_confirmation": "example-password"
+                },
+                "limit": null,
+                "errors": {
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/register",
+                "route": "/api/v1/auth/register",
+                "id": "authcontroller-register",
+                "auth": false,
+                "rate": 5,
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · alpha_dash:ascii · min:3 · max:30 · unique:users,username"
+                    },
+                    {
+                        "name": "email",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · email · max:255 · unique:users,email"
+                    },
+                    {
+                        "name": "password",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · min:8 · confirmed"
+                    },
+                    {
+                        "name": "password_confirmation",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "Must exactly match password."
+                    },
+                    {
+                        "name": "name",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:255"
+                    },
+                    {
+                        "name": "avatar",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · url · max:2048"
+                    },
+                    {
+                        "name": "bio",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Sign in with email",
+                "description": "Returns a JWT for an active, verified account. device_name is accepted but is not used to label tokens.",
+                "response": {
+                    "data": {
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "email": "alex@example.com",
+                            "email_verified_at": "2026-09-29T10:00:00.000000Z",
+                            "likes_count": 0,
+                            "videos_count": 1
+                        },
+                        "token": "<access-token>",
+                        "token_expires_at": "2026-10-01T12:00:00.000000Z"
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "email": "alex@example.com",
+                    "password": "example-password"
+                },
+                "limit": null,
+                "errors": {
+                    "422": "Incorrect credentials or invalid input.",
+                    "403": "Inactive account or unverified email.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/login",
+                "route": "/api/v1/auth/login",
+                "id": "authcontroller-login",
+                "auth": false,
+                "rate": 5,
+                "parameters": [
+                    {
+                        "name": "email",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · email"
+                    },
+                    {
+                        "name": "password",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string"
+                    },
+                    {
+                        "name": "device_name",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:100"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Sign in with Google",
+                "description": "Only provider=google is supported. Send a Google ID token (credential), not an OAuth access token. New accounts are verified. Gmail and Google Workspace identities can link to matching emails automatically; other email matches require password login.",
+                "response": {
+                    "data": {
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "email": "alex@example.com",
+                            "email_verified_at": "2026-09-29T10:00:00.000000Z",
+                            "likes_count": 0,
+                            "videos_count": 1
+                        },
+                        "token": "<access-token>",
+                        "token_expires_at": "2026-10-01T12:00:00.000000Z"
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "token": "<google-id-token>"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Invalid Google credential.",
+                    "403": "Inactive account.",
+                    "404": "Unsupported provider.",
+                    "409": "Email match requires password login.",
+                    "503": "Google configuration or signing-key service unavailable.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/social/{provider}",
+                "route": "/api/v1/auth/social/{provider}",
+                "id": "authcontroller-social",
+                "auth": false,
+                "rate": 5,
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "type": "string",
+                        "required": true,
+                        "description": "Only google is supported."
+                    },
+                    {
+                        "name": "token",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · max:8192"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Request a password reset",
+                "description": "Queues a reset link when the email exists. The successful response does not reveal account existence. A repeat request within 60 seconds can return 422. Read the token and email from the reset link.",
+                "response": {
+                    "data": {
+                        "message": "If that email exists, a password reset link has been sent."
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "email": "alex@example.com"
+                },
+                "limit": null,
+                "errors": {
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/forgot-password",
+                "route": "/api/v1/auth/forgot-password",
+                "id": "authcontroller-forgotpassword",
+                "auth": false,
+                "rate": 5,
+                "parameters": [
+                    {
+                        "name": "email",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · email"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Reset a password",
+                "description": "Consumes a valid, unexpired reset token and revokes all existing access tokens. Sign in again afterward. Token lifetime is configured by the server (60 minutes by default).",
+                "response": {
+                    "data": {
+                        "message": "Password reset successfully. Please log in again."
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "email": "alex@example.com",
+                    "token": "<email-reset-token>",
+                    "password": "new-example-password",
+                    "password_confirmation": "new-example-password"
+                },
+                "limit": null,
+                "errors": {
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/reset-password",
+                "route": "/api/v1/auth/reset-password",
+                "id": "authcontroller-resetpassword",
+                "auth": false,
+                "rate": 5,
+                "parameters": [
+                    {
+                        "name": "email",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · email"
+                    },
+                    {
+                        "name": "token",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string"
+                    },
+                    {
+                        "name": "password",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · min:8 · confirmed"
+                    },
+                    {
+                        "name": "password_confirmation",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "Must exactly match password."
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Resend verification email",
+                "description": "Queues email only for an active, unverified account. Returns the same message when no verification is needed.",
+                "response": {
+                    "data": {
+                        "message": "If verification is needed, an email has been sent."
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "email": "alex@example.com"
+                },
+                "limit": null,
+                "errors": {
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/email/verification-notification",
+                "route": "/api/v1/auth/email/verification-notification",
+                "id": "authcontroller-resendverification",
+                "auth": false,
+                "rate": 5,
+                "parameters": [
+                    {
+                        "name": "email",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · email"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Revoke the current token",
+                "description": "Invalidates only the bearer token used for this request. Discard it in the client.",
+                "response": {
+                    "data": {
+                        "message": "Logged out"
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/logout",
+                "route": "/api/v1/auth/logout",
+                "id": "authcontroller-logout",
+                "auth": true,
+                "rate": null,
+                "parameters": [],
+                "contentType": null
+            },
+            {
+                "group": "Authentication",
+                "title": "Get the signed-in profile",
+                "description": "Returns your profile, including social_identities. Other profile responses omit social_identities because the relation is not loaded.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "name": "Alex Morgan",
+                        "username": "alex",
+                        "avatar": null,
+                        "bio": null,
+                        "followers_count": 0,
+                        "following_count": 0,
+                        "following": false,
+                        "email": "alex@example.com",
+                        "email_verified_at": "2026-09-29T10:00:00.000000Z",
+                        "likes_count": 0,
+                        "videos_count": 1,
+                        "social_identities": []
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "GET",
+                "uri": "/api/v1/auth/me",
+                "route": "/api/v1/auth/me",
+                "id": "authcontroller-me",
+                "auth": true,
+                "rate": null,
+                "parameters": [],
+                "contentType": null
+            },
+            {
+                "group": "Authentication",
+                "title": "Update your profile",
+                "description": "Updates only submitted fields. Username must be unique. Nullable profile fields can be cleared with null. Managed avatar URLs must belong to you.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "name": "Alex Morgan",
+                        "username": "alex",
+                        "avatar": null,
+                        "bio": null,
+                        "followers_count": 0,
+                        "following_count": 0,
+                        "following": false,
+                        "email": "alex@example.com",
+                        "email_verified_at": "2026-09-29T10:00:00.000000Z",
+                        "likes_count": 0,
+                        "videos_count": 1
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "name": "Alex Morgan",
+                    "bio": "Making something new."
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure."
+                },
+                "method": "PUT",
+                "uri": "/api/v1/auth/profile",
+                "route": "/api/v1/auth/profile",
+                "id": "authcontroller-update",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "sometimes · string · alpha_dash:ascii · min:3 · max:30 · unique (excluding your account)"
+                    },
+                    {
+                        "name": "name",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "sometimes · nullable · string · max:255"
+                    },
+                    {
+                        "name": "avatar",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "sometimes · nullable · url · max:2048"
+                    },
+                    {
+                        "name": "bio",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "sometimes · nullable · string · max:120"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Change your password",
+                "description": "Requires the existing password. Revokes other access tokens while preserving the current token.",
+                "response": {
+                    "data": {
+                        "message": "Password changed successfully."
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "current_password": "example-password",
+                    "password": "new-example-password",
+                    "password_confirmation": "new-example-password"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure."
+                },
+                "method": "PUT",
+                "uri": "/api/v1/auth/password",
+                "route": "/api/v1/auth/password",
+                "id": "authcontroller-changepassword",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "current_password",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string"
+                    },
+                    {
+                        "name": "password",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · min:8 · confirmed"
+                    },
+                    {
+                        "name": "password_confirmation",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "Must exactly match password."
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Authentication",
+                "title": "Rotate the access token",
+                "description": "Requires a still-valid bearer token. Revokes that token and returns a replacement. Replace the stored token atomically; an expired token cannot be refreshed.",
+                "response": {
+                    "data": {
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "email": "alex@example.com",
+                            "email_verified_at": "2026-09-29T10:00:00.000000Z",
+                            "likes_count": 0,
+                            "videos_count": 1
+                        },
+                        "token": "<access-token>",
+                        "token_expires_at": "2026-10-01T12:00:00.000000Z"
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "POST",
+                "uri": "/api/v1/auth/token/refresh",
+                "route": "/api/v1/auth/token/refresh",
+                "id": "authcontroller-refreshtoken",
+                "auth": true,
+                "rate": null,
+                "parameters": [],
+                "contentType": null
+            }
+        ],
+        "Feed": [
+            {
+                "group": "Feed",
+                "title": "Get the home feed",
+                "description": "Published videos visible to the viewer, newest first. Use GET /discover for video search and popularity sorting.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/feed?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/feed?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 10,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 10,
+                "errors": [],
+                "method": "GET",
+                "uri": "/api/v1/feed",
+                "route": "/api/v1/feed",
+                "id": "feedcontroller-index",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 10. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Feed",
+                "title": "Get the following feed",
+                "description": "Published videos from accounts you follow, newest first.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/feed/following?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/feed/following?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 10,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 10,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "GET",
+                "uri": "/api/v1/feed/following",
+                "route": "/api/v1/feed/following",
+                "id": "feedcontroller-following",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 10. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            }
+        ],
+        "Discover": [
+            {
+                "group": "Discover",
+                "title": "Discover and search videos",
+                "description": "Public, published videos from active, visible accounts. q matches a literal phrase in captions (including hashtags), creator usernames or names; @ prefixes are removed for creator matching. Private and followers-only videos are excluded even for their owner. Optional JWT adds viewer state and hides blocks in either direction. Popular is an all-time engagement ordering, not a trending or personalized recommendation algorithm. Search runs before pagination; ordering has a stable ID tie-break.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/discover?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/discover?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 18,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 18,
+                "errors": {
+                    "422": "Invalid query, page, limit or sort.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "GET",
+                "uri": "/api/v1/discover",
+                "route": "/api/v1/discover",
+                "id": "discovercontroller-index",
+                "auth": false,
+                "rate": 120,
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "type": "string",
+                        "required": false,
+                        "description": "Optional search text, at most 100 characters. Surrounding whitespace is ignored. SQL wildcard characters are literal. Omit or clear to browse."
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number, 1–100000; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page, 1–100; default 18. Invalid values return 422."
+                    },
+                    {
+                        "name": "sort",
+                        "in": "query",
+                        "type": "string",
+                        "required": false,
+                        "description": "popular (default) or latest. Popular sorts by total likes/comments/saves/shares, then views, creation time and ID descending. Latest sorts by creation time and ID descending."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Discover",
+                "title": "Discover and search people",
+                "description": "q partially matches usernames or display names; a leading @ is optional. Exact username matches rank first, then follower count, creation time and ID descending. With no search, suggests active accounts by follower count and recency; signed-in viewers exclude themselves and accounts they follow. Search includes matching followed accounts and self. Blocks in both directions and inactive accounts are always hidden from the viewer. Returns public User resources without email or credentials.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/discover/people?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/discover/people?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 18,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 18,
+                "errors": {
+                    "422": "Invalid query, page, limit or sort.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "GET",
+                "uri": "/api/v1/discover/people",
+                "route": "/api/v1/discover/people",
+                "id": "discovercontroller-people",
+                "auth": false,
+                "rate": 120,
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "type": "string",
+                        "required": false,
+                        "description": "Optional search text, at most 100 characters. Surrounding whitespace is ignored. SQL wildcard characters are literal. Omit or clear to browse."
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number, 1–100000; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page, 1–100; default 18. Invalid values return 422."
+                    }
+                ],
+                "contentType": null
+            }
+        ],
+        "Videos": [
+            {
+                "group": "Videos",
+                "title": "List published videos",
+                "description": "Published, visible videos ordered newest first.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/videos?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/videos?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 10,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 10,
+                "errors": [],
+                "method": "GET",
+                "uri": "/api/v1/videos",
+                "route": "/api/v1/videos",
+                "id": "videocontroller-index",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 10. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Videos",
+                "title": "Get a video",
+                "description": "Returns one visible video. Only its owner can retrieve processing or failed videos. Deleted or inaccessible videos return 404.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "video_url": "https://media.example.com/videos/1/example.mp4",
+                        "thumbnail_url": null,
+                        "caption": "Hello #world",
+                        "sound_name": null,
+                        "sound_artist": null,
+                        "sound_provider": "original",
+                        "sound_external_id": null,
+                        "sound_preview_url": null,
+                        "music": "Original sound",
+                        "tags": [
+                            "#world"
+                        ],
+                        "duration": 12,
+                        "location_name": null,
+                        "visibility": "public",
+                        "high_quality_upload": false,
+                        "scheduled_at": null,
+                        "pinned_at": null,
+                        "edit": {
+                            "trim_start": null,
+                            "trim_end": null,
+                            "cut_points": [],
+                            "cover_time": null,
+                            "crop_mode": "fit",
+                            "text_overlay": null,
+                            "original_audio_muted": false,
+                            "filter_settings": null,
+                            "effect_settings": null
+                        },
+                        "status": "published",
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        },
+                        "stats": {
+                            "views": 0,
+                            "likes": 0,
+                            "comments": 0,
+                            "saves": 0,
+                            "shares": 0
+                        },
+                        "viewer": {
+                            "liked": false,
+                            "saved": false,
+                            "following": false
+                        },
+                        "created_at": "2026-09-29T10:00:00.000000Z"
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "GET",
+                "uri": "/api/v1/videos/{video}",
+                "route": "/api/v1/videos/{video}",
+                "id": "videocontroller-show",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Videos",
+                "title": "List your videos",
+                "description": "Your non-deleted videos, including processing and failed uploads. Pinned videos appear first, then newest first.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/me/videos?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/me/videos?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 20,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 20,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "GET",
+                "uri": "/api/v1/me/videos",
+                "route": "/api/v1/me/videos",
+                "id": "videocontroller-mine",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 20. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Videos",
+                "title": "Create a video post",
+                "description": "First upload the media, then submit its storage_path. The file must exist and belong to you. Creates a processing video and queues processing. Poll GET /videos/{video} until published or failed. Managed thumbnail and sound URLs must also belong to you. Editing times are in seconds.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "video_url": "https://media.example.com/videos/1/example.mp4",
+                        "thumbnail_url": null,
+                        "caption": "Hello #world",
+                        "sound_name": null,
+                        "sound_artist": null,
+                        "sound_provider": "original",
+                        "sound_external_id": null,
+                        "sound_preview_url": null,
+                        "music": "Original sound",
+                        "tags": [
+                            "#world"
+                        ],
+                        "duration": null,
+                        "location_name": null,
+                        "visibility": "public",
+                        "high_quality_upload": false,
+                        "scheduled_at": null,
+                        "pinned_at": null,
+                        "edit": {
+                            "trim_start": null,
+                            "trim_end": null,
+                            "cut_points": [],
+                            "cover_time": null,
+                            "crop_mode": "fit",
+                            "text_overlay": null,
+                            "original_audio_muted": false,
+                            "filter_settings": null,
+                            "effect_settings": null
+                        },
+                        "status": "processing",
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        },
+                        "stats": {
+                            "views": 0,
+                            "likes": 0,
+                            "comments": 0,
+                            "saves": 0,
+                            "shares": 0
+                        },
+                        "viewer": {
+                            "liked": false,
+                            "saved": false,
+                            "following": false
+                        },
+                        "created_at": "2026-09-29T10:00:00.000000Z"
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "storage_path": "videos/1/example.mp4",
+                    "caption": "Hello #world",
+                    "visibility": "public"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure."
+                },
+                "method": "POST",
+                "uri": "/api/v1/videos",
+                "route": "/api/v1/videos",
+                "id": "videocontroller-store",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "storage_path",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · max:2048"
+                    },
+                    {
+                        "name": "thumbnail_url",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · url · max:2048"
+                    },
+                    {
+                        "name": "caption",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:2200"
+                    },
+                    {
+                        "name": "sound_name",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "sound_artist",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "location_name",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:180"
+                    },
+                    {
+                        "name": "visibility",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · in:public,followers,private"
+                    },
+                    {
+                        "name": "high_quality_upload",
+                        "in": "body",
+                        "type": "boolean",
+                        "required": false,
+                        "description": "nullable · boolean"
+                    },
+                    {
+                        "name": "scheduled_at",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · date"
+                    },
+                    {
+                        "name": "trim_start",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0"
+                    },
+                    {
+                        "name": "trim_end",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · gt:trim_start"
+                    },
+                    {
+                        "name": "cut_points",
+                        "in": "body",
+                        "type": "array",
+                        "required": false,
+                        "description": "nullable · array · max:20"
+                    },
+                    {
+                        "name": "cut_points.*",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "numeric · min:0"
+                    },
+                    {
+                        "name": "cover_time",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0"
+                    },
+                    {
+                        "name": "crop_mode",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · in:fit,fill"
+                    },
+                    {
+                        "name": "text_overlay",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "original_audio_muted",
+                        "in": "body",
+                        "type": "boolean",
+                        "required": false,
+                        "description": "nullable · boolean"
+                    },
+                    {
+                        "name": "filter_settings",
+                        "in": "body",
+                        "type": "object",
+                        "required": false,
+                        "description": "nullable · array"
+                    },
+                    {
+                        "name": "filter_settings.brightness",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0 · max:200"
+                    },
+                    {
+                        "name": "filter_settings.contrast",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0 · max:250"
+                    },
+                    {
+                        "name": "filter_settings.saturation",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0 · max:250"
+                    },
+                    {
+                        "name": "filter_settings.warmth",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:-100 · max:100"
+                    },
+                    {
+                        "name": "filter_settings.preset",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:60"
+                    },
+                    {
+                        "name": "effect_settings",
+                        "in": "body",
+                        "type": "object",
+                        "required": false,
+                        "description": "nullable · array"
+                    },
+                    {
+                        "name": "effect_settings.arFace",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:60"
+                    },
+                    {
+                        "name": "effect_settings.background",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:60"
+                    },
+                    {
+                        "name": "effect_settings.sticker",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:60"
+                    },
+                    {
+                        "name": "effect_settings.visual",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:60"
+                    },
+                    {
+                        "name": "sound_provider",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · in:original,jamendo,local"
+                    },
+                    {
+                        "name": "sound_external_id",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "sound_preview_url",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · url · max:2048"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Videos",
+                "title": "Update your video",
+                "description": "Owner only (403 otherwise). Updates submitted metadata and edit settings; this endpoint does not dispatch a new processing job. pinned=true sets pinned_at; false clears it. effect_settings is accepted only during creation.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "video_url": "https://media.example.com/videos/1/example.mp4",
+                        "thumbnail_url": null,
+                        "caption": "Hello #world",
+                        "sound_name": null,
+                        "sound_artist": null,
+                        "sound_provider": "original",
+                        "sound_external_id": null,
+                        "sound_preview_url": null,
+                        "music": "Original sound",
+                        "tags": [
+                            "#world"
+                        ],
+                        "duration": 12,
+                        "location_name": null,
+                        "visibility": "public",
+                        "high_quality_upload": false,
+                        "scheduled_at": null,
+                        "pinned_at": null,
+                        "edit": {
+                            "trim_start": null,
+                            "trim_end": null,
+                            "cut_points": [],
+                            "cover_time": null,
+                            "crop_mode": "fit",
+                            "text_overlay": null,
+                            "original_audio_muted": false,
+                            "filter_settings": null,
+                            "effect_settings": null
+                        },
+                        "status": "published",
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        },
+                        "stats": {
+                            "views": 0,
+                            "likes": 0,
+                            "comments": 0,
+                            "saves": 0,
+                            "shares": 0
+                        },
+                        "viewer": {
+                            "liked": false,
+                            "saved": false,
+                            "following": false
+                        },
+                        "created_at": "2026-09-29T10:00:00.000000Z"
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "caption": "An updated caption",
+                    "pinned": true
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer.",
+                    "422": "Invalid parameters or a business validation failure."
+                },
+                "method": "PATCH",
+                "uri": "/api/v1/videos/{video}",
+                "route": "/api/v1/videos/{video}",
+                "id": "videocontroller-update",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    },
+                    {
+                        "name": "caption",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:2200"
+                    },
+                    {
+                        "name": "thumbnail_url",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · url · max:2048"
+                    },
+                    {
+                        "name": "location_name",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:180"
+                    },
+                    {
+                        "name": "visibility",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · in:public,followers,private"
+                    },
+                    {
+                        "name": "high_quality_upload",
+                        "in": "body",
+                        "type": "boolean",
+                        "required": false,
+                        "description": "nullable · boolean"
+                    },
+                    {
+                        "name": "scheduled_at",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · date"
+                    },
+                    {
+                        "name": "pinned",
+                        "in": "body",
+                        "type": "boolean",
+                        "required": false,
+                        "description": "nullable · boolean"
+                    },
+                    {
+                        "name": "trim_start",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0"
+                    },
+                    {
+                        "name": "trim_end",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · gt:trim_start"
+                    },
+                    {
+                        "name": "cut_points",
+                        "in": "body",
+                        "type": "array",
+                        "required": false,
+                        "description": "nullable · array · max:20"
+                    },
+                    {
+                        "name": "cut_points.*",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "numeric · min:0"
+                    },
+                    {
+                        "name": "cover_time",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0"
+                    },
+                    {
+                        "name": "crop_mode",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · in:fit,fill"
+                    },
+                    {
+                        "name": "text_overlay",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "original_audio_muted",
+                        "in": "body",
+                        "type": "boolean",
+                        "required": false,
+                        "description": "nullable · boolean"
+                    },
+                    {
+                        "name": "filter_settings",
+                        "in": "body",
+                        "type": "object",
+                        "required": false,
+                        "description": "nullable · array"
+                    },
+                    {
+                        "name": "filter_settings.brightness",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0 · max:200"
+                    },
+                    {
+                        "name": "filter_settings.contrast",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0 · max:250"
+                    },
+                    {
+                        "name": "filter_settings.saturation",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:0 · max:250"
+                    },
+                    {
+                        "name": "filter_settings.warmth",
+                        "in": "body",
+                        "type": "number",
+                        "required": false,
+                        "description": "nullable · numeric · min:-100 · max:100"
+                    },
+                    {
+                        "name": "filter_settings.preset",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:60"
+                    },
+                    {
+                        "name": "sound_name",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "sound_artist",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "sound_provider",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · in:original,jamendo,local"
+                    },
+                    {
+                        "name": "sound_external_id",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:120"
+                    },
+                    {
+                        "name": "sound_preview_url",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · url · max:2048"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Videos",
+                "title": "Delete your video",
+                "description": "Owner only (403 otherwise). Immediately marks the video deleted and queues storage cleanup.",
+                "response": {
+                    "data": {
+                        "message": "Video deleted"
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "DELETE",
+                "uri": "/api/v1/videos/{video}",
+                "route": "/api/v1/videos/{video}",
+                "id": "videocontroller-destroy",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    }
+                ],
+                "contentType": null
+            }
+        ],
+        "Uploads": [
+            {
+                "group": "Uploads",
+                "title": "Upload an avatar",
+                "description": "JPEG, PNG or WebP image, up to 5 MiB. Use avatar_url in PUT /auth/profile. Send multipart/form-data with field file. Server and proxy upload limits may be lower.",
+                "response": {
+                    "data": {
+                        "upload_method": "multipart",
+                        "storage_path": "avatars/1/example.webp",
+                        "avatar_url": "https://media.example.com/avatars/1/example.webp"
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "file": "@/path/to/file"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/uploads/avatar",
+                "route": "/api/v1/uploads/avatar",
+                "id": "uploadcontroller-avatar",
+                "auth": true,
+                "rate": 20,
+                "parameters": [
+                    {
+                        "name": "file",
+                        "in": "body",
+                        "type": "file",
+                        "required": true,
+                        "description": "required · image · mimes:jpg,jpeg,png,webp · max:5120"
+                    }
+                ],
+                "contentType": "multipart/form-data"
+            },
+            {
+                "group": "Uploads",
+                "title": "Request a video upload URL",
+                "description": "Inspect upload_method. signed_url: PUT the raw file to upload_url using exactly the returned headers within 15 minutes, without the API bearer token. multipart: POST FormData with field_name to upload_url with your bearer token. After upload, create the video post.",
+                "response": {
+                    "data": {
+                        "upload_method": "signed_url",
+                        "storage_path": "videos/1/example.mp4",
+                        "video_url": "https://media.example.com/videos/1/example.mp4",
+                        "upload_url": "https://storage.example.com/presigned-upload",
+                        "headers": {
+                            "Content-Type": "video/mp4"
+                        }
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "filename": "example.mp4",
+                    "content_type": "video/mp4"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/uploads/videos/signed-url",
+                "route": "/api/v1/uploads/videos/signed-url",
+                "id": "uploadcontroller-video",
+                "auth": true,
+                "rate": 20,
+                "parameters": [
+                    {
+                        "name": "filename",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · max:255"
+                    },
+                    {
+                        "name": "content_type",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · in:video/mp4,video/quicktime,video/webm"
+                    }
+                ],
+                "contentType": "application/json",
+                "alternate": {
+                    "data": {
+                        "upload_method": "multipart",
+                        "upload_url": "https://dash-xspann.webermelon.dev/api/v1/uploads/videos/local",
+                        "storage_path": null,
+                        "headers": [],
+                        "field_name": "file",
+                        "message": "Upload the video through the backend multipart endpoint."
+                    }
+                }
+            },
+            {
+                "group": "Uploads",
+                "title": "Upload a video file",
+                "description": "MP4, QuickTime or WebM, up to 500 MiB. Uploads through the backend to the configured storage disk. Submit storage_path to POST /videos afterward. Send multipart/form-data with field file. Server and proxy upload limits may be lower.",
+                "response": {
+                    "data": {
+                        "upload_method": "multipart",
+                        "storage_path": "videos/1/example.mp4",
+                        "video_url": "https://media.example.com/videos/1/example.mp4"
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "file": "@/path/to/file"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/uploads/videos/local",
+                "route": "/api/v1/uploads/videos/local",
+                "id": "uploadcontroller-local",
+                "auth": true,
+                "rate": 20,
+                "parameters": [
+                    {
+                        "name": "file",
+                        "in": "body",
+                        "type": "file",
+                        "required": true,
+                        "description": "required · file · mimes:video/mp4,video/quicktime,video/webm · max:512000"
+                    }
+                ],
+                "contentType": "multipart/form-data"
+            },
+            {
+                "group": "Uploads",
+                "title": "Upload a video chunk",
+                "description": "Send multipart/form-data. Generate one UUID per upload. Chunk index is zero-based and less than total_chunks. Chunks are at most 2 MiB; total video size is at most 524288000 bytes. Reusing an index replaces that chunk. Keep all session metadata identical.",
+                "response": {
+                    "data": {
+                        "upload_method": "chunked",
+                        "upload_id": "123e4567-e89b-42d3-a456-426614174000",
+                        "chunk_index": 0,
+                        "total_chunks": 1
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "upload_id": "123e4567-e89b-42d3-a456-426614174000",
+                    "total_chunks": 1,
+                    "filename": "example.mp4",
+                    "content_type": "video/mp4",
+                    "total_size": 1024,
+                    "chunk_index": 0,
+                    "chunk": "@/path/to/chunk"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/uploads/videos/chunk",
+                "route": "/api/v1/uploads/videos/chunk",
+                "id": "uploadcontroller-videochunk",
+                "auth": true,
+                "rate": 900,
+                "parameters": [
+                    {
+                        "name": "upload_id",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · uuid"
+                    },
+                    {
+                        "name": "total_chunks",
+                        "in": "body",
+                        "type": "integer",
+                        "required": true,
+                        "description": "required · integer · regex:/^[0-9]+$/ · min:1 · max:10000"
+                    },
+                    {
+                        "name": "filename",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · max:255"
+                    },
+                    {
+                        "name": "content_type",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · in:video/mp4,video/quicktime,video/webm"
+                    },
+                    {
+                        "name": "total_size",
+                        "in": "body",
+                        "type": "integer",
+                        "required": true,
+                        "description": "required · integer · regex:/^[0-9]+$/ · min:1 · max:524288000"
+                    },
+                    {
+                        "name": "chunk_index",
+                        "in": "body",
+                        "type": "integer",
+                        "required": true,
+                        "description": "required · integer · regex:/^[0-9]+$/ · min:0"
+                    },
+                    {
+                        "name": "chunk",
+                        "in": "body",
+                        "type": "file",
+                        "required": true,
+                        "description": "required · file · max:2048"
+                    }
+                ],
+                "contentType": "multipart/form-data"
+            },
+            {
+                "group": "Uploads",
+                "title": "Complete a chunked upload",
+                "description": "Assembles the signed-in user’s upload. All chunks must exist; total_size and metadata must match exactly and assembled media must have a supported MIME type. Completion removes the session; it is not repeatable. Then submit storage_path to POST /videos.",
+                "response": {
+                    "data": {
+                        "upload_method": "chunked",
+                        "storage_path": "videos/1/example.mp4",
+                        "video_url": "https://media.example.com/videos/1/example.mp4"
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "upload_id": "123e4567-e89b-42d3-a456-426614174000",
+                    "total_chunks": 1,
+                    "filename": "example.mp4",
+                    "content_type": "video/mp4",
+                    "total_size": 1024
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/uploads/videos/complete",
+                "route": "/api/v1/uploads/videos/complete",
+                "id": "uploadcontroller-completevideochunks",
+                "auth": true,
+                "rate": 20,
+                "parameters": [
+                    {
+                        "name": "upload_id",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · uuid"
+                    },
+                    {
+                        "name": "total_chunks",
+                        "in": "body",
+                        "type": "integer",
+                        "required": true,
+                        "description": "required · integer · regex:/^[0-9]+$/ · min:1 · max:10000"
+                    },
+                    {
+                        "name": "filename",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · max:255"
+                    },
+                    {
+                        "name": "content_type",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · in:video/mp4,video/quicktime,video/webm"
+                    },
+                    {
+                        "name": "total_size",
+                        "in": "body",
+                        "type": "integer",
+                        "required": true,
+                        "description": "required · integer · regex:/^[0-9]+$/ · min:1 · max:524288000"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Uploads",
+                "title": "Upload a sound",
+                "description": "Audio file, up to 50 MiB. Use audio_url as sound_preview_url and sound_provider=local when creating a video. Send multipart/form-data with field file. Server and proxy upload limits may be lower.",
+                "response": {
+                    "data": {
+                        "upload_method": "multipart",
+                        "storage_path": "sounds/1/example.mp3",
+                        "audio_url": "https://media.example.com/sounds/1/example.mp3"
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "file": "@/path/to/file"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/uploads/sounds/local",
+                "route": "/api/v1/uploads/sounds/local",
+                "id": "uploadcontroller-audio",
+                "auth": true,
+                "rate": 20,
+                "parameters": [
+                    {
+                        "name": "file",
+                        "in": "body",
+                        "type": "file",
+                        "required": true,
+                        "description": "required · file · mimes:audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,audio/x-m4a,audio/m4a,audio/ogg,audio/webm · max:51200"
+                    }
+                ],
+                "contentType": "multipart/form-data"
+            }
+        ],
+        "Users": [
+            {
+                "group": "Users",
+                "title": "Suggested accounts",
+                "description": "Accounts ranked by follower count, then recency. For signed-in viewers, excludes self, followed accounts and blocked relationships.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/users/suggestions?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/users/suggestions?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 18,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 18,
+                "errors": [],
+                "method": "GET",
+                "uri": "/api/v1/users/suggestions",
+                "route": "/api/v1/users/suggestions",
+                "id": "usercontroller-suggestions",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 18. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Users",
+                "title": "Get a public profile",
+                "description": "Looks up a username, not a numeric ID. Current Profile responses include email and email_verified_at as well as public profile counts. Blocked or inactive accounts are hidden.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "name": "Alex Morgan",
+                        "username": "alex",
+                        "avatar": null,
+                        "bio": null,
+                        "followers_count": 0,
+                        "following_count": 0,
+                        "following": false,
+                        "email": "alex@example.com",
+                        "email_verified_at": "2026-09-29T10:00:00.000000Z",
+                        "likes_count": 0,
+                        "videos_count": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "GET",
+                "uri": "/api/v1/users/{username}",
+                "route": "/api/v1/users/{user:username}",
+                "id": "usercontroller-show",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "path",
+                        "type": "string",
+                        "required": true,
+                        "description": "Account username (not its numeric ID)."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Users",
+                "title": "List a user’s videos",
+                "description": "Published videos from the requested username, filtered by viewer visibility.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/users/{username}/videos?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/users/{username}/videos?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 10,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 10,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "GET",
+                "uri": "/api/v1/users/{username}/videos",
+                "route": "/api/v1/users/{user:username}/videos",
+                "id": "usercontroller-videos",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "path",
+                        "type": "string",
+                        "required": true,
+                        "description": "Account username (not its numeric ID)."
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 10. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Users",
+                "title": "List followers",
+                "description": "Visible accounts following this username.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/users/{username}/followers?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/users/{username}/followers?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 20,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 20,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "GET",
+                "uri": "/api/v1/users/{username}/followers",
+                "route": "/api/v1/users/{user:username}/followers",
+                "id": "usercontroller-followers",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "path",
+                        "type": "string",
+                        "required": true,
+                        "description": "Account username (not its numeric ID)."
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 20. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Users",
+                "title": "List followed accounts",
+                "description": "Visible accounts this username follows.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/users/{username}/following?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/users/{username}/following?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 20,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 20,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "GET",
+                "uri": "/api/v1/users/{username}/following",
+                "route": "/api/v1/users/{user:username}/following",
+                "id": "usercontroller-following",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "path",
+                        "type": "string",
+                        "required": true,
+                        "description": "Account username (not its numeric ID)."
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 20. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            }
+        ],
+        "Comments": [
+            {
+                "group": "Comments",
+                "title": "List video comments",
+                "description": "Top-level comments only, newest first. The video and comment authors must be visible to the viewer.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_id": 1,
+                            "parent_id": null,
+                            "body": "Love this!",
+                            "created_at": "2026-09-29T10:00:00.000000Z",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "replies_count": 0,
+                            "reactions": {
+                                "like": 0,
+                                "love": 0,
+                                "haha": 0,
+                                "wow": 0,
+                                "sad": 0,
+                                "angry": 0
+                            },
+                            "viewer_reaction": null
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/videos/{video}/comments?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/videos/{video}/comments?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 20,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 20,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "GET",
+                "uri": "/api/v1/videos/{video}/comments",
+                "route": "/api/v1/videos/{video}/comments",
+                "id": "commentcontroller-index",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 20. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Comments",
+                "title": "List comment replies",
+                "description": "Direct replies to a visible comment, newest first. The parent video must be visible.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_id": 1,
+                            "parent_id": null,
+                            "body": "Love this!",
+                            "created_at": "2026-09-29T10:00:00.000000Z",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "replies_count": 0,
+                            "reactions": {
+                                "like": 0,
+                                "love": 0,
+                                "haha": 0,
+                                "wow": 0,
+                                "sad": 0,
+                                "angry": 0
+                            },
+                            "viewer_reaction": null
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/comments/{comment}/replies?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/comments/{comment}/replies?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 20,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 20,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "GET",
+                "uri": "/api/v1/comments/{comment}/replies",
+                "route": "/api/v1/comments/{comment}/replies",
+                "id": "commentcontroller-replies",
+                "auth": false,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "comment",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric comment ID."
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 20. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Comments",
+                "title": "Set a comment reaction",
+                "description": "One reaction per account per comment. Replaces your previous reaction. Defaults to like when omitted.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "video_id": 1,
+                        "parent_id": null,
+                        "body": "Love this!",
+                        "created_at": "2026-09-29T10:00:00.000000Z",
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        },
+                        "replies_count": 0,
+                        "reactions": {
+                            "like": 0,
+                            "love": 1,
+                            "haha": 0,
+                            "wow": 0,
+                            "sad": 0,
+                            "angry": 0
+                        },
+                        "viewer_reaction": "love"
+                    }
+                },
+                "status": "200",
+                "example": {
+                    "reaction_type": "love"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/comments/{comment}/reaction",
+                "route": "/api/v1/comments/{comment}/reaction",
+                "id": "commentreactioncontroller-store",
+                "auth": true,
+                "rate": 60,
+                "parameters": [
+                    {
+                        "name": "comment",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric comment ID."
+                    },
+                    {
+                        "name": "reaction_type",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "sometimes · string · in:like,love,haha,wow,sad,angry"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Comments",
+                "title": "Remove your reaction",
+                "description": "Removes your reaction and returns the comment with updated reaction counts.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "video_id": 1,
+                        "parent_id": null,
+                        "body": "Love this!",
+                        "created_at": "2026-09-29T10:00:00.000000Z",
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        },
+                        "replies_count": 0,
+                        "reactions": {
+                            "like": 0,
+                            "love": 0,
+                            "haha": 0,
+                            "wow": 0,
+                            "sad": 0,
+                            "angry": 0
+                        },
+                        "viewer_reaction": null
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "DELETE",
+                "uri": "/api/v1/comments/{comment}/reaction",
+                "route": "/api/v1/comments/{comment}/reaction",
+                "id": "commentreactioncontroller-destroy",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "comment",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric comment ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Comments",
+                "title": "Create a comment or reply",
+                "description": "Add a comment to a published, visible video. To reply, pass parent_id belonging to a visible comment on the same video.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "video_id": 1,
+                        "parent_id": null,
+                        "body": "Love this!",
+                        "created_at": "2026-09-29T10:00:00.000000Z",
+                        "user": {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        },
+                        "replies_count": 0,
+                        "reactions": {
+                            "like": 0,
+                            "love": 0,
+                            "haha": 0,
+                            "wow": 0,
+                            "sad": 0,
+                            "angry": 0
+                        },
+                        "viewer_reaction": null
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "body": "Love this!"
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/videos/{video}/comments",
+                "route": "/api/v1/videos/{video}/comments",
+                "id": "commentcontroller-store",
+                "auth": true,
+                "rate": 30,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    },
+                    {
+                        "name": "body",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · max:1000"
+                    },
+                    {
+                        "name": "parent_id",
+                        "in": "body",
+                        "type": "integer",
+                        "required": false,
+                        "description": "nullable · integer · exists:comments,id"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Comments",
+                "title": "Delete your comment",
+                "description": "Comment author only (403 otherwise). Deletes the comment and recalculates the video comment count.",
+                "response": {
+                    "data": {
+                        "message": "Comment deleted"
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "DELETE",
+                "uri": "/api/v1/comments/{comment}",
+                "route": "/api/v1/comments/{comment}",
+                "id": "commentcontroller-destroy",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "comment",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric comment ID."
+                    }
+                ],
+                "contentType": null
+            }
+        ],
+        "Social actions": [
+            {
+                "group": "Social actions",
+                "title": "Record a share",
+                "description": "Available to guests. Records each request and returns a frontend share URL; repeated requests increment shares_count.",
+                "response": {
+                    "data": {
+                        "video_id": 1,
+                        "share_url": "https://frontend.example.com/video/1",
+                        "shares_count": 1
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "channel": "copy_link"
+                },
+                "limit": null,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/videos/{video}/share",
+                "route": "/api/v1/videos/{video}/share",
+                "id": "sharecontroller-store",
+                "auth": false,
+                "rate": 60,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    },
+                    {
+                        "name": "channel",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · in:copy_link,native_share,message,facebook,whatsapp,telegram,embed,x,linkedin,pinterest"
+                    }
+                ],
+                "contentType": "application/json"
+            },
+            {
+                "group": "Social actions",
+                "title": "Record a video view",
+                "description": "Available to guests. Deduplicates views for six hours by account, or by IP and user agent for guests. A new view returns 201; a duplicate returns 200.",
+                "response": {
+                    "data": {
+                        "viewed": true,
+                        "views_count": 1
+                    }
+                },
+                "status": "201 / 200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "404": "Resource not found or not visible to this viewer.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/videos/{video}/view",
+                "route": "/api/v1/videos/{video}/view",
+                "id": "viewcontroller-store",
+                "auth": false,
+                "rate": 120,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "List your liked videos",
+                "description": "Visible, published videos ordered by when you liked them.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/me/liked-videos?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/me/liked-videos?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 10,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 10,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "GET",
+                "uri": "/api/v1/me/liked-videos",
+                "route": "/api/v1/me/liked-videos",
+                "id": "likecontroller-index",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 10. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "Like a video",
+                "description": "Requires a published, visible video. Idempotent: first creation returns 201 with created=true; repeated requests return 200 with created=false.",
+                "response": {
+                    "data": {
+                        "liked": true,
+                        "likes_count": 1,
+                        "created": true
+                    }
+                },
+                "status": "201 / 200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "POST",
+                "uri": "/api/v1/videos/{video}/like",
+                "route": "/api/v1/videos/{video}/like",
+                "id": "likecontroller-store",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "Remove a like",
+                "description": "Removes your own like. Repeated requests do not decrement the count again.",
+                "response": {
+                    "data": {
+                        "liked": false,
+                        "likes_count": 0
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "DELETE",
+                "uri": "/api/v1/videos/{video}/like",
+                "route": "/api/v1/videos/{video}/like",
+                "id": "likecontroller-destroy",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "List your saved videos",
+                "description": "Visible, published videos ordered by when you saved them.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "video_url": "https://media.example.com/videos/1/example.mp4",
+                            "thumbnail_url": null,
+                            "caption": "Hello #world",
+                            "sound_name": null,
+                            "sound_artist": null,
+                            "sound_provider": "original",
+                            "sound_external_id": null,
+                            "sound_preview_url": null,
+                            "music": "Original sound",
+                            "tags": [
+                                "#world"
+                            ],
+                            "duration": 12,
+                            "location_name": null,
+                            "visibility": "public",
+                            "high_quality_upload": false,
+                            "scheduled_at": null,
+                            "pinned_at": null,
+                            "edit": {
+                                "trim_start": null,
+                                "trim_end": null,
+                                "cut_points": [],
+                                "cover_time": null,
+                                "crop_mode": "fit",
+                                "text_overlay": null,
+                                "original_audio_muted": false,
+                                "filter_settings": null,
+                                "effect_settings": null
+                            },
+                            "status": "published",
+                            "user": {
+                                "id": 1,
+                                "name": "Alex Morgan",
+                                "username": "alex",
+                                "avatar": null,
+                                "bio": null,
+                                "followers_count": 0,
+                                "following_count": 0,
+                                "following": false,
+                                "cover_url": null,
+                                "cover_video_url": null
+                            },
+                            "stats": {
+                                "views": 0,
+                                "likes": 0,
+                                "comments": 0,
+                                "saves": 0,
+                                "shares": 0
+                            },
+                            "viewer": {
+                                "liked": false,
+                                "saved": false,
+                                "following": false
+                            },
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/me/saved-videos?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/me/saved-videos?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 10,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 10,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "GET",
+                "uri": "/api/v1/me/saved-videos",
+                "route": "/api/v1/me/saved-videos",
+                "id": "savecontroller-index",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 10. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "Save a video",
+                "description": "Requires a published, visible video. Idempotent: first creation returns 201 with created=true; repeated requests return 200 with created=false.",
+                "response": {
+                    "data": {
+                        "saved": true,
+                        "saves_count": 1,
+                        "created": true
+                    }
+                },
+                "status": "201 / 200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "POST",
+                "uri": "/api/v1/videos/{video}/save",
+                "route": "/api/v1/videos/{video}/save",
+                "id": "savecontroller-store",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "Remove a save",
+                "description": "Removes your own save. Repeated requests do not decrement the count again.",
+                "response": {
+                    "data": {
+                        "saved": false,
+                        "saves_count": 0
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "DELETE",
+                "uri": "/api/v1/videos/{video}/save",
+                "route": "/api/v1/videos/{video}/save",
+                "id": "savecontroller-destroy",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "video",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric video ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "Follow an account",
+                "description": "Uses a numeric user ID. Cannot follow yourself (422) or an invisible account (404). Repeated follows do not create duplicates.",
+                "response": {
+                    "data": {
+                        "following": true,
+                        "followers_count": 1,
+                        "following_count": 1
+                    }
+                },
+                "status": "201",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "POST",
+                "uri": "/api/v1/users/{user}/follow",
+                "route": "/api/v1/users/{user}/follow",
+                "id": "followcontroller-store",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric user ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Social actions",
+                "title": "Unfollow an account",
+                "description": "Removes your follow relationship with the numeric user ID.",
+                "response": {
+                    "data": {
+                        "following": false,
+                        "followers_count": 0,
+                        "following_count": 0
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "DELETE",
+                "uri": "/api/v1/users/{user}/follow",
+                "route": "/api/v1/users/{user}/follow",
+                "id": "followcontroller-destroy",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric user ID."
+                    }
+                ],
+                "contentType": null
+            }
+        ],
+        "Safety": [
+            {
+                "group": "Safety",
+                "title": "List blocked accounts",
+                "description": "Accounts you have blocked, newest accounts first.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "name": "Alex Morgan",
+                            "username": "alex",
+                            "avatar": null,
+                            "bio": null,
+                            "followers_count": 0,
+                            "following_count": 0,
+                            "following": false,
+                            "cover_url": null,
+                            "cover_video_url": null
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/me/blocks?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/me/blocks?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 20,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 20,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "GET",
+                "uri": "/api/v1/me/blocks",
+                "route": "/api/v1/me/blocks",
+                "id": "blockcontroller-index",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 20. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Safety",
+                "title": "Block an account",
+                "description": "Cannot block yourself (422). Removes follow relationships in both directions. Blocked relationships are hidden from visibility-filtered profiles, videos and comments.",
+                "response": {
+                    "data": {
+                        "blocked": true
+                    }
+                },
+                "status": "201",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/users/{user}/block",
+                "route": "/api/v1/users/{user}/block",
+                "id": "blockcontroller-store",
+                "auth": true,
+                "rate": 30,
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric user ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Safety",
+                "title": "Unblock an account",
+                "description": "Removes your block. Previously removed follows are not restored.",
+                "response": {
+                    "data": {
+                        "blocked": false
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "DELETE",
+                "uri": "/api/v1/users/{user}/block",
+                "route": "/api/v1/users/{user}/block",
+                "id": "blockcontroller-destroy",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric user ID."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Safety",
+                "title": "Report a video or account",
+                "description": "Provide exactly one of video_id or reported_user_id. Videos must be visible. You cannot report yourself. Reports are created with status=open.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "status": "open"
+                    }
+                },
+                "status": "201",
+                "example": {
+                    "video_id": 1,
+                    "reason": "Spam",
+                    "details": "Repeated promotional content."
+                },
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "422": "Invalid parameters or a business validation failure.",
+                    "429": "Too many requests. Back off before retrying."
+                },
+                "method": "POST",
+                "uri": "/api/v1/reports",
+                "route": "/api/v1/reports",
+                "id": "reportcontroller-store",
+                "auth": true,
+                "rate": 10,
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "body",
+                        "type": "integer",
+                        "required": false,
+                        "description": "nullable · integer · min:1"
+                    },
+                    {
+                        "name": "reported_user_id",
+                        "in": "body",
+                        "type": "integer",
+                        "required": false,
+                        "description": "nullable · integer · min:1"
+                    },
+                    {
+                        "name": "reason",
+                        "in": "body",
+                        "type": "string",
+                        "required": true,
+                        "description": "required · string · max:255"
+                    },
+                    {
+                        "name": "details",
+                        "in": "body",
+                        "type": "string",
+                        "required": false,
+                        "description": "nullable · string · max:2000"
+                    }
+                ],
+                "contentType": "application/json"
+            }
+        ],
+        "Notifications": [
+            {
+                "group": "Notifications",
+                "title": "List your notifications",
+                "description": "Notifications for the signed-in account, newest first. data is a type-specific JSON payload.",
+                "response": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "type": "example",
+                            "data": [],
+                            "read_at": null,
+                            "created_at": "2026-09-29T10:00:00.000000Z"
+                        }
+                    ],
+                    "links": {
+                        "first": "https://dash-xspann.webermelon.dev/api/v1/notifications?page=1",
+                        "last": "https://dash-xspann.webermelon.dev/api/v1/notifications?page=1",
+                        "prev": null,
+                        "next": null
+                    },
+                    "meta": {
+                        "current_page": 1,
+                        "per_page": 20,
+                        "last_page": 1,
+                        "total": 1,
+                        "from": 1,
+                        "to": 1
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": 20,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "GET",
+                "uri": "/api/v1/notifications",
+                "route": "/api/v1/notifications",
+                "id": "notificationcontroller-index",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Page number; default 1."
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer",
+                        "required": false,
+                        "description": "Items per page; default 20. Clamped to 1–100."
+                    }
+                ],
+                "contentType": null
+            },
+            {
+                "group": "Notifications",
+                "title": "Mark all notifications read",
+                "description": "Marks all of your unread notifications as read.",
+                "response": {
+                    "data": {
+                        "message": "Notifications marked as read."
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied."
+                },
+                "method": "PATCH",
+                "uri": "/api/v1/notifications/read-all",
+                "route": "/api/v1/notifications/read-all",
+                "id": "notificationcontroller-readall",
+                "auth": true,
+                "rate": null,
+                "parameters": [],
+                "contentType": null
+            },
+            {
+                "group": "Notifications",
+                "title": "Mark a notification read",
+                "description": "Only your own notifications can be read; another account’s notification returns 404. Repeated requests preserve the original read_at.",
+                "response": {
+                    "data": {
+                        "id": 1,
+                        "type": "example",
+                        "data": [],
+                        "read_at": "2026-09-29T10:00:00.000000Z",
+                        "created_at": "2026-09-29T10:00:00.000000Z"
+                    }
+                },
+                "status": "200",
+                "example": [],
+                "limit": null,
+                "errors": {
+                    "401": "Missing, expired, revoked or invalid bearer token.",
+                    "403": "Inactive/unverified account, or an owner-only operation denied.",
+                    "404": "Resource not found or not visible to this viewer."
+                },
+                "method": "PATCH",
+                "uri": "/api/v1/notifications/{notification}/read",
+                "route": "/api/v1/notifications/{notification}/read",
+                "id": "notificationcontroller-read",
+                "auth": true,
+                "rate": null,
+                "parameters": [
+                    {
+                        "name": "notification",
+                        "in": "path",
+                        "type": "integer",
+                        "required": true,
+                        "description": "Numeric notification ID."
+                    }
+                ],
+                "contentType": null
+            }
+        ]
+    },
+    "schemas": {
+        "User": {
+            "id": 1,
+            "name": "Alex Morgan",
+            "username": "alex",
+            "avatar": null,
+            "bio": null,
+            "followers_count": 0,
+            "following_count": 0,
+            "following": false,
+            "cover_url": null,
+            "cover_video_url": null
+        },
+        "Profile": {
+            "id": 1,
+            "name": "Alex Morgan",
+            "username": "alex",
+            "avatar": null,
+            "bio": null,
+            "followers_count": 0,
+            "following_count": 0,
+            "following": false,
+            "email": "alex@example.com",
+            "email_verified_at": "2026-09-29T10:00:00.000000Z",
+            "likes_count": 0,
+            "videos_count": 1
+        },
+        "MyProfile": {
+            "id": 1,
+            "name": "Alex Morgan",
+            "username": "alex",
+            "avatar": null,
+            "bio": null,
+            "followers_count": 0,
+            "following_count": 0,
+            "following": false,
+            "email": "alex@example.com",
+            "email_verified_at": "2026-09-29T10:00:00.000000Z",
+            "likes_count": 0,
+            "videos_count": 1,
+            "social_identities": []
+        },
+        "Video": {
+            "id": 1,
+            "video_url": "https://media.example.com/videos/1/example.mp4",
+            "thumbnail_url": null,
+            "caption": "Hello #world",
+            "sound_name": null,
+            "sound_artist": null,
+            "sound_provider": "original",
+            "sound_external_id": null,
+            "sound_preview_url": null,
+            "music": "Original sound",
+            "tags": [
+                "#world"
+            ],
+            "duration": 12,
+            "location_name": null,
+            "visibility": "public",
+            "high_quality_upload": false,
+            "scheduled_at": null,
+            "pinned_at": null,
+            "edit": {
+                "trim_start": null,
+                "trim_end": null,
+                "cut_points": [],
+                "cover_time": null,
+                "crop_mode": "fit",
+                "text_overlay": null,
+                "original_audio_muted": false,
+                "filter_settings": null,
+                "effect_settings": null
+            },
+            "status": "published",
+            "user": {
+                "id": 1,
+                "name": "Alex Morgan",
+                "username": "alex",
+                "avatar": null,
+                "bio": null,
+                "followers_count": 0,
+                "following_count": 0,
+                "following": false,
+                "cover_url": null,
+                "cover_video_url": null
+            },
+            "stats": {
+                "views": 0,
+                "likes": 0,
+                "comments": 0,
+                "saves": 0,
+                "shares": 0
+            },
+            "viewer": {
+                "liked": false,
+                "saved": false,
+                "following": false
+            },
+            "created_at": "2026-09-29T10:00:00.000000Z"
+        },
+        "ProcessingVideo": {
+            "id": 1,
+            "video_url": "https://media.example.com/videos/1/example.mp4",
+            "thumbnail_url": null,
+            "caption": "Hello #world",
+            "sound_name": null,
+            "sound_artist": null,
+            "sound_provider": "original",
+            "sound_external_id": null,
+            "sound_preview_url": null,
+            "music": "Original sound",
+            "tags": [
+                "#world"
+            ],
+            "duration": null,
+            "location_name": null,
+            "visibility": "public",
+            "high_quality_upload": false,
+            "scheduled_at": null,
+            "pinned_at": null,
+            "edit": {
+                "trim_start": null,
+                "trim_end": null,
+                "cut_points": [],
+                "cover_time": null,
+                "crop_mode": "fit",
+                "text_overlay": null,
+                "original_audio_muted": false,
+                "filter_settings": null,
+                "effect_settings": null
+            },
+            "status": "processing",
+            "user": {
+                "id": 1,
+                "name": "Alex Morgan",
+                "username": "alex",
+                "avatar": null,
+                "bio": null,
+                "followers_count": 0,
+                "following_count": 0,
+                "following": false,
+                "cover_url": null,
+                "cover_video_url": null
+            },
+            "stats": {
+                "views": 0,
+                "likes": 0,
+                "comments": 0,
+                "saves": 0,
+                "shares": 0
+            },
+            "viewer": {
+                "liked": false,
+                "saved": false,
+                "following": false
+            },
+            "created_at": "2026-09-29T10:00:00.000000Z"
+        },
+        "Comment": {
+            "id": 1,
+            "video_id": 1,
+            "parent_id": null,
+            "body": "Love this!",
+            "created_at": "2026-09-29T10:00:00.000000Z",
+            "user": {
+                "id": 1,
+                "name": "Alex Morgan",
+                "username": "alex",
+                "avatar": null,
+                "bio": null,
+                "followers_count": 0,
+                "following_count": 0,
+                "following": false,
+                "cover_url": null,
+                "cover_video_url": null
+            },
+            "replies_count": 0,
+            "reactions": {
+                "like": 0,
+                "love": 0,
+                "haha": 0,
+                "wow": 0,
+                "sad": 0,
+                "angry": 0
+            },
+            "viewer_reaction": null
+        },
+        "Notification": {
+            "id": 1,
+            "type": "example",
+            "data": [],
+            "read_at": null,
+            "created_at": "2026-09-29T10:00:00.000000Z"
+        },
+        "ReadNotification": {
+            "id": 1,
+            "type": "example",
+            "data": [],
+            "read_at": "2026-09-29T10:00:00.000000Z",
+            "created_at": "2026-09-29T10:00:00.000000Z"
+        }
+    }
+}

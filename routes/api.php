@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\{
     AuthController,
     CommentController,
+    DiscoverController,
     FeedController,
     FollowController,
     LikeController,
@@ -29,6 +30,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/email/verification-notification', [AuthController::class, 'resendVerification'])->middleware('throttle:5');
 
     Route::get('/feed', [FeedController::class, 'index']);
+    Route::get('/discover', [DiscoverController::class, 'index'])->middleware('throttle:120');
+    Route::get('/discover/people', [DiscoverController::class, 'people'])->middleware('throttle:120');
     Route::get('/videos', [VideoController::class, 'index']);
     Route::get('/videos/{video}', [VideoController::class, 'show']);
     Route::get('/users/suggestions', [UserController::class, 'suggestions']);
