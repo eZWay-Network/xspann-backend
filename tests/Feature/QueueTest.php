@@ -151,7 +151,7 @@ class QueueTest extends TestCase
         app(Queue::class)->work(once: true, timeout: 5, sleep: 0);
         $this->assertSame('Verify your email address', $mail->Subject);
         $this->assertTrue(str_contains($mail->getSentMIMEMessage(), 'alice@example.com'));
-        preg_match('~href="([^"]+/api/v1/auth/email/verify/[^"]+)"~', $mail->Body, $matches);
+        preg_match('~href="([^"]+/auth/email/verify/[^"]+)"~', $mail->Body, $matches);
         $this->assertTrue(isset($matches[1]));
         $this->getJson(html_entity_decode($matches[1]))->assertOk();
         $this->assertTrue(\App\Models\User::find(1)->hasVerifiedEmail());
