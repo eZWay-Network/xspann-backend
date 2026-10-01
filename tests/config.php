@@ -19,6 +19,7 @@ return [
         'ffmpeg' => '/usr/bin/false',
         'frontend_url' => 'http://localhost:3000',
         'google_client_id' => null,
+        'google_allowed_presenter_ids' => [],
     ],
     'database' => [
         'driver' => 'sqlite',

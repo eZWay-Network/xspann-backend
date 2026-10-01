@@ -168,6 +168,66 @@ class GoogleAuthTest extends TestCase
         $this->assertDatabaseCount('users', 0);
     }
 
+    public function testAcceptsTrustedNativePresenterAndKeepsWebSignInWorking(): void
+    {
+        $this->app->mergeConfig([
+            'app' => [
+                'google_allowed_presenter_ids' => ['android-client.apps.googleusercontent.com'],
+            ]
+        ]);
+
+        foreach (['android-client.apps.googleusercontent.com', 'test-client.apps.googleusercontent.com'] as $presenter) {
+            $response = $this->postJson('/api/v1/auth/social/google', [
+                'token' => $this->tokenFor(['azp' => $presenter]),
+            ])->assertOk();
+
+            $this->withToken($response->json('data.token'))
+                ->getJson('/api/v1/auth/me')
+                ->assertOk()
+                ->assertJsonPath('data.email', 'alice@gmail.com');
+        }
+
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('auth_identities', 1);
+    }
+
+    public function testRejectsUntrustedAndMalformedPresentersEvenWithNativeClientConfigured(): void
+    {
+        $this->app->mergeConfig([
+            'app' => [
+                'google_allowed_presenter_ids' => ['android-client.apps.googleusercontent.com'],
+            ]
+        ]);
+
+        foreach (['other-client.apps.googleusercontent.com', null, [], 123, ''] as $presenter) {
+            $this->postJson('/api/v1/auth/social/google', [
+                'token' => $this->tokenFor(['azp' => $presenter]),
+            ])->assertStatus(401);
+        }
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('jwt_access_tokens', 0);
+    }
+
+    public function testTrustedNativePresenterDoesNotReplaceRequiredWebAudience(): void
+    {
+        $nativeClient = 'android-client.apps.googleusercontent.com';
+        $this->app->mergeConfig([
+            'app' => [
+                'google_allowed_presenter_ids' => [$nativeClient],
+            ]
+        ]);
+
+        foreach ([$nativeClient, 'other-web-client.apps.googleusercontent.com'] as $audience) {
+            $this->postJson('/api/v1/auth/social/google', [
+                'token' => $this->tokenFor(['azp' => $nativeClient, 'aud' => $audience]),
+            ])->assertStatus(401);
+        }
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('jwt_access_tokens', 0);
+    }
+
     public function testRefreshesRotatedKeysAndLimitsUnknownKeyRefreshes(): void
     {
         Cache::store('google.certificates', ['old-key' => openssl_pkey_get_details($this->privateKey)['key']], '+1 hour');

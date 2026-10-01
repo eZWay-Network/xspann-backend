@@ -6,6 +6,7 @@ use App\Models\{AuthIdentity, User};
 use App\Services\StorageService;
 use Spark\Facades\{Cache, DB, Hash, Http, Lock};
 use Spark\Utils\JWT;
+use function array_key_exists;
 use function count;
 use function in_array;
 use function is_int;
@@ -133,10 +134,14 @@ class GoogleAuth
             abort(401, 'Invalid Google ID token.');
         }
 
+        // Native Google sign-in uses the Android client as azp and the Web client as aud.
+        $allowedPresenters = [$clientId, ...config('app.google_allowed_presenter_ids', [])];
+
         abort_unless(
             in_array($claims['iss'] ?? null, ['accounts.google.com', 'https://accounts.google.com'], true)
             && ($claims['aud'] ?? null) === $clientId
-            && (!isset($claims['azp']) || $claims['azp'] === $clientId)
+            && (!array_key_exists('azp', $claims)
+                || (is_string($claims['azp']) && in_array($claims['azp'], $allowedPresenters, true)))
             && is_int($claims['exp'] ?? null) && $claims['exp'] > time()
             && is_int($claims['iat'] ?? null) && $claims['iat'] <= time()
             && (!isset($claims['nbf']) || (is_int($claims['nbf']) && $claims['nbf'] <= time()))

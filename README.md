@@ -32,7 +32,8 @@ The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service
 | `FRONTEND_URL` | Frontend origin for CORS, password reset links, and share URLs. |
 | `DB_CONNECTION` | `sqlite`, `mysql`, or the driver supported by the installed Spark version. |
 | `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Connection values for a server database. SQLite uses `database/sqlite.db`; its path is in `config/database.php`. |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID used by the frontend. Required for Google sign-in; no client secret is needed for ID-token verification. |
+| `GOOGLE_CLIENT_ID` | Google OAuth Web/server client ID; required token audience for web and native sign-in. No client secret is needed. |
+| `GOOGLE_ALLOWED_PRESENTER_IDS` | Comma-separated trusted Android/iOS OAuth client IDs allowed as token presenters (`azp`). The Web client is always allowed. |
 | `API_TOKEN_EXPIRATION` | Token lifetime in minutes; default `43200` (30 days). |
 | `FILESYSTEM_DISK` | `public` for locally served media; `s3` for AWS or compatible object storage. The `local` disk is private and is not a public-media destination. |
 | `VIDEO_UPLOAD_MODE` | `signed` allows direct browser uploads on S3 disks. Default `local` sends uploads through the backend to `FILESYSTEM_DISK`. |
@@ -93,7 +94,13 @@ Profiles include: `id`, `name`, `username`, `email`, `email_verified_at`, `avata
 
 The route is `POST /api/v1/auth/social/{provider}`. Only `google` is supported; other providers return 404. Provider services live in `app/Services/Social`, and identities are stored in `auth_identities` with unique `(provider, provider_id)` and `(user_id, provider)` pairs. Each user can link one identity per provider. The table stores only `id`, `user_id`, `provider`, `provider_id`, and `created_at`; deleting a user cascades to their identities.
 
-Set `GOOGLE_CLIENT_ID` to the frontend's Google OAuth client ID. Signature verification uses native `Spark\Utils\JWT` with RS256 explicitly allowed, plus application checks for Google claims. Deploy a TinyCore build with RSA JWT support and enable OpenSSL; no separate JWT package is required.
+Set `GOOGLE_CLIENT_ID` to the Google OAuth **Web/server** client ID, also used by the native app when requesting its ID token. For Android/iOS, add their OAuth client IDs to `GOOGLE_ALLOWED_PRESENTER_IDS` (comma-separated).
+
+Google can issue a native token with the Web client as `aud` and the Android client as `azp`; the audience must still equal `GOOGLE_CLIENT_ID`, while a present `azp` must match the Web client or an explicitly allowed presenter. See [Google’s hybrid-app claim documentation](https://developers.google.com/identity/openid-connect/openid-connect#an-id-tokens-payload).
+
+After changing these settings on a deployed server, run `php spark config:clear` so both environment and configuration caches are refreshed. Never log raw ID tokens or request bodies on the social sign-in endpoint.
+
+Signature verification uses native `Spark\Utils\JWT` with RS256 explicitly allowed, plus application checks for Google claims. Deploy a TinyCore build with RSA JWT support and enable OpenSSL; no separate JWT package is required.
 
 The users migration defines `auth_identities` and a nullable password. Existing databases must match this updated schema; `php spark migrate` does not replay an already-applied users migration. No migration reset is needed for the test suite, which creates disposable databases.
 

@@ -34,6 +34,11 @@ return [
     // Other settings
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:3000')),
     'google_client_id' => env('GOOGLE_CLIENT_ID'),
+    // Additional trusted clients requesting tokens for the Web/server audience.
+    'google_allowed_presenter_ids' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', env('GOOGLE_ALLOWED_PRESENTER_IDS', ''))
+    ))),
     'api_token_expiration_minutes' => (int) env('API_TOKEN_EXPIRATION', 43200),
     'password_reset_expiration_minutes' => (int) env('PASSWORD_RESET_EXPIRATION', 60),
     'ffmpeg' => env('FFMPEG_BINARY', 'ffmpeg'),
