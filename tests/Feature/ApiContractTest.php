@@ -119,7 +119,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(56, count($entries));
+        $this->assertSame(55, count($entries));
         $this->assertFalse($entries['discovercontroller-index']['auth']);
         $this->assertFalse($entries['discovercontroller-people']['auth']);
         $this->assertSame(120, $entries['discovercontroller-index']['rate']);
