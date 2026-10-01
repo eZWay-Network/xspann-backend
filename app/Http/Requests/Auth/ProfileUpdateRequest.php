@@ -16,4 +16,11 @@ class ProfileUpdateRequest extends FormRequest
             'bio' => ['sometimes', 'nullable', 'string', 'max:120'],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'username.unique' => 'The username has already been taken.',
+        ];
+    }
 }

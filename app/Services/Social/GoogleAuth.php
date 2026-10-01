@@ -41,8 +41,14 @@ class GoogleAuth
                 }
 
                 if (!$user) {
+                    $base = str($email)->before('@')->slug('_')->toString();
+                    $username = $base;
+                    $attempt = 0;
                     do {
-                        $username = 'user_' . Hash::random(8);
+                        // First pass tries the plain username; later passes add a random suffix
+                        if ($attempt++ > 0) {
+                            $username = $base . random_int(100, 9999);
+                        }
                     } while (User::where('username', $username)->exists());
 
                     $picture = $claims['picture'] ?? null;
@@ -170,7 +176,7 @@ class GoogleAuth
         $certificates = $response->json();
 
         abort_unless(
-            $response->status() === 200 && is_array($certificates) && $certificates && count(array_filter($certificates, 'is_string')) === count($certificates),
+            $response->status() === 200 && \is_array($certificates) && $certificates && count(array_filter($certificates, 'is_string')) === count($certificates),
             503,
             'Google sign-in is temporarily unavailable.'
         );

@@ -12,8 +12,7 @@ class AuthMiddleware extends Middleware
         return parent::handle($request, function (Request $request) use ($next) {
             abort_unless($request->user('status') === 'active', 403, 'This account is not active.');
 
-            // TODO: Uncomment this line when email verification is required for all users
-            // abort_unless($request->user()->hasVerifiedEmail(), 403, 'Please verify your email address.');
+            abort_unless($request->user()->hasVerifiedEmail(), 403, 'Please verify your email address.');
 
             return $next($request);
         }, ...$guards);

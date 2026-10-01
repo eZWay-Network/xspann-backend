@@ -16,15 +16,13 @@ class DiscoverController extends Controller
     public function index(Request $request): JsonResource
     {
         $filters = $this->filters($request, true);
-        $viewer = $request->user();
-        $search = trim($filters['q'] ?? '');
 
         $videos = Video::published()
             ->where('videos.visibility', 'public')
-            ->visibleTo($viewer)
-            ->withApiData($viewer);
+            ->visibleTo($request->user())
+            ->withApiData($request->user());
 
-        if ($search !== '') {
+        if ($search = trim($filters->safe('q') ?: '') !== '') {
             $pattern = $this->pattern($search);
             $creators = $this->matchingUsers(ltrim($search, '@'));
 
@@ -50,9 +48,10 @@ class DiscoverController extends Controller
     public function people(Request $request): JsonResource
     {
         $filters = $this->filters($request);
-        $viewer = $request->user();
-        $search = ltrim(trim($filters['q'] ?? ''), '@');
-        $users = User::visibleTo($viewer)->withApiData($viewer);
+        $search = ltrim(trim($filters->safe('q') ?: ''), '@');
+
+        $users = User::visibleTo($viewer = $request->user())
+            ->withApiData($viewer);
 
         if ($search !== '') {
             $users->whereIn('users.id', $this->matchingUsers($search)->select('users.id'))
@@ -73,7 +72,7 @@ class DiscoverController extends Controller
         return UserResource::collection($users->paginate((int) ($filters['limit'] ?? 18)));
     }
 
-    private function filters(Request $request, bool $videos = false): array
+    private function filters(Request $request, bool $videos = false): \Spark\Http\Input
     {
         $rules = [
             'q' => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -85,14 +84,14 @@ class DiscoverController extends Controller
             $rules['sort'] = ['sometimes', 'string', 'in:popular,latest'];
         }
 
-        return $request->validate($rules)->toArray();
+        return $request->validate($rules);
     }
 
     private function matchingUsers(string $search): QueryBuilder
     {
         $pattern = $this->pattern($search);
 
-        return User::query()->where(function (QueryBuilder $query) use ($pattern): void {
+        return User::where(function (QueryBuilder $query) use ($pattern): void {
             $query->whereRaw("LOWER(users.username) LIKE LOWER(:discover_username) ESCAPE '!'", ['discover_username' => $pattern])
                 ->orWhereRaw("LOWER(users.name) LIKE LOWER(:discover_name) ESCAPE '!'", ['discover_name' => $pattern]);
         });

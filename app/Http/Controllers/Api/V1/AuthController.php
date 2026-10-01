@@ -28,9 +28,6 @@ class AuthController extends Controller
             return $user;
         });
 
-        // TODO: Remove this line when email verification is required for all users
-        return json(['data' => $this->payload($user)], 201);
-
         $notifications->verify($user);
 
         return json([
@@ -55,8 +52,7 @@ class AuthController extends Controller
 
         abort_unless($user->status === 'active', 403, 'This account is not active.');
 
-        // TODO: Uncomment this line when email verification is required for all users
-        // abort_unless($user->hasVerifiedEmail(), 403, 'Please verify your email address before logging in.');
+        abort_unless($user->hasVerifiedEmail(), 403, 'Please verify your email address before logging in.');
 
         return json(['data' => $this->payload($user)]);
     }
