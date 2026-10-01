@@ -13,7 +13,7 @@ class ApiContractTest extends TestCase
         'POST /api/v1/auth/social/{provider}',
         'POST /api/v1/auth/forgot-password',
         'POST /api/v1/auth/reset-password',
-        'GET /api/v1/auth/email/verify/{user}/{hash}',
+        'GET /auth/email/verify/{user}/{hash}',
         'GET /api/v1/feed',
         'GET /api/v1/discover',
         'GET /api/v1/discover/people',

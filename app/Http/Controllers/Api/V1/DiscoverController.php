@@ -16,13 +16,15 @@ class DiscoverController extends Controller
     public function index(Request $request): JsonResource
     {
         $filters = $this->filters($request, true);
+        $viewer = $request->user();
+        $search = trim($filters['q'] ?? '');
 
         $videos = Video::published()
             ->where('videos.visibility', 'public')
-            ->visibleTo($request->user())
-            ->withApiData($request->user());
+            ->visibleTo($viewer)
+            ->withApiData($viewer);
 
-        if ($search = trim($filters->safe('q') ?: '') !== '') {
+        if ($search !== '') {
             $pattern = $this->pattern($search);
             $creators = $this->matchingUsers(ltrim($search, '@'));
 
@@ -48,10 +50,9 @@ class DiscoverController extends Controller
     public function people(Request $request): JsonResource
     {
         $filters = $this->filters($request);
-        $search = ltrim(trim($filters->safe('q') ?: ''), '@');
-
-        $users = User::visibleTo($viewer = $request->user())
-            ->withApiData($viewer);
+        $viewer = $request->user();
+        $search = ltrim(trim($filters['q'] ?? ''), '@');
+        $users = User::visibleTo($viewer)->withApiData($viewer);
 
         if ($search !== '') {
             $users->whereIn('users.id', $this->matchingUsers($search)->select('users.id'))
@@ -72,7 +73,7 @@ class DiscoverController extends Controller
         return UserResource::collection($users->paginate((int) ($filters['limit'] ?? 18)));
     }
 
-    private function filters(Request $request, bool $videos = false): \Spark\Http\Input
+    private function filters(Request $request, bool $videos = false): array
     {
         $rules = [
             'q' => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -84,7 +85,7 @@ class DiscoverController extends Controller
             $rules['sort'] = ['sometimes', 'string', 'in:popular,latest'];
         }
 
-        return $request->validate($rules);
+        return $request->validate($rules)->toArray();
     }
 
     private function matchingUsers(string $search): QueryBuilder
