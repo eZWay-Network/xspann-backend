@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'driver' => env('DB_CONNECTION', 'sqlite'), // Database driver
+    'default' => env('DB_CONNECTION', 'sqlite'), // Database driver
     'connections' => [
         'sqlite' => [
             'driver' => 'sqlite',

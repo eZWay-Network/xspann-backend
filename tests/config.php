@@ -22,19 +22,19 @@ return [
         'google_allowed_presenter_ids' => [],
     ],
     'database' => [
-        'driver' => 'sqlite',
+        'default' => 'sqlite',
         'connections' => ['sqlite' => ['file' => ':memory:']],
     ],
     'session' => [
-        'handler' => 'file',
+        'default' => 'file',
         'connections' => ['file' => ['path' => "$storage/sessions"]],
     ],
     'cache' => [
-        'driver' => 'file',
+        'default' => 'file',
         'connections' => ['file' => ['path' => "$storage/cache", 'lock_path' => "$storage/locks"]],
     ],
     'queue' => [
-        'driver' => 'database',
+        'default' => 'database',
         'connections' => [
             'database' => ['driver' => 'database', 'connection' => null, 'table' => 'jobs'],
             'file' => ['driver' => 'file', 'path' => "$storage/queue.d"],

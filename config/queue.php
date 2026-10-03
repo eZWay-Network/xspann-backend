@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'driver' => env('QUEUE_CONNECTION', 'database'),
+    'default' => env('QUEUE_CONNECTION', 'database'),
     'connections' => [
         'database' => [
             'driver' => 'database',
