@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Video;
 use App\Http\Resources\VideoResource;
+use App\Services\SocialNotifications;
 use App\Services\VideoActions;
 use Spark\Http\{Request, Resources\JsonResource, Response};
 
@@ -23,15 +24,16 @@ class LikeController extends Controller
         return VideoResource::collection($videos);
     }
 
-    public function store(Request $request, Video $video): Response
+    public function store(Request $request, Video $video, SocialNotifications $notifications): Response
     {
         VideoActions::visible($video);
 
-        $created = VideoActions::transaction($video->id, function (Video $video) use ($request): bool {
+        $created = VideoActions::transaction($video->id, function (Video $video) use ($request, $notifications): bool {
             $like = $video->likes()->firstOrCreate(['user_id' => $request->user('id')]);
 
             if ($created = $like->wasCreated()) {
                 $video->increment('likes_count');
+                $notifications->liked($request->user(), $video);
             }
 
             return $created;

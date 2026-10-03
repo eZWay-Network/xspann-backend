@@ -384,13 +384,67 @@ Authorization: Bearer &lt;access-token&gt;
                         </tr>
                         <tr>
                             <td>Notification</td>
-                            <td>type is a string; data is a type-specific payload with no fixed schema enforced here.
-                                read_at is a nullable timestamp. “example” below is illustrative, not a promised
-                                notification type.</td>
+                            <td>read_at is null until read. data contains actor (id, username, name, avatar URL or
+                                null),
+                                message, and nullable video_id, comment_id, parent_id, excerpt and reaction_type.
+                                For replies, comment_id identifies the new reply and parent_id the original comment;
+                                for reactions, comment_id identifies the reacted-to comment. excerpt is a short comment
+                                snapshot. Actor details are snapshots; avatar URLs are resolved when fetched.
+                                Render message and excerpt as plain text. Use actor.username for profile lookup and
+                                video_id/comment_id for content navigation; deleted or inaccessible targets may return
+                                404.</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
+            <h3>Notification events</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Recipient / trigger</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>video_liked</td>
+                            <td>Video owner, when a new like is created.</td>
+                        </tr>
+                        <tr>
+                            <td>video_commented</td>
+                            <td>Video owner, for a new comment or reply.</td>
+                        </tr>
+                        <tr>
+                            <td>comment_replied</td>
+                            <td>Parent comment author. If also the video owner, receives only this notice.</td>
+                        </tr>
+                        <tr>
+                            <td>comment_reacted</td>
+                            <td>Comment author, on the first reaction. Changing an existing reaction does not send
+                                another notice.</td>
+                        </tr>
+                        <tr>
+                            <td>user_followed</td>
+                            <td>Followed user, when a new follow is created. Content fields are null.</td>
+                        </tr>
+                        <tr>
+                            <td>video_shared</td>
+                            <td>Video owner, on the first share by each signed-in, verified, active user.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p>Notifications are stored immediately with the action; no queue worker is required. Self-actions,
+                blocked relationships, recipients without video access, saves, views, reports and anonymous shares
+                do not generate notifications. Repeated active likes/follows/reactions do not create duplicates.
+                Removing and adding a like, follow or reaction again creates a new event. Historical notifications
+                remain after the underlying action is removed. Existing activity is not backfilled.</p>
+            <p>Fetch <code>GET /api/v1/notifications?unread=1</code> for unread items. Use
+                <code>meta.unread_count</code> for the badge, then mark individual items or all items read using the
+                documented PATCH endpoints and refresh the count. Delivery is through this inbox API; there are no
+                email, push or WebSocket deliveries.
+            </p>
             @foreach ($schemas as $name => $schema)
                 @if (!in_array($name, ['ProcessingVideo', 'ReadNotification']))
                     <details class="schema">

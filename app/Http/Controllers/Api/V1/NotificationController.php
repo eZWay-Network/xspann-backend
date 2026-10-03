@@ -11,11 +11,23 @@ class NotificationController extends Controller
 {
     public function index(Request $request): JsonResource
     {
+        $request->validate(['unread' => ['sometimes', 'boolean']]);
+
+        $unreadCount = Notification::where('user_id', $request->user('id'))
+            ->whereNull('read_at')
+            ->count();
+
         $notifications = Notification::where('user_id', $request->user('id'))
+            ->when(
+                $request->boolean('unread'),
+                fn($query) => $query->whereNull('read_at')
+            )
             ->latest()
+            ->orderBy('id', 'DESC')
             ->paginate(max(1, min(100, $request->integer('limit', 20))));
 
-        return NotificationResource::collection($notifications);
+        return NotificationResource::collection($notifications)
+            ->additional(['meta' => ['unread_count' => $unreadCount]]);
     }
 
     public function read(Request $request, Notification $notification): JsonResource

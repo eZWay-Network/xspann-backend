@@ -70,6 +70,16 @@ class DocsController extends Controller
 
                 $entry['errors']['422'] = 'Invalid query, page, limit or sort.';
             }
+            if ($key === 'NotificationController@index') {
+                $entry['parameters'][] = [
+                    'name' => 'unread',
+                    'in' => 'query',
+                    'type' => 'boolean',
+                    'required' => false,
+                    'description' => 'Use 1 to return only unread notifications; default 0 returns all. meta.unread_count always counts all unread notifications for this account, independent of pagination.',
+                ];
+                $entry['errors']['422'] = 'Invalid unread filter.';
+            }
             if ($action === 'verifyEmail') {
                 foreach (['expires' => 'Unix timestamp from the signed link.', 'signature' => 'HMAC from the signed link. Preserve every query parameter exactly.'] as $name => $description) {
                     $entry['parameters'][] = ['name' => $name, 'in' => 'query', 'type' => $name === 'expires' ? 'integer' : 'string', 'required' => true, 'description' => $description];
@@ -84,6 +94,9 @@ class DocsController extends Controller
                 $pageUrl = url($entry['uri']);
                 $entry['response']['links'] = ['first' => $pageUrl . '?page=1', 'last' => $pageUrl . '?page=1', 'prev' => null, 'next' => null];
                 $entry['response']['meta'] = ['current_page' => 1, 'per_page' => $entry['limit'], 'last_page' => 1, 'total' => 1, 'from' => 1, 'to' => 1];
+            }
+            if ($key === 'NotificationController@index') {
+                $entry['response']['meta']['unread_count'] = 1;
             }
             if ($key === 'AuthController@register') {
                 $entry['response']['data']['user']['email_verified_at'] = null;
@@ -187,7 +200,7 @@ class DocsController extends Controller
         }
         $add('BlockController@index', 'Safety', 'List blocked accounts', 'Accounts you have blocked, newest accounts first.', '$User', '200', [], [], 20);
         $add('ReportController@store', 'Safety', 'Report a video or account', 'Provide exactly one of video_id or reported_user_id. Videos must be visible. You cannot report yourself. Reports are created with status=open.', ['id' => 1, 'status' => 'open'], '201', ['video_id' => ['nullable', 'integer', 'min:1'], 'reported_user_id' => ['nullable', 'integer', 'min:1'], 'reason' => ['required', 'string', 'max:255'], 'details' => ['nullable', 'string', 'max:2000']], ['video_id' => 1, 'reason' => 'Spam', 'details' => 'Repeated promotional content.']);
-        $add('NotificationController@index', 'Notifications', 'List your notifications', 'Notifications for the signed-in account, newest first. data is a type-specific JSON payload.', '$Notification', '200', [], [], 20);
+        $add('NotificationController@index', 'Notifications', 'List your notifications', 'Stored in-app activity for the signed-in account, newest first. Supports unread filtering and includes meta.unread_count for the badge. See the Notification schema for event types, recipients and payload fields.', '$Notification', '200', [], [], 20);
         $add('NotificationController@read', 'Notifications', 'Mark a notification read', 'Only your own notifications can be read; another account’s notification returns 404. Repeated requests preserve the original read_at.', '$ReadNotification');
         $add('NotificationController@readAll', 'Notifications', 'Mark all notifications read', 'Marks all of your unread notifications as read.', $message('Notifications marked as read.'));
         foreach (['avatar' => [AvatarUploadRequest::class, 'Upload an avatar', 'JPEG, PNG or WebP image, up to 5 MiB. Use avatar_url in PUT /auth/profile.', 'avatar_url', 'avatars/1/example.webp'], 'local' => [LocalVideoUploadRequest::class, 'Upload a video file', 'MP4, QuickTime or WebM, up to 500 MiB. Uploads through the backend to the configured storage disk. Submit storage_path to POST /videos afterward.', 'video_url', 'videos/1/example.mp4'], 'audio' => [LocalAudioUploadRequest::class, 'Upload a sound', 'Audio file, up to 50 MiB. Use audio_url as sound_preview_url and sound_provider=local when creating a video.', 'audio_url', 'sounds/1/example.mp3']] as $action => [$rules, $title, $description, $urlKey, $path]) {
@@ -206,7 +219,21 @@ class DocsController extends Controller
         $user = ['id' => 1, 'name' => 'Alex Morgan', 'username' => 'alex', 'avatar' => null, 'bio' => null, 'followers_count' => 0, 'following_count' => 0, 'following' => false, 'cover_url' => null, 'cover_video_url' => null];
         $profile = array_diff_key($user, array_flip(['cover_url', 'cover_video_url'])) + ['email' => 'alex@example.com', 'email_verified_at' => $date, 'likes_count' => 0, 'videos_count' => 1];
         $video = ['id' => 1, 'video_url' => 'https://media.example.com/videos/1/example.mp4', 'thumbnail_url' => null, 'caption' => 'Hello #world', 'sound_name' => null, 'sound_artist' => null, 'sound_provider' => 'original', 'sound_external_id' => null, 'sound_preview_url' => null, 'music' => 'Original sound', 'tags' => ['#world'], 'duration' => 12, 'location_name' => null, 'visibility' => 'public', 'high_quality_upload' => false, 'scheduled_at' => null, 'pinned_at' => null, 'edit' => ['trim_start' => null, 'trim_end' => null, 'cut_points' => [], 'cover_time' => null, 'crop_mode' => 'fit', 'text_overlay' => null, 'original_audio_muted' => false, 'filter_settings' => null, 'effect_settings' => null], 'status' => 'published', 'user' => $user, 'stats' => ['views' => 0, 'likes' => 0, 'comments' => 0, 'saves' => 0, 'shares' => 0], 'viewer' => ['liked' => false, 'saved' => false, 'following' => false], 'created_at' => $date];
-        $notification = ['id' => 1, 'type' => 'example', 'data' => (object) [], 'read_at' => null, 'created_at' => $date];
+        $notification = [
+            'id' => 1,
+            'type' => 'video_liked',
+            'data' => [
+                'actor' => ['id' => 1, 'username' => 'alex', 'name' => 'Alex Morgan', 'avatar' => null],
+                'message' => 'Alex Morgan liked your video.',
+                'video_id' => 1,
+                'comment_id' => null,
+                'parent_id' => null,
+                'excerpt' => null,
+                'reaction_type' => null,
+            ],
+            'read_at' => null,
+            'created_at' => $date,
+        ];
         return ['User' => $user, 'Profile' => $profile, 'MyProfile' => $profile + ['social_identities' => []], 'Video' => $video, 'ProcessingVideo' => array_replace($video, ['status' => 'processing', 'duration' => null]), 'Comment' => ['id' => 1, 'video_id' => 1, 'parent_id' => null, 'body' => 'Love this!', 'created_at' => $date, 'user' => $user, 'replies_count' => 0, 'reactions' => ['like' => 0, 'love' => 0, 'haha' => 0, 'wow' => 0, 'sad' => 0, 'angry' => 0], 'viewer_reaction' => null], 'Notification' => $notification, 'ReadNotification' => array_replace($notification, ['read_at' => $date])];
     }
 

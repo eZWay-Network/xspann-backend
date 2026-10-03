@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Comments\StoreCommentRequest;
 use App\Models\{Comment, Video};
 use App\Http\Resources\CommentResource;
+use App\Services\SocialNotifications;
 use App\Services\VideoActions;
 use Spark\Facades\Auth;
 use Spark\Http\{Request, Resources\JsonResource, Response};
@@ -26,22 +27,25 @@ class CommentController extends Controller
         return CommentResource::collection($comments);
     }
 
-    public function store(Video $video, StoreCommentRequest $request): Response
+    public function store(Video $video, StoreCommentRequest $request, SocialNotifications $notifications): Response
     {
         $data = $request->validated();
 
         $video = VideoActions::visible($video);
 
-        $comment = VideoActions::transaction($video->id, function () use ($video, $data) {
-            abort_if(
-                isset($data['parent_id']) && !Comment::visibleTo(Auth::user())->whereKey($data['parent_id'])->where('video_id', $video->id)->exists(),
-                422,
-                'The selected parent_id is invalid.'
-            );
+        $comment = VideoActions::transaction($video->id, function (Video $video) use ($data, $notifications) {
+            $parent = isset($data['parent_id'])
+                ? Comment::visibleTo(Auth::user())
+                    ->whereKey($data['parent_id'])
+                    ->where('video_id', $video->id)
+                    ->first()
+                : null;
+
+            abort_if(isset($data['parent_id']) && !$parent, 422, 'The selected parent_id is invalid.');
 
             $comment = $video->comments()->create([...$data, 'user_id' => Auth::id()]);
-
             $video->increment('comments_count');
+            $notifications->commented(Auth::user(), $video, $comment, $parent);
 
             return $comment->refresh();
         });
