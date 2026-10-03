@@ -66,7 +66,7 @@ final class HttpServer
         $content = curl_exec($curl);
         $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         $error = curl_error($curl);
-        curl_close($curl);
+
         if ($content === false) {
             throw new \RuntimeException($error);
         }
@@ -79,6 +79,9 @@ final class HttpServer
             proc_terminate($this->process);
             proc_close($this->process);
             $this->process = null;
+            if (PHP_OS_FAMILY === 'Windows') {
+                usleep(100000); // 100ms
+            }
         }
     }
 

@@ -26,7 +26,7 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
         parent::setUp();
 
         $database = config('database.connections.sqlite.file');
-        if (config('database.driver') !== 'sqlite' || ($database !== ':memory:' && !str_starts_with($database, $this->storagePath . '/'))) {
+        if (config('database.default') !== 'sqlite' || ($database !== ':memory:' && !str_starts_with($database, $this->storagePath . '/'))) {
             throw new \LogicException('Tests must use an isolated SQLite database.');
         }
 
@@ -102,6 +102,14 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
         file_put_contents($ffmpeg, "#!/usr/bin/env php\n<?php file_put_contents(end(\$argv), 'fixture-thumbnail'); file_put_contents(__DIR__ . '/arguments.json', json_encode(\$argv));\n");
         chmod($probe, 0700);
         chmod($ffmpeg, 0700);
-        $this->app->mergeConfig(['app' => ['ffprobe' => $probe, 'ffmpeg' => $ffmpeg]]);
+        if (PHP_OS_FAMILY === 'Windows') {
+            $probeBat = str_replace('/', '\\', $probe . '.bat');
+            $ffmpegBat = str_replace('/', '\\', $ffmpeg . '.bat');
+            file_put_contents($probeBat, '@echo off' . "\r\n" . '"' . PHP_BINARY . '" "' . str_replace('/', '\\', $probe) . '" %*');
+            file_put_contents($ffmpegBat, '@echo off' . "\r\n" . '"' . PHP_BINARY . '" "' . str_replace('/', '\\', $ffmpeg) . '" %*');
+            $this->app->mergeConfig(['app' => ['ffprobe' => $probeBat, 'ffmpeg' => $ffmpegBat]]);
+        } else {
+            $this->app->mergeConfig(['app' => ['ffprobe' => $probe, 'ffmpeg' => $ffmpeg]]);
+        }
     }
 }

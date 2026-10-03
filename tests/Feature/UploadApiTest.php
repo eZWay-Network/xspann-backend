@@ -22,6 +22,9 @@ class UploadApiTest extends TestCase
     protected function tearDown(): void
     {
         $this->server?->stop();
+        if ($this->app->has('db')) {
+            $this->app->get('db')->disconnect();
+        }
         parent::tearDown();
     }
 
@@ -33,7 +36,13 @@ class UploadApiTest extends TestCase
         }
         $documentRoot = $this->storagePath . '/public';
         mkdir($documentRoot);
-        symlink(config('storage.disks.public.root'), $documentRoot . '/uploads');
+        $publicRoot = config('storage.disks.public.root');
+        if (!is_dir($publicRoot)) {
+            mkdir($publicRoot, 0777, true);
+        }
+        if (!file_exists($documentRoot . '/uploads')) {
+            @symlink($publicRoot, $documentRoot . '/uploads');
+        }
         $path = $this->storagePath . '/http-config.json';
         $this->server = new HttpServer(
             dirname(__DIR__) . '/Fixtures/http-router.php',
@@ -106,7 +115,7 @@ class UploadApiTest extends TestCase
         $png = $this->storagePath . '/avatar.png';
         $image = imagecreatetruecolor(8, 8);
         imagepng($image, $png);
-        imagedestroy($image);
+        // imagedestroy($image);
         $avatar = $this->http('/uploads/avatar', ['file' => new \CURLFile($png, 'image/png', 'avatar.png')], 201, true)['data'];
         $this->assertTrue(storage('public')->exists($avatar['storage_path']));
         $this->http('/uploads/videos/local', ['file' => new \CURLFile($png, 'video/mp4', 'fake.mp4')], 422, true);
@@ -128,10 +137,10 @@ class UploadApiTest extends TestCase
         $this->assertSame('published', $published['status']);
         $stored = \App\Models\Video::find($video['id']);
         $this->assertSame($upload['storage_path'], $stored->storage_path);
-        $this->assertTrue(str_starts_with($stored->thumbnail_url, 'thumbnails/1/'));
+        $this->assertTrue(str_starts_with($stored->thumbnail_url ?? '', 'thumbnails/1/'));
         $this->assertSame(9, $published['duration']);
         $this->assertSame(['#test'], $published['tags']);
-        $this->assertTrue(str_contains($published['thumbnail_url'], '/uploads/thumbnails/1/'));
+        $this->assertTrue(str_contains($published['thumbnail_url'] ?? '', '/uploads/thumbnails/1/'));
         $this->assertSame($video['id'], $this->http('/feed', [], method: 'GET')['data'][0]['id']);
     }
 
@@ -304,7 +313,7 @@ class UploadApiTest extends TestCase
                 $published = $this->http('/videos/' . $video['id'], [], method: 'GET')['data'];
                 $this->assertSame('published', $published['status']);
                 foreach ([$published['video_url'], $published['thumbnail_url']] as $url) {
-                    $this->assertTrue(str_contains($url, 'X-Amz-Signature='));
+                    $this->assertTrue(str_contains($url ?? '', 'X-Amz-Signature='));
                     $cloud->request('GET', substr($url, strlen($cloud->url)))->assertOk();
                 }
                 $this->assertFalse(storage('public')->exists($upload['storage_path']));
