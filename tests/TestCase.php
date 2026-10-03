@@ -8,6 +8,11 @@ use Spark\Foundation\Application;
 
 abstract class TestCase extends \Spark\Testing\ApplicationTestCase
 {
+    protected function testStorageDirectory(): string
+    {
+        return dirname(__DIR__) . '/storage/framework/testing';
+    }
+
     protected function createApplication(): Application
     {
         $app = require dirname(__DIR__) . '/bootstrap/app.php';

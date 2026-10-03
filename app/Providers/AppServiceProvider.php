@@ -3,17 +3,13 @@
 namespace App\Providers;
 
 use Spark\Facades\Gate;
-use Spark\Http\Auth;
 use Spark\Foundation\Providers\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(
-            abstract: Auth::class,
-            concrete: fn() => new Auth(config: ['channels' => ['jwt'], 'jwt_token_table' => 'jwt_access_tokens', 'jwt_expire' => config('app.api_token_expiration_minutes') . ' minutes'])
-        );
+        // Register any application services here
     }
 
     public function boot(): void

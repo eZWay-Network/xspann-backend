@@ -28,7 +28,7 @@ class UploadApiTest extends TestCase
     private function startServer(): void
     {
         $config = [];
-        foreach (['app', 'database', 'cache', 'queue', 'storage', 'cors'] as $key) {
+        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors'] as $key) {
             $config[$key] = config($key);
         }
         $documentRoot = $this->storagePath . '/public';

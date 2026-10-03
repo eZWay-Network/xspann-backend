@@ -8,7 +8,7 @@ return new class {
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->index();
+            $table->string('name')->nullable()->index();
             $table->string('username')->unique();
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();

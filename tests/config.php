@@ -25,13 +25,20 @@ return [
         'driver' => 'sqlite',
         'connections' => ['sqlite' => ['file' => ':memory:']],
     ],
+    'session' => [
+        'handler' => 'file',
+        'connections' => ['file' => ['path' => "$storage/sessions"]],
+    ],
     'cache' => [
-        'driver' => 'sqlite',
-        'connections' => ['sqlite' => ['path' => "$storage/cache"]],
+        'driver' => 'file',
+        'connections' => ['file' => ['path' => "$storage/cache", 'lock_path' => "$storage/locks"]],
     ],
     'queue' => [
-        'driver' => 'sqlite',
-        'connections' => ['sqlite' => ['path' => "$storage/queue/jobs.db"]],
+        'driver' => 'database',
+        'connections' => [
+            'database' => ['driver' => 'database', 'connection' => null, 'table' => 'jobs'],
+            'file' => ['driver' => 'file', 'path' => "$storage/queue.d"],
+        ],
     ],
     'storage' => [
         'default' => 'public',

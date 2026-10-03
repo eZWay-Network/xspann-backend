@@ -2,7 +2,19 @@
 
 Use this reference when implementing, debugging, reviewing, or testing a TinyMVC/Spark application. The project-local skill entry point is [.agents/skills/tinymvc-development/SKILL.md](.agents/skills/tinymvc-development/SKILL.md). It selects the relevant parts of this file; reading the entire reference is unnecessary for a small task.
 
-This reference describes the current TinyCore implementation, including soft-delete scopes and the separate `upsert()` arguments. Check the application's installed source before using a newer API. A Composer constraint such as `^3.0` does not prove which implementation is installed.
+This reference describes the current TinyCore 4.0 implementation, including soft-delete scopes and the separate `upsert()` arguments. Check the application's installed source before using a newer API. A Composer constraint such as `^4.0` does not prove which implementation is installed.
+
+## Spark 4.0 upgrade
+
+This reference targets the 4.0 source. The skeleton dependency is `tinymvc/tinycore: ^4.0`; release tags are still managed separately. Driver configuration, migration history, public/private paths, and removed APIs require an explicit application upgrade.
+
+Back up the database and files. Stop workers/producers and drain old queues before changing storage formats. Migration history is database-only; the core does not read, import, or detect old JSON ledgers. Before running migrations on an existing schema, baseline its applied filenames in the SQL ledger through reviewed application-specific upgrade tooling. An empty ledger means every migration is pending.
+
+Keep historical migrations unchanged. Add a new migration for missing framework tables; do not replace an already-applied users migration with the fresh skeleton file. Rebuild the public uploads link to `storage/app/public` after moving files; private data belongs under `storage/app/private`. Old SQLite cache/queue files and Redis queue indexes are not automatically migrated.
+
+`fireline()`, `Router::fireline()`, and `Request::isFirelineRequest()` have been removed. There is no core `Route::fire()` replacement; return normal views or implement the installed client's response protocol explicitly. Use `app.locale`, `app.locale_dir`, and `locale_dir()` for localization. Existing native session locations, cookie names, and old stateless remember-cookie formats may require fresh logins.
+
+`cache:clear` clears the default cache and compiled views/configuration while preserving active locks and unrelated temporary files. Clear other named caches explicitly with `cache($name)->flush()`. `key:generate` preserves existing application keys.
 
 ## Select the Relevant Reference
 
@@ -30,7 +42,7 @@ TinyMVC is a small PHP framework powered by the TinyCore package.
 - Routing: `Spark\Http\Routing\Router`
 - HTTP: `Spark\Http\Request`, `Spark\Http\Response`, `Spark\Http\Middleware`
 - Database: PDO wrapper, query builder, active-record-like models, schema/migrations
-- Storage utilities: sqlite or redis cache, lock, and queue
+- Storage utilities: database, file, or Redis cache, locks, sessions, and queues
 
 Do not assume Laravel classes such as `Illuminate\Http\Request`, `Illuminate\Support\Facades\Route`, `artisan`, Eloquent, or Laravel middleware internals exist. Use the `Spark\\` classes and global helpers documented here.
 
@@ -171,6 +183,7 @@ app/
     Controllers/
     Middlewares/
     Requests/
+    Resources/
   Models/
   Providers/
   Jobs/
@@ -182,27 +195,33 @@ bootstrap/
   helpers.php
 config/
   app.php
+  auth.php
   cache.php
+  cors.php
   database.php
   mail.php
   queue.php
+  session.php
+  storage.php
 database/
   migrations/
 public/
   index.php
 resources/
   views/
+  languages/
 routes/
   web.php
   api.php
   webhook.php
   console.php
 storage/
-  cache/
+  app/public
+  app/private
+  framework/
   logs/
-  queue/
   temp/
-  uploads/
+tests/
 ```
 
 Always verify the actual project before creating files.
@@ -218,11 +237,7 @@ Example shape:
 
 use Spark\Foundation\Application;
 
-return Application::create(
-    path: dirname(__DIR__),
-    config: 'config',
-    providers: require __DIR__ . '/providers.php',
-)
+return Application::create(path: dirname(__DIR__))
     ->withMiddleware(
         load: __DIR__ . '/middlewares.php',
         queue: ['csrf']
@@ -285,9 +300,11 @@ return [
     'driver' => env('DB_CONNECTION', 'sqlite'),
     'connections' => [
         'sqlite' => [
+            'driver' => 'sqlite',
             'file' => dirname(__DIR__) . '/database/sqlite.db',
         ],
         'default' => [
+            // 'driver' => 'mysql', auto from env('DB_CONNECTION')
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
             'name' => env('DB_DATABASE', 'spark'),
@@ -298,59 +315,26 @@ return [
 ];
 ```
 
-### Cache and Lock Config
+### Cache, lock, queue, and session config
 
-Cache and lock both use `config('cache')`.
+Spark 4.0 uses `database`, `file`, or `redis` for cache/locks and queue storage. The default is `database`; `sqlite` remains a database connection type, not a storage-driver name. Session storage has its own `config/session.php`, defaulting to `database`. Unknown drivers raise an exception.
 
-```php
-<?php
+Database tables are created by migrations, not by storage constructors. Run the framework migration before using the database drivers. Connections default to the application database; use `cache.connections.database.connection`, `lock_connection`, `queue.connections.database.connection`, and `session.connections.database.connection` for named connections. Configurable table names default to `caches`, `locks`, `jobs`, `failed_jobs`, and `sessions`.
 
-return [
-    'driver' => env('CACHE_DRIVER', 'sqlite'),
-    'connections' => [
-        'sqlite' => [
-            'path' => dirname(__DIR__) . '/storage/cache',
-        ],
-        'redis' => [
-            'host' => env('REDIS_HOST', '127.0.0.1'),
-            'port' => env('REDIS_PORT', 6379),
-            'password' => env('REDIS_PASSWORD', null),
-            'database' => env('REDIS_DATABASE', 0),
-            'prefix' => env('REDIS_PREFIX', 'spark'),
-            'timeout' => env('REDIS_TIMEOUT', 0.0),
-            'read_timeout' => env('REDIS_READ_TIMEOUT', 0.0),
-            'persistent' => env('REDIS_PERSISTENT', false),
-        ],
-    ],
-];
-```
+File paths in the skeleton:
 
-### Queue Config
+- Cache: `storage/framework/temp/cache`; locks: `storage/framework/temp/locks`.
+- Queue: `storage/framework/queue.d`; sessions: `storage/framework/sessions`.
+- Private files: `storage/app/private`; public uploads: `storage/app/public`.
+- Temporary files: `storage/framework/temp`.
 
-Queue uses `config('queue')`.
+Redis connections use the shared connector options: host, port, password, database, prefix, socket, timeout, read_timeout, and persistent. Require `ext-redis`, distinct environment prefixes, and a deliberate durability policy. File drivers require a local filesystem with working locks and atomic rename; do not use NFS/SMB. Use database/Redis for shared deployments.
 
-```php
-<?php
+### Session configuration
 
-return [
-    'driver' => env('QUEUE_DRIVER', 'sqlite'),
-    'connections' => [
-        'sqlite' => [
-            'path' => dirname(__DIR__) . '/storage/queue/jobs.db',
-        ],
-        'redis' => [
-            'host' => env('REDIS_HOST', '127.0.0.1'),
-            'port' => env('REDIS_PORT', 6379),
-            'password' => env('REDIS_PASSWORD', null),
-            'database' => env('REDIS_DATABASE', 0),
-            'prefix' => env('REDIS_PREFIX', 'spark'),
-            'timeout' => env('REDIS_TIMEOUT', 0.0),
-            'read_timeout' => env('REDIS_READ_TIMEOUT', 0.0),
-            'persistent' => env('REDIS_PERSISTENT', false),
-        ],
-    ],
-];
-```
+`session.handler` selects `database`, `file`, or `redis`. `session.lifetime` is idle lifetime in minutes, default 120; `expire_on_close` controls cookie lifetime. `cookie_name` defaults to `spark_session`; `cookie_settings` uses `path`, `domain`, `secure`, `http_only`, and `same_site`. Set `secure=true` behind a TLS-terminating proxy. Unknown IDs are rejected by strict session validation.
+
+The file handler serializes requests for the same session until close. Database and Redis session writes are atomic but do not lock a whole request; avoid concurrent read-modify-write updates to session data or coordinate them explicitly. The testing harness uses in-memory session state; use real HTTP tests when changing native session behavior.
 
 ## Global Helpers
 
@@ -377,7 +361,7 @@ route_url('users.show', ['id' => 5]);
 route('users.show', ['id' => 5]); // returns Spark\Url
 
 view('users.index', ['users' => $users]);
-fireline('emails.welcome', ['user' => $user]);
+view('emails.welcome', ['user' => $user]);
 
 auth();
 user();
@@ -431,7 +415,7 @@ Route::options($path, $callback);
 Route::any($path, $callback);
 Route::match(['GET', 'POST'], $path, $callback);
 Route::view('/about', 'pages.about');
-Route::fireline('/email-preview', 'emails.welcome');
+Route::view('/email-preview', 'emails.welcome');
 Route::inertia('/contact', 'Contact', ['key' => 'value']); // Requires the Inertia adapter/provider
 Route::redirect('/old', '/new', 301);
 Route::fallback(fn() => response('Not found', 404));
@@ -1120,6 +1104,8 @@ $usersWithPosts = query('users')->whereExists(function ($sub) {
 
 ## Migrations and Schema
 
+With `app.debug` disabled, migration, rollback, and fresh commands warn and ask for confirmation before changing the database (default: no). Fresh confirms once for the complete rollback/reapply operation. Pass `--force` for unattended runs.
+
 Migration files return an anonymous class with `up()` and `down()`.
 
 ```php
@@ -1183,9 +1169,9 @@ php spark migrate:rollback --step=1
 
 `--pivot` (alias `-p`) prompts for the first and second related table names. `users` and `roles` produce a `roles_users` migration with an `id`, `user_id`, `role_id`, and cascading foreign keys. Generation writes a migration file; `php spark migrate` applies it. Related tables must exist first. Add a composite unique constraint yourself when duplicate associations are invalid.
 
-The runner records applied filenames in `database/migrations.json`. Preserve that file with its database. Files use `migration_` / `seed_` prefixes; `php spark make:seeder Name` and `php spark migrate --seed` handle seed files. `migrate:fresh` rolls back recorded migrations and replays them; it is destructive, not a read-only verification command.
+The runner records filenames, type, batch, and applied time in a `migrations` database table, created automatically. Back it up with the application database. Files use `migration_` / `seed_` prefixes; `php spark make:seeder Name` and `php spark migrate --seed` handle seed files. `migrate:fresh` rolls back recorded migrations and replays them; it is destructive, not a read-only verification command.
 
-Create new migrations for deployed schemas instead of rewriting history. Failures can leave partial DDL because the runner does not automatically wrap each file in a transaction. On SQLite, adding/removing foreign keys or primary keys from existing tables needs a deliberate rebuild; there is no `change()` column modifier. Most type methods do not imply NOT NULL: call `required()` for required fields. Chain `nullable()` on `foreignId()` before `setNullOnDelete()`.
+Create new migrations for deployed schemas instead of rewriting history. SQLite/PostgreSQL wrap each file and its ledger change in a transaction; MySQL DDL can leave partial changes because it implicitly commits. On SQLite, adding/removing foreign keys or primary keys from existing tables needs a deliberate rebuild; there is no `change()` column modifier. Columns are `NOT NULL` by default. Use `nullable()` for optional fields; `nullable(false)` or `required()` restores `NOT NULL`, and the last nullability modifier wins. `required(false)` allows null. Default values do not imply nullable columns. Helpers such as `softDeletes()`, `rememberToken()`, `nullableTimestamp()`, and `nullableTimestamps()` explicitly remain nullable; Spark’s `timestamps()` retains its current-time defaults. Chain `nullable()` on `foreignId()` before `setNullOnDelete()`.
 
 ## Soft Deletes
 
@@ -1292,7 +1278,7 @@ auth()->user();
 auth()->id();
 ```
 
-Named guards are separate Auth singletons. Register them in a provider's `register()` method before use:
+Named guards are separate Auth singletons. In 4.0, `config/auth.php` defines the default `guard`, shared `model`, and `guards` map; configured named guards resolve lazily. The skeleton API guard uses JWT only. Alternatively, register a guard in a provider before use:
 
 ```php
 \Spark\Http\Auth::register(
@@ -1372,29 +1358,107 @@ Current JWT methods are `makeToken($user, $payload)` (sign only) and `createToke
 
 ## Cache
 
-Use:
+### Configure storage
+
+Spark 4.0 supports `database`, `file`, and `redis` in `config/cache.php`. The default is `database`; the old standalone `sqlite` storage driver has been removed. SQLite remains a supported database connection.
 
 ```php
-cache('default')->store('key', $value, '+10 minutes');
-$value = cache('default')->retrieve('key');
-$value = cache('default')->remember('key', fn() => expensive(), '+10 minutes');
-cache('default')->erase('key');
-cache('default')->flush();
+return [
+    'driver' => env('CACHE_DRIVER', 'database'),
+    'connections' => [
+        'database' => [
+            'connection' => env('DB_CACHE_CONNECTION'),
+            'table' => 'caches',
+            'lock_connection' => env('DB_LOCK_CONNECTION'),
+            'lock_table' => 'locks',
+        ],
+        'file' => [
+            'path' => dirname(__DIR__) . '/storage/framework/temp/cache',
+            'lock_path' => dirname(__DIR__) . '/storage/framework/temp/locks',
+        ],
+        'redis' => [
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'port' => env('REDIS_PORT', 6379),
+            'password' => env('REDIS_PASSWORD'),
+            'database' => env('REDIS_DATABASE', 0),
+            'prefix' => env('REDIS_PREFIX', 'spark'),
+        ],
+    ],
+];
 ```
 
-Cache driver is configured by `config('cache.driver')`.
+Run the framework migration before using database cache/locks. `caches` contains `key`, `group`, `data`, and `expiration`; `locks` contains `key`, `owner`, and `expiration`. Neither needs `created_at`. Use case-sensitive collations for keys and owners, as in the skeleton migration. Cache values are base64-encoded PHP serialization; keep storage private and trusted. Database key storage includes a namespace hash and two separators, leaving 189 bytes for the application key with the default 255-byte limit.
 
-SQLite cache:
+The file driver uses hashed namespace/shard directories, stable guard files, and atomic replacement. Use a local filesystem with working `flock()` and `rename()`, not NFS/SMB. Optional `file_mode`, `dir_mode`, `guard_timeout`, `gc_interval`, and `fsync` control access, contention, cleanup, and file flushing. Atomic replacement does not by itself guarantee survival of a host power loss.
 
-- `cache.connections.sqlite.path` can be a directory.
-- The cache class creates one sqlite cache file per cache name.
+Redis requires `ext-redis`; it also accepts `socket`, `timeout`, `read_timeout`, and `persistent`. Use distinct prefixes for applications and environments. These drivers target standalone Redis; the multi-key queue scripts are not Redis Cluster support. Unknown storage driver names raise an exception.
 
-Redis cache:
+### Store and retrieve
 
-- Uses `cache.connections.redis`.
-- Uses configured prefix.
+```php
+$cache = cache('catalog');
+$cache->store('featured', $products, '+10 minutes');
+$products = $cache->retrieve('featured');
+```
+
+Expiration is a date/time string accepted by the cache implementation; prefer explicit relative forms such as `+10 minutes`. A null expiration stores without a configured expiry. `has($key, eraseExpired: true)` and `retrieve($key, eraseExpired: true)` can remove expired entries while checking.
+
+### Compute a missing value
+
+```php
+$products = cache('catalog')->remember(
+    'featured',
+    fn() => Product::where('featured', true)->take(12)->all(),
+    '+10 minutes',
+);
+```
+
+`load()` provides the same cache-or-compute pattern. Make the callback safe to run more than once if concurrent requests miss together. For a critical single computation, coordinate with a [lock](https://tinymvc.github.io/locks).
+
+### Update and invalidate
+
+| Method | Purpose |
+| --- | --- |
+| `erase($keyOrKeys)` | Remove selected entries |
+| `flush()`, `clear()` | Empty this cache namespace |
+| `flushIf($condition)` | Conditional clearing |
+| `eraseExpired()` | Remove expired entries |
+| `storeMany($items, $expire)` | Store several entries |
+| `storeManyWithExpiry($items)` | Per-item expiry configuration |
+| `add($key, $value, $expire)` | Add when absent according to the driver |
+| `increment()`, `decrement()` | Numeric counters |
+| `pull($key, $default)` | Retrieve and erase |
+
+Invalidate cached results after changes that affect them. Include relevant tenant, locale, or permission context in keys so data is not accidentally reused for the wrong viewer.
+
+### Inspect and maintain
+
+`ttl()`, `stats()`, `retrieveAll()`, and `getExpired()` expose cache information. `optimize()` performs storage maintenance supported by the driver. `unload_cache($name)` releases a cached service instance in the application; it is different from deleting stored entries.
+
+Use `php spark cache:clear` for the framework's cache-clear command. Review its scope before running it in a live application, especially if cache stores are shared with rate limiting or other transient state.
+
+### Driver considerations
+
+SQLite suits a simple local deployment. Redis supports shared storage across app servers. Cache is not durable business storage: design for a missing or expired value and keep authoritative records in the database. `add()`, `pull()`, and numeric increments coordinate competing writers through database transactions, file guards, or Redis atomic operations. An increment may return false for a missing/non-numeric value or exhausted contention retries. Cache expiry still requires application-level retry and idempotency decisions.
+
+### Batch values and cache misses
+
+```php
+$cache = cache('dashboard');
+$cache->storeManyWithExpiry([
+    'counts' => ['value' => $counts, 'expire' => '+1 minute'],
+    'labels' => ['value' => $labels, 'expire' => '+1 day'],
+]);
+$values = $cache->retrieve(['counts', 'labels']);
+```
+
+A missing or expired entry reads as null. `has()` distinguishes a stored null from a missing active key. Expiry checks apply even when `eraseExpired` is false; that flag controls cleanup, not permission to read stale data. `ttl()` reports remaining seconds where available; inspect presence separately rather than using TTL as the value itself.
+
+`storeMany()` shares one expiry across a map; `storeManyWithExpiry()` expects `value` and `expire` for each key. Database cache using the default connection participates in that connection’s transaction; a named connection is separate. File and Redis writes do not join database transactions. Invalidate after a successful business transaction and choose a key that includes the user/tenant scope of the cached result.
 
 ## Locks
+
+Locks use the cache driver and namespace. Database locks use a separate connection and commit independently of application transactions. With SQLite, use a file-backed database; do not acquire a lock against the same SQLite file while already holding a write transaction. Use a dedicated lock database where needed. Lock timeouts are leases, not a guarantee that the original worker stopped; use idempotency and constraints as well.
 
 Use locks for critical sections.
 
@@ -1421,6 +1485,8 @@ if ($lock->lock('report:daily', 30, 5)) {
 Lock driver follows cache config.
 
 ## Queue and Jobs
+
+Database queue operations use the configured connection, including their transactions. Default-connection dispatch participates in the business transaction; named connection/file/Redis dispatch does not. MySQL `pushOnce()`/`dispatchOnce()` rejects active transactions; call it after commit so deduplication does not outlive its advisory lock. Queue delivery is at least once: handlers must be idempotent, and stale recovery must exceed the longest execution time. File storage is for local, modest backlogs. Redis queue transitions are atomic and target standalone Redis, not Redis Cluster. Stop workers before clearing or changing storage. `getConnection()` throws for file queues.
 
 Prefer class jobs for application work. A class job implements `Spark\Queue\Contracts\JobInterface` and usually uses `Spark\Queue\Dispatchable`.
 
@@ -1506,7 +1572,7 @@ The fluent dispatch object supports:
 - `onQueue('name')`
 - `once()` for duplicate-safe push behavior
 - `delay($seconds)`
-- `schedule($time)`
+- `schedule($time)` accepts a string or `Carbon`; persisted schedules use UTC and preserve the supplied instant across time zones.
 - `repeat($intervalOrAlias)`
 - `repeatEveryMinutes($minutes)`
 - `repeatHourly()`, `repeatDaily()`, `repeatWeekly()`, `repeatMonthly()`
@@ -1566,7 +1632,7 @@ Important:
 - A `failed()` method may accept either `Throwable $exception` or `JobContract $job, Throwable $exception`.
 - Queue connection/driver comes from `config('queue')`; do not invent Laravel-style `onConnection()` usage.
 - Queue has separate config from cache.
-- Redis and sqlite drivers should behave consistently for push/pushOnce/work.
+- Database, file, and Redis drivers should behave consistently for push/pushOnce/work. Database jobs have no created_at column. Treat job metadata fields as driver-dependent unless explicitly guaranteed.
 
 ## Views
 
@@ -1662,9 +1728,9 @@ $path = $storage->uploader('avatars', extensions: ['jpg', 'png'], maxSize: 2048)
 $url = $storage->url($path);
 ```
 
-- `local` defaults to private `storage/app`; `public` uses `storage/uploads` and the existing `storage:link` mapping. Keys are relative paths, never URLs or absolute paths. Traversal is rejected; local child symlinks are not followed.
+- `local` defaults to private `storage/app/private`; `public` uses `storage/app/public` and the existing `storage:link` mapping. Keys are relative paths, never URLs or absolute paths. Traversal is rejected; local child symlinks are not followed.
 - Use `putFile($directory, $localPath)` or `putFileAs($directory, $localPath, $name)` for trusted existing local files. These return keys and preserve the source. HTTP uploads must use genuine PHP upload files; size checks use their actual size, not a submitted size value.
-- Disk-backed uploaders retain extension/size validation, image resizing, variants, and cleanup. Their driver destinations and returned paths are disk-relative. Staging lives under private `storage/temp/storage-uploads`.
+- Disk-backed uploaders retain extension/size validation, image resizing, variants, and cleanup. Their driver destinations and returned paths are disk-relative. Staging lives under private `storage/framework/temp/storage-uploads`.
 - `Spark\Storage\S3UploaderDriver` implements the existing `UploaderUtilDriverInterface` and delegates to `Spark\Storage\S3Storage`. Configure AWS or compatible endpoints, region, bucket, key/secret, optional session token, optional public/CDN URL, and path-style addressing. ACLs are omitted by default; use `acl: public-read` only for an ACL-enabled public bucket.
 - `exists`, `missing`, `get`, `put`, `copy`, `move`, `delete`, `files`, `allFiles`, `size`, `mimeType`, and `lastModified` share the storage API. Storage failures throw; missing-file deletion succeeds. Arrays and moves are not atomic. Local copies stream; S3 copies run on the server and preserve object metadata.
 - `path()` is local-only. `url()` requires a configured URL on local storages and does not grant public access on S3. `temporaryUrl($key, $secondsOrDateTime)` is S3-only, signs the origin, and allows 1–604800 seconds. Authorize private downloads first.
@@ -1757,6 +1823,8 @@ app()->on('order.created', function ($order) {
 The event dispatcher supports priorities, one-time listeners, dispatch with responses, `until`, and subscriptions.
 
 ## Console Commands
+
+Built-in commands use consistent `INFO`, `DONE`, `WARN`, and `ERROR` notices. Migrations and rollbacks print `RUNNING` followed by timed `DONE` / `FAIL` lines. Route and queue listings use tables. ANSI colors are disabled when output is redirected, `NO_COLOR` is nonempty, or `TERM=dumb`; progress uses complete lines for readable logs. Custom commands can use `Spark\Console\Prompt::info()`, `success()`, `warning()`, `error()`, `line()`, `table()`, and `status($message, $status, $duration)`. `status()` accepts an optional elapsed duration in seconds and only renders output; use `line()` when intentional multiline text is needed.
 
 Command routes may be loaded through `withRouting(commands: __DIR__ . '/../routes/console.php')` from `bootstrap/app.php`.
 
@@ -1885,7 +1953,7 @@ runs the standalone SQLite scope/alias/relationship regression suite.
 `APP_ENV=testing` must be set before creating a CLI application. In that mode,
 `.env` and config caches are skipped; `Application::create()` merges
 `tests/config.php` before provider registration. The feature base supplies a
-temporary storage path; the supplied config uses in-memory SQLite. Middleware,
+unique per-test storage path under `storage/framework/testing` in the skeleton; the supplied config uses in-memory SQLite. Override `testStorageDirectory()` before application boot to choose the parent directory. Core defaults to the system temporary directory. Normal cleanup removes only the current test’s directory, including after failures, and preserves the shared parent and `.gitignore`. Custom teardown must call its parent in `finally`. After forced termination, remove abandoned directories only when no tests are running. Middleware,
 including CSRF, remains active. Unexpected exceptions reach the runner; early
 responses, redirects, aborts, and validation errors are captured. Deferred work
 runs after each successful request without flushing the runner's buffers.
@@ -1902,7 +1970,7 @@ Before finishing changes in a TinyMVC app:
 4. Check config keys and APIs against the installed framework and app overrides.
 5. If changing DB code, verify schema/model names, return types, and active/archive/owner boundaries using an isolated database.
 6. If changing CORS/CSRF/throttle, test normal request and preflight/invalid cases when possible.
-7. If changing queue/cache/lock, test sqlite default and consider redis parity.
+7. For drivers, run file/SQLite and real Redis tests, contention tests, native HTTP session tests, and migrations up/down. Run MySQL/PostgreSQL integration tests on the exact production versions before release.
 8. Run `git diff --check`.
 9. Run relevant tests with `php test --filter=Name` or `composer test -- --filter=Name`; run the full suite for shared behavior changes. Run `npm run build` when frontend assets change.
 10. Mention anything not tested.

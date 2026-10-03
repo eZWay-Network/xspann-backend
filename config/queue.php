@@ -1,12 +1,19 @@
 <?php
 
 return [
-    'driver' => env('QUEUE_DRIVER', 'sqlite'),
+    'driver' => env('QUEUE_CONNECTION', 'database'),
     'connections' => [
-        'sqlite' => [
-            'path' => dirname(__DIR__) . '/storage/queue/jobs.db',
+        'database' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+        ],
+        'file' => [
+            'driver' => 'file',
+            'path' => dirname(__DIR__) . '/storage/framework/queue.d',
         ],
         'redis' => [
+            'driver' => 'redis',
             'host' => env('REDIS_HOST', '127.0.0.1'),
             'port' => env('REDIS_PORT', 6379),
             'password' => env('REDIS_PASSWORD', null),
