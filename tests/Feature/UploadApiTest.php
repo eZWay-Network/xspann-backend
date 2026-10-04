@@ -180,11 +180,16 @@ class UploadApiTest extends TestCase
 
     public function testLocalMediaIsServedFromThePublicDisk(): void
     {
-        storage('public')->put('videos/1/file.mp4', '0123456789');
+        $contents = file_get_contents($this->videoFile());
+        storage('public')->put('videos/1/file.mp4', $contents);
+
         $this->startServer();
+
         $response = $this->server->request('GET', '/uploads/videos/1/file.mp4')
-            ->assertOk()->assertHeader('Content-Type', 'video/mp4');
-        $this->assertSame('0123456789', $response->content());
+            ->assertOk()
+            ->assertHeader('Content-Type', 'video/mp4');
+
+        $this->assertSame($contents, $response->content());
     }
 
     public function testConfiguredSpacesReturnsSignedPutContractAndMissingCredentialsFallBack(): void
