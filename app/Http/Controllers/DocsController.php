@@ -203,6 +203,13 @@ class DocsController extends Controller
         $add('NotificationController@index', 'Notifications', 'List your notifications', 'Stored in-app activity for the signed-in account, newest first. Supports unread filtering and includes meta.unread_count for the badge. See the Notification schema for event types, recipients and payload fields.', '$Notification', '200', [], [], 20);
         $add('NotificationController@read', 'Notifications', 'Mark a notification read', 'Only your own notifications can be read; another account’s notification returns 404. Repeated requests preserve the original read_at.', '$ReadNotification');
         $add('NotificationController@readAll', 'Notifications', 'Mark all notifications read', 'Marks all of your unread notifications as read.', $message('Notifications marked as read.'));
+        $add(
+            'NotificationController@clearAll',
+            'Notifications',
+            'Clear read notifications',
+            'Permanently deletes only your read notifications. Unread notifications and other accounts’ notifications are preserved. Repeated requests or an empty inbox return the same successful response. No request body is required.',
+            $message('Read notifications cleared.'),
+        );
         foreach (['avatar' => [AvatarUploadRequest::class, 'Upload an avatar', 'JPEG, PNG or WebP image, up to 5 MiB. Use avatar_url in PUT /auth/profile.', 'avatar_url', 'avatars/1/example.webp'], 'local' => [LocalVideoUploadRequest::class, 'Upload a video file', 'MP4, QuickTime or WebM, up to 500 MiB. Uploads through the backend to the configured storage disk. Submit storage_path to POST /videos afterward.', 'video_url', 'videos/1/example.mp4'], 'audio' => [LocalAudioUploadRequest::class, 'Upload a sound', 'Audio file, up to 50 MiB. Use audio_url as sound_preview_url and sound_provider=local when creating a video.', 'audio_url', 'sounds/1/example.mp3']] as $action => [$rules, $title, $description, $urlKey, $path]) {
             $add('UploadController@' . $action, 'Uploads', $title, $description . ' Send multipart/form-data with field file. Server and proxy upload limits may be lower.', ['upload_method' => 'multipart', 'storage_path' => $path, $urlKey => 'https://media.example.com/' . $path], '201', $rules, ['file' => '@/path/to/file']);
         }

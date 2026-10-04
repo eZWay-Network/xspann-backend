@@ -54,6 +54,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::patch('/notifications/read-all', [NotificationController::class, 'readAll']);
         Route::patch('/notifications/{notification}/read', [NotificationController::class, 'read']);
+        Route::delete('/notifications/clear-all', [NotificationController::class, 'clearAll']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::put('/auth/profile', [AuthController::class, 'update']);

@@ -442,7 +442,9 @@ Authorization: Bearer &lt;access-token&gt;
                 remain after the underlying action is removed. Existing activity is not backfilled.</p>
             <p>Fetch <code>GET /api/v1/notifications?unread=1</code> for unread items. Use
                 <code>meta.unread_count</code> for the badge, then mark individual items or all items read using the
-                documented PATCH endpoints and refresh the count. Delivery is through this inbox API; there are no
+                documented PATCH endpoints and refresh the count.
+                <code>DELETE /api/v1/notifications/clear-all</code> permanently clears your read notifications;
+                unread items are preserved. Delivery is through this inbox API; there are no
                 email, push or WebSocket deliveries.
             </p>
             @foreach ($schemas as $name => $schema)

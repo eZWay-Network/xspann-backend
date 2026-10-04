@@ -49,4 +49,13 @@ class NotificationController extends Controller
 
         return json(['data' => ['message' => 'Notifications marked as read.']]);
     }
+
+    public function clearAll(Request $request): Response
+    {
+        Notification::where('user_id', $request->user('id'))
+            ->whereNotNull('read_at')
+            ->delete();
+
+        return json(['data' => ['message' => 'Read notifications cleared.']]);
+    }
 }

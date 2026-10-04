@@ -11,6 +11,69 @@ use Tests\TestCase;
 
 class NotificationTest extends TestCase
 {
+    public function testClearAllDeletesOnlyTheRecipientsReadNotifications(): void
+    {
+        $owner = $this->makeUser();
+        $other = $this->makeUser('bob');
+        $read = Notification::create(['user_id' => $owner->id, 'type' => 'test', 'data' => [], 'read_at' => now()]);
+        $unread = Notification::create(['user_id' => $owner->id, 'type' => 'test', 'data' => []]);
+        $foreignRead = Notification::create(['user_id' => $other->id, 'type' => 'test', 'data' => [], 'read_at' => now()]);
+        $foreignUnread = Notification::create(['user_id' => $other->id, 'type' => 'test', 'data' => []]);
+
+        $this->asUser($owner)->deleteJson('/api/v1/notifications/clear-all', ['user_id' => $other->id])
+            ->assertOk()
+            ->assertJsonPath('data.message', 'Read notifications cleared.');
+
+        $this->assertDatabaseMissing('notifications', ['id' => $read->id]);
+        $this->assertDatabaseHas('notifications', ['id' => $unread->id, 'read_at' => null]);
+        $this->assertDatabaseHas('notifications', ['id' => $foreignRead->id]);
+        $this->assertDatabaseHas('notifications', ['id' => $foreignUnread->id, 'read_at' => null]);
+        $this->assertDatabaseCount('notifications', 3);
+
+        $this->getJson('/api/v1/notifications')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $unread->id)
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('meta.unread_count', 1);
+        $this->patchJson('/api/v1/notifications/' . $read->id . '/read')->assertStatus(404);
+    }
+
+    public function testClearAllHandlesEmptyInboxesAndRepeatedRequests(): void
+    {
+        $owner = $this->makeUser();
+        $this->asUser($owner)->deleteJson('/api/v1/notifications/clear-all')->assertOk();
+
+        Notification::create(['user_id' => $owner->id, 'type' => 'test', 'data' => []]);
+        $this->patchJson('/api/v1/notifications/read-all')->assertOk();
+
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $this->deleteJson('/api/v1/notifications/clear-all')->assertOk()
+                ->assertJsonPath('data.message', 'Read notifications cleared.');
+            $this->assertDatabaseCount('notifications', 0);
+        }
+
+        $this->getJson('/api/v1/notifications')->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.total', 0)
+            ->assertJsonPath('meta.unread_count', 0);
+    }
+
+    public function testClearAllRejectsGuestsInactiveAndUnverifiedAccounts(): void
+    {
+        $owner = $this->makeUser();
+        $notice = Notification::create(['user_id' => $owner->id, 'type' => 'test', 'data' => [], 'read_at' => now()]);
+        $this->deleteJson('/api/v1/notifications/clear-all')->assertStatus(401);
+
+        $owner->update(['status' => 'suspended']);
+        $this->asUser($owner)->deleteJson('/api/v1/notifications/clear-all')->assertStatus(403);
+
+        $owner->update(['status' => 'active', 'email_verified_at' => null]);
+        $this->asUser($owner)->deleteJson('/api/v1/notifications/clear-all')->assertStatus(403);
+
+        $this->assertDatabaseHas('notifications', ['id' => $notice->id]);
+        $this->assertDatabaseCount('notifications', 1);
+    }
+
     public function testSocialActionsPersistUsefulNotificationsWithoutRequestDuplicates(): void
     {
         $owner = $this->makeUser();

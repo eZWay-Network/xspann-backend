@@ -129,6 +129,7 @@ class VideoApiTest extends TestCase
             ['POST', '/reports'],
             ['GET', '/notifications'],
             ['PATCH', '/notifications/read-all'],
+            ['DELETE', '/notifications/clear-all'],
             ['PATCH', '/notifications/1/read'],
         ];
         foreach ($routes as [$method, $path]) {

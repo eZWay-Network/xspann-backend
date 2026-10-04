@@ -175,7 +175,7 @@ Comments accept `body` (up to 1000 characters) and optional `parent_id` belongin
 - Block/unblock a numeric user ID with POST/DELETE `/users/{user}/block`; GET `/me/blocks` lists your blocks. Blocking removes follows in both directions and hides the blocked account’s profile, videos, comments, and interactions from the other account. Guests can still see public content.
 - POST `/comments/{comment}/reaction` accepts `reaction_type`: `like` (default when omitted), `love`, `haha`, `wow`, `sad`, or `angry`. Each account has one reaction per comment; another POST replaces it. DELETE removes it. Comment resources include `replies_count`, counts under `reactions`, and `viewer_reaction` (null when absent).
 - POST `/reports` accepts exactly one of `video_id` or `reported_user_id`, a required `reason` (255 characters), and optional `details` (2000 characters). Reports always start with `status=open`.
-- GET `/notifications` lists only your notifications. PATCH `/notifications/{notification}/read` marks one read; PATCH `/notifications/read-all` marks yours read. These endpoints read existing notification records; social actions do not currently generate in-app notifications.
+- GET `/notifications` lists only your notifications. PATCH `/notifications/{notification}/read` marks one read; PATCH `/notifications/read-all` marks yours read. DELETE `/notifications/clear-all` permanently removes only your read notifications, preserving unread items and other users’ notifications. It requires no body and returns 200 with `data.message`: `Read notifications cleared.`, including when nothing remains to clear. Social actions generate in-app notifications; self-actions and blocked activity are excluded.
 
 ### Upload flow
 
@@ -265,6 +265,7 @@ All paths below include the `/api/v1` prefix. Public reads, shares, and views ac
 | POST | `/api/v1/reports` |
 | GET | `/api/v1/notifications` |
 | PATCH | `/api/v1/notifications/read-all` |
+| DELETE | `/api/v1/notifications/clear-all` |
 | PATCH | `/api/v1/notifications/{notification}/read` |
 
 
@@ -295,7 +296,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 54 versioned API endpoints and middleware assignments. |
+| `routes/api.php` | The 56 versioned API endpoints and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -319,7 +320,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover all 54 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover all 56 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 

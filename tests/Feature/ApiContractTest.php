@@ -62,6 +62,7 @@ class ApiContractTest extends TestCase
         'POST /api/v1/reports',
         'GET /api/v1/notifications',
         'PATCH /api/v1/notifications/read-all',
+        'DELETE /api/v1/notifications/clear-all',
         'PATCH /api/v1/notifications/{notification}/read',
     ];
 
@@ -119,7 +120,10 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(55, count($entries));
+        $this->assertSame(56, count($entries));
+        $this->assertTrue($entries['notificationcontroller-clearall']['auth']);
+        $this->assertSame('DELETE', $entries['notificationcontroller-clearall']['method']);
+        $this->assertSame(['data' => ['message' => 'Read notifications cleared.']], $entries['notificationcontroller-clearall']['response']);
         $this->assertFalse($entries['discovercontroller-index']['auth']);
         $this->assertFalse($entries['discovercontroller-people']['auth']);
         $this->assertSame(120, $entries['discovercontroller-index']['rate']);
