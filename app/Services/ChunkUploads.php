@@ -158,6 +158,6 @@ class ChunkUploads
             throw new \InvalidArgumentException('Invalid upload ID.');
         }
 
-        return Lock::withLock("uploads.$userId.$uploadId", fn() => $callback(storage_dir("temp/upload-chunks/$userId/$uploadId")), timeout: 600, waitTimeout: 10);
+        return Lock::withLock("uploads.$userId.$uploadId", fn() => $callback(temp_dir("upload-chunks/$userId/$uploadId")), timeout: 600, waitTimeout: 10);
     }
 }

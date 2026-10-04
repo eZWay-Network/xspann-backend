@@ -136,7 +136,7 @@ class VideoMetadataExtractor
 
     private function temporary(string $prefix): string
     {
-        File::ensureDirectoryExists($directory = storage_dir('temp/video-processing'));
+        File::ensureDirectoryExists($directory = temp_dir('video-processing'));
 
         $path = tempnam($directory, $prefix);
         if ($path === false) {
