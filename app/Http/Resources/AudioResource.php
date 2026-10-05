@@ -18,6 +18,9 @@ class AudioResource extends JsonResource
             'origin' => $this->origin,
             'status' => $this->status,
             'source_video_id' => $this->source_video_id,
+            'viewer' => [
+                'saved' => (bool) $this->viewer_saved
+            ],
             'videos_count' => (int) $this->videos_count,
             'creator' => $this->whenLoaded('user', UserResource::make(...)),
             'created_at' => $this->created_at,

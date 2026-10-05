@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\{
     AuthController,
     AudioController,
+    AudioSaveController,
     CommentController,
     DiscoverController,
     FeedController,
@@ -72,6 +73,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/uploads/videos/chunk', [UploadController::class, 'videoChunk'])->middleware('throttle:900');
         Route::post('/uploads/videos/complete', [UploadController::class, 'completeVideoChunks'])->middleware('throttle:20');
         Route::post('/uploads/sounds/local', [UploadController::class, 'audio'])->middleware('throttle:20');
+
+        Route::get('/me/saved-audios', [AudioSaveController::class, 'index']);
+        Route::post('/audios/{audio}/save', [AudioSaveController::class, 'store']);
+        Route::delete('/audios/{audio}/save', [AudioSaveController::class, 'destroy']);
 
         Route::post('/audios', [AudioController::class, 'store']);
 

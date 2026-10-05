@@ -20,6 +20,15 @@ return new class {
             $table->index(['status', 'created_at']);
         });
 
+        Schema::create('audio_saves', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('audio_id')->constrained('audios')->cascadeOnDelete();
+            $table->timestamp('created_at')->useCurrent();
+            $table->unique(['user_id', 'audio_id']);
+            $table->index(['user_id', 'created_at']);
+        });
+
         // Spark cannot add SQLite foreign keys separately; add this nullable reference inline.
         if (db()->getDriver() === 'sqlite') {
             db()->statement('ALTER TABLE videos ADD COLUMN audio_id INTEGER REFERENCES audios(id) ON DELETE SET NULL');
@@ -54,8 +63,8 @@ return new class {
             $table->dropColumn('audio_mode');
         });
 
+        Schema::dropIfExists('audio_saves');
         Schema::dropIfExists('audios');
-
         Schema::dropIfExists('pending_uploads');
     }
 };

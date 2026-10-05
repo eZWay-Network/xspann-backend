@@ -29,6 +29,11 @@ class Audio extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function saves(): HasMany
+    {
+        return $this->hasMany(AudioSave::class);
+    }
+
     public function videos(): HasMany
     {
         return $this->hasMany(Video::class);
@@ -54,7 +59,11 @@ class Audio extends Model
 
     public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
-        return $query->with(['user' => fn (QueryBuilder $query) => $query->withApiData($viewer)])
-            ->withCount('videos', fn (QueryBuilder $query) => $query->published()->visibleTo($viewer));
+        if ($viewer) {
+            $query->withExists(['saves as viewer_saved' => fn(QueryBuilder $query) => $query->where('user_id', $viewer->id)]);
+        }
+
+        return $query->with(['user' => fn(QueryBuilder $query) => $query->withApiData($viewer)])
+            ->withCount('videos', fn(QueryBuilder $query) => $query->published()->visibleTo($viewer));
     }
 }

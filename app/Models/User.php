@@ -113,6 +113,11 @@ class User extends Model
         return $this->belongsToMany(Video::class, 'likes');
     }
 
+    public function savedAudios(): BelongsToMany
+    {
+        return $this->belongsToMany(Audio::class, 'audio_saves');
+    }
+
     public function savedVideos(): BelongsToMany
     {
         return $this->belongsToMany(Video::class, 'saves');

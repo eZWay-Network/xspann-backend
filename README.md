@@ -206,6 +206,8 @@ Apply `migration_2026_10_05_120000_audio_library.php` after the existing schema.
 
 Original sounds remain reusable only while their source video is public and published. Private/followers-only/deleted sources, inactive creators, and blocked relationships hide them from library discovery and other viewers' video resources. An owner may still inspect their own sound profile. Deleting the source also deletes its extracted library file/record and clears referencing video IDs; already rendered shorts retain their embedded soundtrack. Independently uploaded library sounds survive deletion of shorts that use them. Legacy `sound_*` fields remain for response compatibility; new integrations should use `audio_id` and the nested `audio` resource.
 
+Authenticated clients save with `POST /api/v1/audios/{audio}/save` (201 initially, 200 on repeat), unsave with `DELETE /api/v1/audios/{audio}/save`, and list with `GET /api/v1/me/saved-audios?page=1&limit=20` (maximum limit 100). Audio resources include `viewer.saved` for the signed-in viewer; guests receive false. The saved list returns ordinary audio resources, newest saves first, ready for the studio's `audio_id` selection. Unavailable/private/blocked sounds are hidden without discarding the save; they reappear if available again. Users can unsave hidden sounds by ID. Saves are private to the account and cascade when the audio or account is deleted.
+
 Audio media uses the existing storage convention: full stable S3 URLs in the database, relative paths for local files, and public/signed URLs in resources. A previously issued signed URL remains valid until expiry; source privacy controls new API responses and reuse.
 
 ### Upload flow
@@ -226,7 +228,7 @@ Chunk requests contain `upload_id` (UUID), zero-based `chunk_index`, `total_chun
 | Audio | 51200 KiB (50 MiB) | See `LocalAudioUploadRequest` for the accepted audio MIME types |
 | Avatar | 5120 KiB (5 MiB) | JPEG, PNG, WebP |
 
-Audio uploads retain `audio_url` and add `audio_id` and an `audio` resource with `status=processing`; avatar uploads return `avatar_url`. Keep PHP, reverse-proxy, and web-server body limits above the allowed upload size plus multipart overhead.
+Audio uploads return `audio_url`; create the library entry separately through `POST /audios`. Avatar uploads return `avatar_url`. Keep PHP, reverse-proxy, and web-server body limits above the allowed upload size plus multipart overhead.
 ### Media storage
 
 - The public disk uses the local filesystem. Media fields store relative paths, such as `videos/1/clip.mp4`. The private `local` disk remains separate.
@@ -294,6 +296,9 @@ All paths below include the `/api/v1` prefix. Public reads, shares, and views ac
 | POST | `/api/v1/users/{user}/block` |
 | DELETE | `/api/v1/users/{user}/block` |
 | POST | `/api/v1/reports` |
+| GET | `/api/v1/me/saved-audios` |
+| POST | `/api/v1/audios/{audio}/save` |
+| DELETE | `/api/v1/audios/{audio}/save` |
 | POST | `/api/v1/audios` |
 | GET | `/api/v1/audios` |
 | GET | `/api/v1/audios/{audio}` |
@@ -335,7 +340,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 60 versioned API endpoints and middleware assignments. |
+| `routes/api.php` | The 63 versioned API endpoints and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -359,7 +364,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover all 60 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover all 63 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 
