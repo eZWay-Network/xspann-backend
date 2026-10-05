@@ -66,12 +66,15 @@ class S3UploadTest extends TestCase
             app(Queue::class)->work(once: true, timeout: 5, sleep: 0);
             $video = Video::find($id);
             $this->assertSame('published', $video->status);
-            $this->assertSame($upload['video_url'], $video->storage_path);
+            $this->assertTrue(str_starts_with($video->storage_path, 'https://cdn.example.com/videos/1/'));
+            $this->assertFalse($upload['video_url'] === $video->storage_path);
+            $this->assertFalse(storage('s3')->exists($upload['storage_path']));
+            $this->assertTrue(storage('s3')->exists(\App\Services\StorageService::location($video->storage_path)['key']));
             $this->assertSame(13, $video->duration);
             $this->assertTrue(str_starts_with($video->thumbnail_url, 'https://cdn.example.com/thumbnails/1/'));
             $this->assertSame('fixture-thumbnail', file_get_contents($this->storagePath . '/' . substr($video->thumbnail_url, strlen('https://cdn.example.com/'))));
             $this->getJson('/api/v1/feed')->assertOk()
-                ->assertJsonPath('data.0.video_url', $upload['video_url'])
+                ->assertJsonPath('data.0.video_url', $video->storage_path)
                 ->assertJsonPath('data.0.thumbnail_url', $video->thumbnail_url)
                 ->assertJsonPath('data.0.user.cover_url', $video->thumbnail_url);
             $this->assertSame([], glob($this->storagePath . '/temp/video-processing/*'));

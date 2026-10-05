@@ -49,6 +49,7 @@ class VideoApiTest extends TestCase
             'sound_provider' => 'local',
             'sound_name' => 'My audio'
         ];
+        storage('public')->put($data['storage_path'], 'uploaded');
         $response = $this->postJson('/api/v1/videos', $data)->assertStatus(201)->assertJsonPath('data.status', 'processing')
             ->assertJsonPath('data.edit.trim_start', 1.5)->assertJsonPath('data.edit.effect_settings.arFace', 'Smile');
         $this->assertDatabaseHas('videos', ['id' => $response->json('data.id'), 'user_id' => $user->id, 'visibility' => 'followers']);

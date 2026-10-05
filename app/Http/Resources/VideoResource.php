@@ -12,6 +12,9 @@ class VideoResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'audio_id' => $this->audio_id,
+            'audio_mode' => $this->audio_mode,
+            'audio' => $this->whenLoaded('audio', AudioResource::make(...)),
             'video_url' => StorageService::publicUrl($this->storage_path),
             'thumbnail_url' => StorageService::publicUrl($this->thumbnail_url),
             'caption' => $this->caption,

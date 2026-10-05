@@ -12,6 +12,9 @@ class MediaApiTest extends TestCase
     {
         $user = $this->makeUser();
         $this->asUser($user);
+        foreach (['videos/1/clip.mp4', 'thumbnails/1/cover.jpg', 'sounds/1/audio.mp3', 'avatars/1/avatar.png'] as $path) {
+            storage('public')->put($path, 'uploaded');
+        }
         $video = $this->postJson('/api/v1/videos', [
             'storage_path' => 'videos/1/clip.mp4',
             'thumbnail_url' => media_url('thumbnails/1/cover.jpg'),

@@ -60,6 +60,10 @@ class ChunkUploads
             if (!move_uploaded_file($file['tmp_name'], "$directory/" . $data['chunk_index'] . '.part')) {
                 throw new \RuntimeException('Cannot store upload chunk.');
             }
+
+            if (!touch("$directory/manifest.json")) {
+                throw new \RuntimeException('Cannot update upload activity.');
+            }
         });
     }
 
@@ -121,6 +125,8 @@ class ChunkUploads
                 $path = StorageService::pathFor($userId, $data['filename']);
                 $path = StorageService::disk()->putFileAs(dirname($path), $assembledPath, basename($path));
 
+                PendingUploads::track($userId, $path);
+
                 File::deleteDirectory($directory);
 
                 return $path;
@@ -128,6 +134,30 @@ class ChunkUploads
                 File::delete($assembledPath);
             }
         });
+    }
+
+    public function prune(int $cutoff): void
+    {
+        foreach (glob(temp_dir('upload-chunks/*/*'), GLOB_ONLYDIR) ?: [] as $directory) {
+            $userId = basename(dirname($directory));
+            $uploadId = basename($directory);
+            if (!ctype_digit($userId) || !preg_match('/^[a-f0-9-]{36}$/Di', $uploadId)) {
+                continue;
+            }
+
+            $this->locked((int) $userId, $uploadId, function (string $directory) use ($cutoff): void {
+                if (!is_dir($directory)) {
+                    return;
+                }
+
+                $manifest = "$directory/manifest.json";
+                clearstatcache(true, $manifest);
+                $modified = is_file($manifest) ? filemtime($manifest) : filemtime($directory);
+                if ($modified !== false && $modified < $cutoff && !File::deleteDirectory($directory)) {
+                    throw new \RuntimeException('Cannot remove expired upload chunks.');
+                }
+            });
+        }
     }
 
     private function manifest(string $directory, array $data, bool $create): void

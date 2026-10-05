@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\VideoRetry;
+use App\Jobs\PruneUploads;
 use Spark\Console\Prompt;
 
 command('greet', function (Prompt $prompt) {
@@ -19,3 +20,8 @@ command('videos:retry', function (Prompt $prompt, array $args) {
     $retried = VideoRetry::retry($id);
     $prompt->message($retried ? 'Video processing queued.' : 'Only failed or processing videos can be retried.');
 })->description('Retry processing for one failed or interrupted video');
+
+command('uploads:prune', function (Prompt $prompt) {
+    PruneUploads::dispatchOnce()->send();
+    $prompt->message('Abandoned upload cleanup queued.');
+})->description('Queue cleanup of expired, unreferenced uploads and chunk sessions');

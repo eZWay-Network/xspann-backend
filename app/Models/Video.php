@@ -18,6 +18,8 @@ class Video extends Model
 
     protected array $fillable = [
         'user_id',
+        'audio_id',
+        'audio_mode',
         'storage_path',
         'thumbnail_url',
         'caption',
@@ -86,6 +88,11 @@ class Video extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function audio(): BelongsTo
+    {
+        return $this->belongsTo(Audio::class);
     }
 
     public function likes(): HasMany
@@ -162,6 +169,9 @@ class Video extends Model
     public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
         return $query->withViewerState($viewer)
-            ->with(['user' => fn($query) => $query->withApiData($viewer)]);
+            ->with([
+                'user' => fn($query) => $query->withApiData($viewer),
+                'audio' => fn($query) => $query->availableTo($viewer)->withApiData($viewer),
+            ]);
     }
 }

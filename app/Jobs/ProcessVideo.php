@@ -2,13 +2,12 @@
 
 namespace App\Jobs;
 
-use App\Models\Video;
-use App\Services\{VideoMetadataExtractor, StorageService};
-use Spark\Facades\Lock;
+use App\Models\{Audio, Video};
+use App\Services\{MediaProcessor, PendingUploads};
+use Spark\Facades\{DB, Lock};
 use Spark\Queue\Contracts\JobInterface;
 use Spark\Queue\Dispatchable;
 use Throwable;
-use function sprintf;
 
 class ProcessVideo implements JobInterface
 {
@@ -22,31 +21,61 @@ class ProcessVideo implements JobInterface
 
     public function handle(): void
     {
-        $key = sprintf('videos.process.%d', $this->videoId);
-
-        Lock::withLock($key, function (): void {
+        Lock::withLock("videos.process.$this->videoId", function (): void {
             $video = Video::find($this->videoId);
-
             if (!$video || $video->status !== Video::STATUS_PROCESSING) {
                 return;
             }
 
-            $metadata = app(VideoMetadataExtractor::class)->extract($video);
+            $media = app(MediaProcessor::class)->video($video);
+            $paths = array_filter([$media['storage_path'], $media['thumbnail_url'] ?? null, $media['audio_path'] ?? null]);
 
-            // Keep an owner deletion from being overwritten by a running job.
-            $updated = Video::whereKey($video->id)
-                ->where('status', Video::STATUS_PROCESSING)
-                ->update([
-                    'thumbnail_url' => $video->thumbnail_url ?: ($metadata['thumbnail_url'] ?? null),
-                    'duration' => $video->duration ?: ($metadata['duration'] ?? null),
-                    'status' => Video::STATUS_PUBLISHED,
-                    'updated_at' => now(),
-                ]);
+            try {
+                PendingUploads::locked($video->user_id, function () use ($video, $media): bool {
+                    return DB::transaction(function () use ($video, $media): bool {
+                        $current = Video::find($video->id);
+                        if (!$current || $current->status !== Video::STATUS_PROCESSING) {
+                            return false;
+                        }
 
-            if ((!$updated || $video->thumbnail_url) && isset($metadata['thumbnail_path'])) {
-                StorageService::disk()->delete($metadata['thumbnail_path']);
+                        $updated = Video::whereKey($video->id)
+                            ->where('status', Video::STATUS_PROCESSING)
+                            ->update([
+                                'storage_path' => $media['storage_path'],
+                                'thumbnail_url' => $current->thumbnail_url ?: ($media['thumbnail_url'] ?? null),
+                                'duration' => $media['duration'],
+                                'status' => Video::STATUS_PUBLISHED,
+                                'updated_at' => now(),
+                            ]);
+
+                        if (!$updated) {
+                            return false;
+                        }
+
+                        if (isset($media['audio_path'])) {
+                            $audio = Audio::create([
+                                'user_id' => $video->user_id,
+                                'source_video_id' => $video->id,
+                                'title' => mb_substr('Original sound - ' . $video->user->name, 0, 120),
+                                'origin' => 'original',
+                                'status' => 'ready',
+                                'storage_path' => $media['audio_path'],
+                                'duration' => $media['duration'],
+                            ]);
+
+                            Video::whereKey($video->id)->update(['audio_id' => $audio->id]);
+                        }
+
+                        return true;
+                    });
+                });
+            } catch (Throwable $exception) {
+                MediaProcessor::cleanup($video->user_id, $paths);
+                throw $exception;
             }
-        }, timeout: 1800, waitTimeout: 5);
+
+            MediaProcessor::cleanup($video->user_id, [$video->storage_path, ...$paths]);
+        }, timeout: 3600, waitTimeout: 5);
     }
 
     public function failed(Throwable $exception): void

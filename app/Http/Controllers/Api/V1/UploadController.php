@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Uploads\{AvatarUploadRequest, LocalAudioUploadRequest, LocalVideoUploadRequest, SignedVideoUploadRequest};
-use App\Services\{StorageService, ChunkUploads};
+use App\Services\{StorageService, ChunkUploads, PendingUploads};
 use Spark\Http\{Request, Response};
 
 class UploadController extends Controller
@@ -33,6 +33,9 @@ class UploadController extends Controller
                 $acl = config('storage.disks.' . StorageService::diskName() . '.acl');
                 $disk = StorageService::disk();
                 $uploadUrl = $disk->temporaryUploadUrl($path, 900, $contentType, $acl);
+
+                PendingUploads::track($request->user('id'), $path);
+
                 $headers = ['Content-Type' => $contentType];
 
                 if ($acl !== null) {

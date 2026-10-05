@@ -2,7 +2,7 @@
 
 A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses TinyCore 3.3.34.
 
-Requires PHP 8.2+. Enable PDO and your database driver, `pdo_sqlite` for the default cache/queue/locks, `fileinfo`, `mbstring`, `openssl`, and `curl`. Install FFmpeg and FFprobe for video duration and cover generation. GD is used by the avatar upload test fixture.
+Requires PHP 8.2+. Enable PDO and your database driver, `pdo_sqlite` for the default cache/queue/locks, `fileinfo`, `mbstring`, `openssl`, and `curl`. Install FFmpeg with libx264/AAC encoding and FFprobe for video compression, audio extraction, and cover generation. GD is used by the avatar upload test fixture.
 
 ```sh
 composer install
@@ -37,7 +37,7 @@ curl -G 'https://dash-xspann.webermelon.dev/api/v1/discover/people' \
   -H 'Accept: application/json' --data-urlencode 'q=alex'
 ```
 
-The route-generated docs at `/` and their **Export JSON** action include both endpoints. A generated snapshot is in [`docs/api-reference.json`](docs/api-reference.json). No migration, dependency update, or email-verification change is required. Publish the controller, routes, and docs together before switching the mobile client from its current `/videos` and `/users/suggestions` implementation. The new endpoints use a 120-request throttle, matching the route's native middleware semantics.
+The route-generated docs at `/` and their **Export JSON** action include both endpoints. No migration, dependency update, or email-verification change is required. Publish the controller, routes, and docs together before switching the mobile client from its current `/videos` and `/users/suggestions` implementation. The new endpoints use a 120-request throttle, matching the route's native middleware semantics.
 
 Run `php test --filter=DiscoverApiTest` for isolated search, ranking, privacy, pagination, validation, docs-export and bounded-query checks. The pre-existing email-verification expectations are intentionally unchanged.
 
@@ -150,6 +150,7 @@ Create a video with the `storage_path` returned by an upload. Optional fields ar
 | --- | --- |
 | `thumbnail_url`, `sound_preview_url` | Public URLs, up to 2048 characters. `video_url` is an output field derived from `storage_path`. |
 | `caption` | Up to 2200 characters. Hashtags are returned as `tags`. |
+| `audio_id`, `audio_mode` | Optional reusable library sound ID; mode `replace` (default) or `mix`. Create only. |
 | `sound_name`, `sound_artist`, `sound_external_id` | Up to 120 characters each. |
 | `sound_provider` | `original`, `jamendo`, or `local`. |
 | `location_name` | Up to 180 characters. |
@@ -177,6 +178,36 @@ Comments accept `body` (up to 1000 characters) and optional `parent_id` belongin
 - POST `/reports` accepts exactly one of `video_id` or `reported_user_id`, a required `reason` (255 characters), and optional `details` (2000 characters). Reports always start with `status=open`.
 - GET `/notifications` lists only your notifications. PATCH `/notifications/{notification}/read` marks one read; PATCH `/notifications/read-all` marks yours read. DELETE `/notifications/clear-all` permanently removes only your read notifications, preserving unread items and other users’ notifications. It requires no body and returns 200 with `data.message`: `Read notifications cleared.`, including when nothing remains to clear. Social actions generate in-app notifications; self-actions and blocked activity are excluded.
 
+### Abandoned uploads
+
+Apply `migration_2026_10_05_120000_audio_library.php` before deploying the upload changes; it includes the `pending_uploads` table. If an earlier version of this migration was already applied, add the missing table through a new migration before deploying—rerunning an applied migration does not update its schema. Multipart avatar/video/audio uploads, completed chunk uploads, and signed S3 targets are recorded in `pending_uploads`. Stable paths stay in their final storage location; “pending” is a database state, so attaching a large S3 object does not need a second copy. S3 URLs remain stable in the database and API resources resolve playback URLs as before.
+
+`PruneUploads` removes pending files older than `storage.pending_upload_hours` (48 hours by default, minimum 24) only if no user avatar, video source/thumbnail/sound preview, or audio source references them. Processing and failed records count as references, preserving queued work and retry sources. The pending record is retired once the file is referenced or successfully deleted. Missing objects are safe to retry; storage errors keep their tracking records and fail the job for retry. Expired chunk sessions are removed under the same session lock used by chunk upload/completion, using last activity. Attachment and pruning share an account lock; attaching a file that was already removed returns 422.
+
+Schedule this command twice daily on **one scheduler host**, while the normal queue worker remains running:
+
+```cron
+0 0,12 * * * cd /absolute/path/to/xspann && php spark uploads:prune
+```
+
+The command queues one deduplicated cleanup job; it does not delete files in the request process. Cron times use the scheduler host timezone. Run `php spark uploads:prune` manually to enqueue an immediate pass. In a multi-server deployment use shared database/Redis locks, shared chunk storage (or sticky upload sessions plus per-host chunk cleanup), and a shared durable queue. Monitor failed jobs. No live scheduler is installed by this code change.
+
+This cleanup covers uploads tracked after this migration. It deliberately does not scan/delete arbitrary legacy bucket objects or unrelated temporary files. Previously attached avatars replaced later are outside pending-upload cleanup, as are media still referenced by failed posts; deleting those needs its own retention policy. Keep configured disk names/bucket URLs stable while pending records exist. Do not apply a bucket-wide age lifecycle rule to permanent media. If native S3 multipart uploads are added later, configure the bucket to abort incomplete multipart sessions separately; current direct uploads use a single signed PUT.
+
+### Audio library and “Use this Sound”
+
+Apply `migration_2026_10_05_120000_audio_library.php` after the existing schema. It creates `audios` and adds nullable `videos.audio_id` plus `audio_mode` (default `replace`), with foreign keys. The existing initial migrations are preserved. No application database is migrated by the tests.
+
+1. Upload a custom sound through `POST /api/v1/uploads/sounds/local` using multipart `file`. This only stores the file and returns `upload_method`, `storage_path`, and `audio_url`. Then send `POST /api/v1/audios` with that `storage_path` and a required `title` (1–120 characters). The returned `data.id` identifies the new library entry. Audio conversion runs asynchronously through `ProcessAudio` on the default queue.
+2. Poll `GET /api/v1/audios/{audio}` until `status=ready`. Only the owner can view processing/failed uploads; failed uploads can be uploaded again. Library audio is limited to 50 MiB and 600 seconds.
+3. Browse `GET /api/v1/audios?q=title&page=1&limit=20`, then show the sound profile from `GET /api/v1/audios/{audio}`. Resources include `id`, `title`, `audio_url`, `duration`, `origin`, `status`, `source_video_id`, `videos_count`, `creator`, and `created_at`.
+4. The frontend's **Use this Sound** button submits that `audio_id` with the uploaded video's `storage_path` to `POST /api/v1/videos`. Optionally send `audio_mode=mix`; default is `replace`. These fields cannot be changed through PATCH after creation. An unavailable sound returns 422.
+5. `GET /api/v1/audios/{audio}/videos` lists visible published shorts using the sound. Video resources add `audio_id`, `audio_mode`, and nested `audio` with the original creator. Feeds eager-load these relations.
+
+Original sounds remain reusable only while their source video is public and published. Private/followers-only/deleted sources, inactive creators, and blocked relationships hide them from library discovery and other viewers' video resources. An owner may still inspect their own sound profile. Deleting the source also deletes its extracted library file/record and clears referencing video IDs; already rendered shorts retain their embedded soundtrack. Independently uploaded library sounds survive deletion of shorts that use them. Legacy `sound_*` fields remain for response compatibility; new integrations should use `audio_id` and the nested `audio` resource.
+
+Audio media uses the existing storage convention: full stable S3 URLs in the database, relative paths for local files, and public/signed URLs in resources. A previously issued signed URL remains valid until expiry; source privacy controls new API responses and reuse.
+
 ### Upload flow
 
 The disk selects the final destination; the mode selects the upload transport. `FILESYSTEM_DISK=s3` with mode `local` stores files in S3 through the backend. Mode `signed` lets the browser upload directly to S3. A `public` disk always uses backend uploads. The `/uploads/videos/local` endpoint name does not select the disk.
@@ -195,7 +226,7 @@ Chunk requests contain `upload_id` (UUID), zero-based `chunk_index`, `total_chun
 | Audio | 51200 KiB (50 MiB) | See `LocalAudioUploadRequest` for the accepted audio MIME types |
 | Avatar | 5120 KiB (5 MiB) | JPEG, PNG, WebP |
 
-Audio and avatar uploads return `audio_url` and `avatar_url` respectively. Keep PHP, reverse-proxy, and web-server body limits above the allowed upload size plus multipart overhead.
+Audio uploads retain `audio_url` and add `audio_id` and an `audio` resource with `status=processing`; avatar uploads return `avatar_url`. Keep PHP, reverse-proxy, and web-server body limits above the allowed upload size plus multipart overhead.
 ### Media storage
 
 - The public disk uses the local filesystem. Media fields store relative paths, such as `videos/1/clip.mp4`. The private `local` disk remains separate.
@@ -263,21 +294,29 @@ All paths below include the `/api/v1` prefix. Public reads, shares, and views ac
 | POST | `/api/v1/users/{user}/block` |
 | DELETE | `/api/v1/users/{user}/block` |
 | POST | `/api/v1/reports` |
+| POST | `/api/v1/audios` |
+| GET | `/api/v1/audios` |
+| GET | `/api/v1/audios/{audio}` |
+| GET | `/api/v1/audios/{audio}/videos` |
 | GET | `/api/v1/notifications` |
 | PATCH | `/api/v1/notifications/read-all` |
 | DELETE | `/api/v1/notifications/clear-all` |
 | PATCH | `/api/v1/notifications/{notification}/read` |
 
 
-Outside the API prefix: `/uploads/*` is static media, `GET /up` checks health, and `GET /api-docs` renders the Blade reference.
+Outside the API prefix: `/uploads/*` is static media, `GET /up` checks health, and `GET /` renders the Blade reference.
 
 ## Queues and deployment
 
-`ProcessVideo` uses Spark's durable `default` queue and native process runner. It probes duration (rounded up to seconds), extracts a 720-pixel-wide JPEG cover, preserves supplied duration/thumbnail values, and publishes the video. S3 processing works in both upload modes: it checks object size before downloading, then verifies the downloaded size and actual MIME type. Missing managed sources, invalid S3 uploads, and download failures mark the video failed. Decoder/thumbnail failures can still publish without metadata, preserving the Laravel behavior. External media URLs outside the configured disk are not fetched. The job does not transcode trims, cuts, overlays, filters, effects, replacement audio, or defer publication until `scheduled_at`; these values are stored as metadata.
+`ProcessVideo` uses Spark's durable `default` queue and native process runner. It stages managed sources locally, compresses them to H.264 High/yuv420p MP4 at 30 fps, CRF 23 with a 4 Mbps video ceiling, and AAC stereo at 128 kbps/48 kHz. Frames fit within 720×1280 portrait or 1280×720 landscape without upscaling. MP4 fast-start moves playback metadata ahead of media data ([FFmpeg documentation](https://ffmpeg.org/ffmpeg-formats.html#mov_002c-mp4_002c-ismv)). File size depends on duration and content; already efficient uploads may not become smaller. A valid, positive duration of at most 600 seconds is required. Decoding/transcoding errors fail the job and prevent publication; thumbnail extraction remains optional. The worker replaces `storage_path` only after successful encoding, keeps supplied thumbnails, stores measured duration, and removes unreferenced source uploads. Cleanup storage failures queue a retry through `DeleteUnusedMedia`.
+
+Selected library audio is looped or cut to the short's duration. `audio_mode=replace` is the default; `mix` combines original and library audio with equal normalized weights. `original_audio_muted=true` removes the original input from either mode. Without `audio_id`, audible original sound is extracted into a ready AAC/M4A library record in the same publication transaction. Silent or muted videos do not generate a track. Processing retries skip already published videos and cannot overwrite an owner deletion. Both local and S3 uploads follow this pipeline; the worker downloads S3 sources, uploads processed files to the configured disk, and removes temporary files. FFmpeg commands run with a 20-minute timeout; the processing lock lasts one hour.
+
+Trims, cuts, overlays, filters, effects and `scheduled_at` remain metadata; this pipeline normalizes the submitted visual content rather than applying those editor settings again.
 
 Signed PUT URLs do not enforce the 500 MiB limit at the storage edge; the worker rejects oversized objects before downloading or publishing them. Configure retention for abandoned/rejected objects. A signed URL remains usable until expiry, so it is not a one-time upload token. Backend mode validates uploads before storing them in S3.
 
-`DeleteVideo` removes owned source, thumbnail, and uploaded sound files, then deletes the video row; foreign keys cascade comments, reactions, likes, saves, shares, views, and reports. Shared files still referenced by another video and external URLs are preserved. It shares the processing lock with `ProcessVideo`. Storage failures preserve the deleted row for retry, with three attempts and 30/120-second backoff. Monitor failed jobs and retry failed deletions after fixing storage access. Files remain until the worker completes; object version history and CDN/browser caches follow the storage provider’s retention policies.
+`DeleteVideo` removes owned source, thumbnail, and uploaded sound files, then deletes the video row; foreign keys cascade comments, reactions, likes, saves, shares, views, and reports. Shared files still referenced by another video or library audio record, and external URLs, are preserved. Extracted original sound records/files are removed when their source video is deleted. It shares the processing lock with `ProcessVideo`. Storage failures preserve the deleted row for retry, with three attempts and 30/120-second backoff. Monitor failed jobs and retry failed deletions after fixing storage access. Files remain until the worker completes; object version history and CDN/browser caches follow the storage provider’s retention policies.
 
 `SendAccountEmail` also uses the `default` queue and native PHPMailer integration, with three attempts and 30/120-second backoff. Run the queue worker under your process supervisor and restart it after deployment. The HTTP request should not run FFmpeg or send SMTP synchronously.
 
@@ -296,7 +335,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 56 versioned API endpoints and middleware assignments. |
+| `routes/api.php` | The 60 versioned API endpoints and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -304,7 +343,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 | `app/Services/VideoStorage.php` | Native storage and media URL handling. |
 | `app/Services/ChunkUploads.php` | Chunk manifests, locking, assembly, and cleanup. |
 | `app/Jobs` | Durable video processing, deletion, and email delivery. |
-| `app/Http/Controllers/DocsController.php`, `resources/views/api-docs.blade.php` | Registered-route metadata and the Blade API reference. |
+| `app/Http/Controllers/DocsController.php`, `resources/views/docs.blade.php` | Registered-route metadata and the Blade API reference. |
 | `FRAMEWORK.md` | TinyMVC development reference; verify behavior against installed TinyCore. |
 
 List queries use native eager loading, `withCount`, `withExists`, `withSum`, and subqueries for author covers and viewer state. Resources do not query the database. Query-count tests compare one-item and twelve-item pages across feeds, comments, replies, followers, profiles, and saved/liked/own posts. Music catalog lookup remains in the frontend, as before.
@@ -320,7 +359,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover all 56 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover all 60 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 

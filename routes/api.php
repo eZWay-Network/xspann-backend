@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\{
     AuthController,
+    AudioController,
     CommentController,
     DiscoverController,
     FeedController,
@@ -21,6 +22,9 @@ use App\Http\Controllers\Api\V1\{
 use Spark\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    Route::get('/audios', [AudioController::class, 'index']);
+    Route::get('/audios/{audio}', [AudioController::class, 'show']);
+    Route::get('/audios/{audio}/videos', [AudioController::class, 'videos']);
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5');
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5');
     Route::post('/auth/social/{provider}', [AuthController::class, 'social'])->middleware('throttle:5');
@@ -68,6 +72,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/uploads/videos/chunk', [UploadController::class, 'videoChunk'])->middleware('throttle:900');
         Route::post('/uploads/videos/complete', [UploadController::class, 'completeVideoChunks'])->middleware('throttle:20');
         Route::post('/uploads/sounds/local', [UploadController::class, 'audio'])->middleware('throttle:20');
+
+        Route::post('/audios', [AudioController::class, 'store']);
 
         Route::get('/me/videos', [VideoController::class, 'mine']);
         Route::post('/videos', [VideoController::class, 'store']);

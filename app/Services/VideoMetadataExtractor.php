@@ -50,14 +50,21 @@ class VideoMetadataExtractor
                 }
             }
 
-            $duration = $this->duration($source);
-            $coverTime = $this->coverTime($video, $duration);
-            $thumbnail = $this->thumbnail($video, $source, $coverTime);
-
-            return array_filter(['duration' => $duration !== null ? (int) ceil($duration) : null, ...$thumbnail], fn($value) => $value !== null);
+            return $this->extractLocal($video, $source);
         } finally {
             File::delete($temporary);
         }
+    }
+
+    public function extractLocal(Video $video, string $source, ?float $duration = null): array
+    {
+        $duration ??= $this->duration($source);
+        $thumbnail = $this->thumbnail($video, $source, $this->coverTime($video, $duration));
+
+        return array_filter([
+            'duration' => $duration !== null ? (int) ceil($duration) : null,
+            ...$thumbnail,
+        ], fn($value) => $value !== null);
     }
 
     private function duration(string $source): ?float

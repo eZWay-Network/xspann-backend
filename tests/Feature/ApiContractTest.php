@@ -8,6 +8,10 @@ use Tests\TestCase;
 class ApiContractTest extends TestCase
 {
     private const ROUTES = [
+        'POST /api/v1/audios',
+        'GET /api/v1/audios',
+        'GET /api/v1/audios/{audio}',
+        'GET /api/v1/audios/{audio}/videos',
         'POST /api/v1/auth/register',
         'POST /api/v1/auth/login',
         'POST /api/v1/auth/social/{provider}',
@@ -120,7 +124,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(56, count($entries));
+        $this->assertSame(60, count($entries));
         $this->assertTrue($entries['notificationcontroller-clearall']['auth']);
         $this->assertSame('DELETE', $entries['notificationcontroller-clearall']['method']);
         $this->assertSame(['data' => ['message' => 'Read notifications cleared.']], $entries['notificationcontroller-clearall']['response']);
@@ -181,6 +185,9 @@ class ApiContractTest extends TestCase
         $data = $this->getJson('/api/v1/feed')->assertOk()->json('data.0');
         $this->assertFields([
             'id',
+            'audio_id',
+            'audio_mode',
+            'audio',
             'video_url',
             'thumbnail_url',
             'caption',

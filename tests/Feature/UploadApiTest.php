@@ -110,8 +110,12 @@ class UploadApiTest extends TestCase
         $this->http('/uploads/videos/local', ['file' => new \CURLFile($file, 'video/mp4', 'clip.txt')], 422, true);
         $wav = $this->storagePath . '/sound.wav';
         file_put_contents($wav, 'RIFF' . pack('V', 38) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, 8000, 16000, 2, 16) . 'data' . pack('V', 2) . "\0\0");
-        $audio = $this->http('/uploads/sounds/local', ['file' => new \CURLFile($wav, 'audio/wav', 'sound.wav')], 201, true)['data'];
+        $audio = $this->http('/uploads/sounds/local', ['file' => new \CURLFile($wav, 'audio/wav', '-sound.wav')], 201, true)['data'];
         $this->assertTrue(storage('public')->exists($audio['storage_path']));
+        $this->assertSame(0, \App\Models\Audio::count());
+        $track = $this->http('/audios', ['storage_path' => $audio['storage_path'], 'title' => 'My sound'], 201)['data'];
+        $this->assertSame('processing', $track['status']);
+        $this->assertDatabaseHas('audios', ['id' => $track['id'], 'user_id' => 1, 'storage_path' => $audio['storage_path']]);
         $png = $this->storagePath . '/avatar.png';
         $image = imagecreatetruecolor(8, 8);
         imagepng($image, $png);
@@ -136,7 +140,11 @@ class UploadApiTest extends TestCase
         $published = $this->http('/videos/' . $video['id'], [], method: 'GET')['data'];
         $this->assertSame('published', $published['status']);
         $stored = \App\Models\Video::find($video['id']);
-        $this->assertSame($upload['storage_path'], $stored->storage_path);
+        $this->assertTrue(str_starts_with($stored->storage_path, 'videos/1/'));
+        $this->assertFalse($upload['storage_path'] === $stored->storage_path);
+        $this->assertFalse(storage('public')->exists($upload['storage_path']));
+        $this->assertTrue(storage('public')->exists($stored->storage_path));
+        $this->assertTrue($published['audio_id'] !== null);
         $this->assertTrue(str_starts_with($stored->thumbnail_url ?? '', 'thumbnails/1/'));
         $this->assertSame(9, $published['duration']);
         $this->assertSame(['#test'], $published['tags']);
@@ -263,6 +271,12 @@ class UploadApiTest extends TestCase
             $this->http('/videos/' . $video['id'], ['sound_preview_url' => $audio['audio_url']], method: 'PATCH');
             $this->assertDatabaseHas('videos', ['id' => $video['id'], 'sound_preview_url' => 'https://cdn.example.com/' . $audio['storage_path']]);
             $this->assertSame(file_get_contents($wav), file_get_contents($this->storagePath . '/' . $audio['storage_path']));
+            $track = $this->http('/audios', ['storage_path' => $audio['storage_path'], 'title' => 'My sound'], 201)['data'];
+            $this->assertDatabaseHas('audios', ['id' => $track['id'], 'storage_path' => 'https://cdn.example.com/' . $audio['storage_path']]);
+            app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0);
+            $track = $this->http('/audios/' . $track['id'], [], method: 'GET')['data'];
+            $this->assertSame('ready', $track['status']);
+            $this->assertTrue(str_starts_with($track['audio_url'], 'https://cdn.example.com/sounds/1/'));
         } finally {
             $cloud->stop();
         }
@@ -317,7 +331,7 @@ class UploadApiTest extends TestCase
                 app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0);
                 $published = $this->http('/videos/' . $video['id'], [], method: 'GET')['data'];
                 $this->assertSame('published', $published['status']);
-                foreach ([$published['video_url'], $published['thumbnail_url']] as $url) {
+                foreach ([$published['video_url'], $published['thumbnail_url'], $published['audio']['audio_url']] as $url) {
                     $this->assertTrue(str_contains($url ?? '', 'X-Amz-Signature='));
                     $cloud->request('GET', substr($url, strlen($cloud->url)))->assertOk();
                 }

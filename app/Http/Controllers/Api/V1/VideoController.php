@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Video;
+use App\Models\{Audio, Video};
 use App\Http\Resources\VideoResource;
-use App\Services\StorageService;
+use App\Services\{PendingUploads, StorageService};
 use App\Http\Requests\Videos\{StoreVideoRequest, UpdateVideoRequest};
 use App\Jobs\{ProcessVideo, DeleteVideo};
+use Spark\Foundation\Exceptions\ValidationException;
 use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class VideoController extends Controller
@@ -49,17 +50,39 @@ class VideoController extends Controller
 
     public function store(StoreVideoRequest $request): Response
     {
-        $input = $request->validated();
+        $video = PendingUploads::locked($request->user('id'), function () use ($request): Video {
+            $input = $request->validated();
 
-        StorageService::validateOwner($input->storage_path, $request->user('id'), 'storage_path', 'videos', true);
-        StorageService::validateOwner($input->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
-        StorageService::validateOwner($input->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');
+            StorageService::validateOwner($input->storage_path, $request->user('id'), 'storage_path', 'videos', true);
+            StorageService::validateOwner($input->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
+            StorageService::validateOwner($input->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');
 
-        $input->set('status', Video::STATUS_PROCESSING);
+            if ($input->audio_id !== null) {
+                $audio = Audio::whereKey($input->audio_id)->availableTo($request->user())->first();
+                if (!$audio) {
+                    throw ValidationException::withMessages([
+                        'audio_id' => ['Select an available sound from the audio library.'],
+                    ]);
+                }
+                // Sound labels come from the library; clients cannot impersonate its creator.
+                $input->set('sound_name', $audio->title);
+                $input->set('sound_artist', $audio->user->name);
+                $input->set('sound_provider', 'local');
+                $input->set('sound_external_id', null);
+                $input->set('sound_preview_url', null);
+            }
 
-        $video = $request->user()->videos()->create($input);
+            $input->set('status', Video::STATUS_PROCESSING);
 
-        ProcessVideo::dispatch($video->id);
+            return $request->user()->videos()->create($input);
+        });
+
+        try {
+            ProcessVideo::dispatch($video->id);
+        } catch (\Throwable $exception) {
+            $video->update(['status' => Video::STATUS_FAILED]);
+            throw $exception;
+        }
 
         return VideoResource::make(Video::withApiData($request->user())->findOrFail($video->id))->response(201);
     }
@@ -81,18 +104,22 @@ class VideoController extends Controller
         authorize('model.update', $video);
         abort_if($video->status === Video::STATUS_DELETED, 404, 'Video not found.');
 
-        $data = $request->validated();
+        PendingUploads::locked($request->user('id'), function () use ($request, $video): void {
+            abort_if($video->refresh()->status === Video::STATUS_DELETED, 404, 'Video not found.');
 
-        StorageService::validateOwner($data->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
-        StorageService::validateOwner($data->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');
+            $data = $request->validated();
 
-        if ($data->has('pinned')) {
-            $data->set('pinned_at', $data->boolean('pinned') ? now()->toDateTimeString() : null);
+            StorageService::validateOwner($data->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
+            StorageService::validateOwner($data->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');
 
-            unset($data['pinned']);
-        }
+            if ($data->has('pinned')) {
+                $data->set('pinned_at', $data->boolean('pinned') ? now()->toDateTimeString() : null);
 
-        $video->update($data);
+                unset($data['pinned']);
+            }
+
+            $video->update($data);
+        });
 
         return VideoResource::make(Video::withApiData($request->user())->findOrFail($video->id));
     }

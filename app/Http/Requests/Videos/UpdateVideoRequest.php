@@ -9,6 +9,8 @@ class UpdateVideoRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'audio_id' => ['prohibited'],
+            'audio_mode' => ['prohibited'],
             'caption' => ['nullable', 'string', 'max:2200'],
             'thumbnail_url' => ['nullable', 'url', 'max:2048'],
             'location_name' => ['nullable', 'string', 'max:180'],

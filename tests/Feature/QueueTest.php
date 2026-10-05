@@ -4,27 +4,27 @@ namespace Tests\Feature;
 
 use App\Jobs\{ProcessVideo, SendAccountEmail};
 use App\Models\Video;
-use App\Services\{StorageService, VideoMetadataExtractor, AccountNotifications};
+use App\Services\{StorageService, VideoMetadataExtractor, AccountNotifications, MediaProcessor};
 use Spark\Queue\Queue;
 use Tests\TestCase;
 
 class QueueTest extends TestCase
 {
-    public function testVideoJobPublishesPreservesMetadataAndIsIdempotent(): void
+    public function testVideoJobPublishesProcessedDurationAndIsIdempotent(): void
     {
         $video = $this->makeVideo($this->makeUser(), ['status' => 'processing', 'duration' => 20, 'thumbnail_url' => 'https://cdn.example.com/cover.jpg']);
-        $extractor = new class extends VideoMetadataExtractor {
+        $extractor = new class extends MediaProcessor {
             public int $calls = 0;
-            public function extract(Video $video): array
+            public function video(Video $video): array
             {
                 $this->calls++;
-                return ['duration' => 12, 'thumbnail_url' => 'https://cdn.example.com/new.jpg'];
+                return ['storage_path' => $video->storage_path, 'duration' => 12, 'thumbnail_url' => 'https://cdn.example.com/new.jpg'];
             }
         };
-        $this->app->instance(VideoMetadataExtractor::class, $extractor);
+        $this->app->instance(MediaProcessor::class, $extractor);
         ProcessVideo::dispatch((int) $video->id)->send();
         app(Queue::class)->work(once: true, timeout: 5, sleep: 0, queue: 'default');
-        $this->assertDatabaseHas('videos', ['id' => $video->id, 'status' => 'published', 'duration' => 20, 'thumbnail_url' => 'https://cdn.example.com/cover.jpg']);
+        $this->assertDatabaseHas('videos', ['id' => $video->id, 'status' => 'published', 'duration' => 12, 'thumbnail_url' => 'https://cdn.example.com/cover.jpg']);
         (new ProcessVideo((int) $video->id))->handle();
         $this->assertSame(1, $extractor->calls);
         $this->assertSame(0, (int) app(Queue::class)->getConnection()->query('SELECT COUNT(*) FROM jobs')->fetchColumn());
@@ -33,8 +33,8 @@ class QueueTest extends TestCase
     public function testWorkerMarksUnexpectedProcessingFailureFailed(): void
     {
         $video = $this->makeVideo($this->makeUser(), ['status' => 'processing']);
-        $this->app->instance(VideoMetadataExtractor::class, new class extends VideoMetadataExtractor {
-            public function extract(Video $video): array
+        $this->app->instance(MediaProcessor::class, new class extends MediaProcessor {
+            public function video(Video $video): array
             {
                 throw new \RuntimeException('Decoder unavailable');
             }
@@ -58,11 +58,11 @@ class QueueTest extends TestCase
     public function testConcurrentDeletionCannotBeRepublished(): void
     {
         $video = $this->makeVideo($this->makeUser(), ['status' => 'processing']);
-        $this->app->instance(VideoMetadataExtractor::class, new class extends VideoMetadataExtractor {
-            public function extract(Video $video): array
+        $this->app->instance(MediaProcessor::class, new class extends MediaProcessor {
+            public function video(Video $video): array
             {
                 query('videos')->where('id', $video->id)->update(['status' => 'deleted']);
-                return ['duration' => 9];
+                return ['storage_path' => $video->storage_path, 'duration' => 9];
             }
         });
         (new ProcessVideo((int) $video->id))->handle();
@@ -95,8 +95,8 @@ class QueueTest extends TestCase
         $this->assertSame([], (new VideoMetadataExtractor())->extract($video));
         $video->fill(['status' => 'processing']);
         $video->save();
-        (new ProcessVideo((int) $video->id))->handle();
-        $this->assertSame('published', $video->refresh()->status);
+        $this->assertThrows(\Throwable::class, fn () => (new ProcessVideo((int) $video->id))->handle());
+        $this->assertSame('processing', $video->refresh()->status);
         $this->assertSame([], glob($this->storagePath . '/temp/video-processing/*') ?: []);
     }
 

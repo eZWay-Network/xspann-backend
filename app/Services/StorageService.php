@@ -63,9 +63,13 @@ class StorageService
             $compress = 90;
         }
 
-        return self::disk()
+        $path = self::disk()
             ->uploader("$kind/$userId", extensions: $extensions, maxSize: $max, resize: $resize, compress: $compress)
             ->upload($file);
+
+        PendingUploads::track($userId, $path);
+
+        return $path;
     }
 
     public static function storeThumbnail(int $userId, string $localPath): string
@@ -156,8 +160,12 @@ class StorageService
     public static function validateOwner(?string $value, int $userId, string $field, string $kind, bool $required = false): void
     {
         $location = self::location($value);
-        if ((!$location && $required) || ($location && !preg_match('~^' . $kind . '/' . $userId . '/[a-z0-9][a-z0-9._-]*$~Di', $location['key']))) {
+        if ((!$location && $required) || ($location && !preg_match('~^' . $kind . '/' . $userId . '/[a-z0-9_-][a-z0-9._-]*$~Di', $location['key']))) {
             throw ValidationException::withMessages([$field => ['Select a file uploaded by this account.']]);
+        }
+        $location = self::location(self::storedValue($value));
+        if ($location && !storage($location['disk'])->exists($location['key'])) {
+            throw ValidationException::withMessages([$field => ['The upload is missing or has expired. Please upload it again.']]);
         }
     }
 

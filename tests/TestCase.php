@@ -98,7 +98,8 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
     {
         $probe = $this->storagePath . '/ffprobe';
         $ffmpeg = $this->storagePath . '/ffmpeg';
-        file_put_contents($probe, "#!/usr/bin/env php\n<?php echo " . var_export($duration, true) . ";\n");
+        $metadata = json_encode(['format' => ['duration' => $duration], 'streams' => [['codec_type' => 'video'], ['codec_type' => 'audio']]]);
+        file_put_contents($probe, "#!/usr/bin/env php\n<?php echo in_array('json', \$argv, true) ? " . var_export($metadata, true) . " : " . var_export($duration, true) . ";\n");
         file_put_contents($ffmpeg, "#!/usr/bin/env php\n<?php file_put_contents(end(\$argv), 'fixture-thumbnail'); file_put_contents(__DIR__ . '/arguments.json', json_encode(\$argv));\n");
         chmod($probe, 0700);
         chmod($ffmpeg, 0700);

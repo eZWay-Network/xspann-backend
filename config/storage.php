@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'pending_upload_hours' => 48,
+
     'default' => env('FILESYSTEM_DISK', env('FILESYSTEM_DRIVER', 'local')),
 
     'video_upload_mode' => env('VIDEO_UPLOAD_MODE', 'local'), // signed: browser to S3; local: backend to S3
