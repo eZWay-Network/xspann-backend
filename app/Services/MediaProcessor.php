@@ -35,32 +35,52 @@ class MediaProcessor
             }
 
             $output = $this->temporary($temporary);
+            $start = (float) ($video->trim_start ?? 0);
+            $end = min((float) ($video->trim_end ?? $metadata['duration']), $metadata['duration']);
+            $duration = $end - $start;
+            if ($start < 0 || $duration < 0.1) {
+                throw new \RuntimeException('The selected trim range is outside this video.');
+            }
+
+            $settings = $video->audio_settings ?? [];
+            $defaultVolume = $video->audio_id && $video->audio_mode === 'mix' && !$video->original_audio_muted && $metadata['audio'] ? 0.5 : 1;
+            $originalVolume = max(0, min(1, (float) ($settings['original_volume'] ?? $defaultVolume)));
+            $soundVolume = max(0, min(1, (float) ($settings['sound_volume'] ?? $defaultVolume)));
             $command = $this->input($source);
+            // Seek the video input before decoding; output time starts at zero after the trim.
+            array_splice($command, count($command) - 2, 0, ['-ss', (string) $start]);
             if ($video->audio_id) {
                 $audio = Audio::whereKey($video->audio_id)->availableTo($video->user)->first();
                 if (!$audio) {
                     throw new \RuntimeException('The selected sound is no longer available.');
                 }
                 $sound = $this->source($audio->storage_path, $temporary, 52428800);
-                array_push($command, '-stream_loop', '-1', '-protocol_whitelist', 'file,pipe', '-i', $sound);
+                $soundDuration = $this->probe($sound)['duration'];
+                $soundStart = (float) ($settings['start'] ?? 0);
+                if ($soundStart < 0 || $soundStart >= $soundDuration) {
+                    throw new \RuntimeException('The selected sound start is outside this sound.');
+                }
+                array_push($command, '-stream_loop', '-1', '-ss', (string) $soundStart, '-protocol_whitelist', 'file,pipe', '-i', $sound);
                 if ($video->audio_mode === 'mix' && !$video->original_audio_muted && $metadata['audio']) {
-                    array_push($command, '-filter_complex', '[0:a:0][1:a:0]amix=inputs=2:duration=first:normalize=1[a]', '-map', '0:v:0', '-map', '[a]');
+                    $mix = "[0:a:0]volume={$originalVolume}[original];[1:a:0]volume={$soundVolume}[sound];"
+                        . '[original][sound]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=1:level=false:latency=true[a]';
+                    array_push($command, '-filter_complex', $mix, '-map', '0:v:0', '-map', '[a]');
                 } else {
-                    array_push($command, '-map', '0:v:0', '-map', '1:a:0');
+                    array_push($command, '-map', '0:v:0', '-map', '1:a:0', '-af', "volume={$soundVolume}");
                 }
             } else {
                 array_push($command, '-map', '0:v:0');
                 if (!$video->original_audio_muted) {
-                    array_push($command, '-map', '0:a:0?');
+                    array_push($command, '-map', '0:a:0?', '-af', "volume={$originalVolume}");
                 }
             }
 
             array_push(
                 $command,
                 '-t',
-                (string) $metadata['duration'],
+                (string) $duration,
                 '-vf',
-                "scale=w='if(gte(iw,ih),min(1280,iw),min(720,iw))':h='if(gte(iw,ih),min(720,ih),min(1280,ih))':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps=30",
+                $this->videoFilters($video),
                 '-c:v',
                 'libx264',
                 '-preset',
@@ -115,7 +135,7 @@ class MediaProcessor
                 }
             }
 
-            if (!$video->audio_id && !$video->original_audio_muted && $processed['audio']) {
+            if (!$video->audio_id && !$video->original_audio_muted && $originalVolume > 0 && $processed['audio']) {
                 $sound = $this->temporary($temporary);
                 $this->encodeAudio($output, $sound, copy: true);
                 $result['audio_path'] = $this->store($video->user_id, $sound, 'original.m4a', 'sounds', $stored);
@@ -128,6 +148,22 @@ class MediaProcessor
         } finally {
             File::delete($temporary);
         }
+    }
+
+    private function videoFilters(Video $video): string
+    {
+        // Preserve legacy aspect ratios unless the creator explicitly chose a studio crop.
+        $geometry = match ($video->crop_mode) {
+            'fill' => 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280',
+            'fit' => 'scale=720:1280:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black',
+            default => "scale=w='if(gte(iw,ih),min(1280,iw),min(720,iw))':h='if(gte(iw,ih),min(720,ih),min(1280,ih))':force_original_aspect_ratio=decrease:force_divisible_by=2",
+        };
+        $filters = $video->filter_settings ?? [];
+        $brightness = max(-1, min(1, ((float) ($filters['brightness'] ?? 100) - 100) / 100));
+        $contrast = max(0, min(2.5, (float) ($filters['contrast'] ?? 100) / 100));
+        $saturation = max(0, min(2.5, (float) ($filters['saturation'] ?? 100) / 100));
+
+        return "{$geometry},setsar=1,fps=30,eq=brightness={$brightness}:contrast={$contrast}:saturation={$saturation}";
     }
 
     public function audio(Audio $audio): array

@@ -20,6 +20,7 @@ class Video extends Model
         'user_id',
         'audio_id',
         'audio_mode',
+        'audio_settings',
         'storage_path',
         'thumbnail_url',
         'caption',
@@ -52,6 +53,7 @@ class Video extends Model
     ];
 
     protected array $casts = [
+        'audio_settings' => 'array',
         'duration' => 'integer',
         'high_quality_upload' => 'boolean',
         'scheduled_at' => 'datetime',

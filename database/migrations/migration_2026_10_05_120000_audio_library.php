@@ -40,6 +40,7 @@ return new class {
 
         Schema::table('videos', function (Blueprint $table) {
             $table->string('audio_mode', 10)->default('replace');
+            $table->json('audio_settings')->nullable();
             $table->index('audio_id');
         });
 
@@ -61,6 +62,7 @@ return new class {
             }
             $table->dropColumn('audio_id');
             $table->dropColumn('audio_mode');
+            $table->dropColumn('audio_settings');
         });
 
         Schema::dropIfExists('audio_saves');

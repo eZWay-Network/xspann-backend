@@ -11,6 +11,7 @@ class UpdateVideoRequest extends FormRequest
         return [
             'audio_id' => ['prohibited'],
             'audio_mode' => ['prohibited'],
+            'audio_settings' => ['prohibited'],
             'caption' => ['nullable', 'string', 'max:2200'],
             'thumbnail_url' => ['nullable', 'url', 'max:2048'],
             'location_name' => ['nullable', 'string', 'max:180'],

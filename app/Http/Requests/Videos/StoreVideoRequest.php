@@ -11,6 +11,10 @@ class StoreVideoRequest extends FormRequest
         return [
             'audio_id' => ['nullable', 'integer', 'min:1'],
             'audio_mode' => ['sometimes', 'string', ['in' => ['replace', 'mix']]],
+            'audio_settings' => ['nullable', 'array'],
+            'audio_settings.start' => ['nullable', 'numeric', 'min:0', 'max:600'],
+            'audio_settings.original_volume' => ['nullable', 'numeric', 'min:0', 'max:1'],
+            'audio_settings.sound_volume' => ['nullable', 'numeric', 'min:0', 'max:1'],
             'storage_path' => ['required', 'string', 'max:2048'],
             'thumbnail_url' => ['nullable', 'url', 'max:2048'],
             'caption' => ['nullable', 'string', 'max:2200'],

@@ -190,6 +190,7 @@ class ApiContractTest extends TestCase
             'id',
             'audio_id',
             'audio_mode',
+            'audio_settings',
             'audio',
             'video_url',
             'thumbnail_url',
