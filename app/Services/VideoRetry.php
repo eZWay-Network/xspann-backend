@@ -4,23 +4,22 @@ namespace App\Services;
 
 use App\Jobs\ProcessVideo;
 use App\Models\Video;
-use function in_array;
 
 class VideoRetry
 {
-    public static function retry(int $id): bool
+    public static function retry(): bool
     {
-        $video = Video::findOrFail($id);
+        $videos = Video::whereIn('status', [Video::STATUS_FAILED, Video::STATUS_PROCESSING])->get();
 
-        if (!in_array($video->status, [Video::STATUS_FAILED, Video::STATUS_PROCESSING], true)) {
+        if ($videos->isEmpty()) {
             return false;
         }
 
-        Video::whereKey($id)
-            ->whereIn('status', [Video::STATUS_FAILED, Video::STATUS_PROCESSING])
-            ->update(['status' => Video::STATUS_PROCESSING, 'updated_at' => now()]);
+        foreach ($videos as $video) {
+            $video->update(['status' => Video::STATUS_PROCESSING, 'updated_at' => now()]);
 
-        ProcessVideo::dispatch($id);
+            ProcessVideo::dispatch($video->id);
+        }
 
         return true;
     }

@@ -40,4 +40,12 @@ return Application::create(path: dirname(__DIR__))
     ->withRouting(
         web: __DIR__ . '/../routes/web.php',
         api: __DIR__ . '/../routes/api.php'
-    );
+    )
+
+    /**
+     * Register regularly scheduled jobs in the application.
+     */
+    ->withQueue([
+        job(\App\Jobs\PruneUploads::class)->repeatDaily(),
+        job([\App\Services\VideoRetry::class, 'retry'])->repeatHourly(),
+    ]);
