@@ -43,8 +43,11 @@ class MediaProcessor
             }
 
             $settings = $video->audio_settings ?? [];
+            // Native Studio uploads already contain the final mix. Keep audio_id for attribution,
+            // but never add the library track again or apply its original mixing gain twice.
+            $renderedAudio = filter_var($settings['rendered'] ?? false, FILTER_VALIDATE_BOOLEAN);
             $defaultVolume = $video->audio_id && $video->audio_mode === 'mix' && !$video->original_audio_muted && $metadata['audio'] ? 0.5 : 1;
-            $originalVolume = max(0, min(1, (float) ($settings['original_volume'] ?? $defaultVolume)));
+            $originalVolume = $renderedAudio ? 1 : max(0, min(1, (float) ($settings['original_volume'] ?? $defaultVolume)));
             $soundVolume = max(0, min(1, (float) ($settings['sound_volume'] ?? $defaultVolume)));
             $command = $this->input($source);
             // Seek the video input before decoding; output time starts at zero after the trim.
@@ -54,6 +57,9 @@ class MediaProcessor
                 if (!$audio) {
                     throw new \RuntimeException('The selected sound is no longer available.');
                 }
+            }
+
+            if ($video->audio_id && !$renderedAudio) {
                 $sound = $this->source($audio->storage_path, $temporary, 52428800);
                 $soundDuration = $this->probe($sound)['duration'];
                 $soundStart = (float) ($settings['start'] ?? 0);
