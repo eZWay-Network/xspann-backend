@@ -17,6 +17,8 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
     {
         $app = require dirname(__DIR__) . '/bootstrap/app.php';
         $app->mergeConfig(require __DIR__ . '/config.php');
+        // Queue tests dispatch their own jobs; recurring production jobs are registered separately.
+        $app->withQueue();
 
         return $app;
     }

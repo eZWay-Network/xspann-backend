@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\{Audio, Video};
 use App\Http\Resources\VideoResource;
-use App\Services\{PendingUploads, StorageService};
+use App\Services\{JamendoSoundService, PendingUploads, StorageService};
 use App\Http\Requests\Videos\{StoreVideoRequest, UpdateVideoRequest};
 use App\Jobs\{ProcessVideo, DeleteVideo};
 use Spark\Foundation\Exceptions\ValidationException;
@@ -50,9 +50,27 @@ class VideoController extends Controller
 
     public function store(StoreVideoRequest $request): Response
     {
-        $video = PendingUploads::locked($request->user('id'), function () use ($request): Video {
-            $input = $request->validated();
+        $input = $request->validated();
+        if ($input->sound_provider === 'jamendo') {
+            if ($input->audio_id !== null || !preg_match('/^[1-9][0-9]{0,19}$/D', (string) $input->sound_external_id)) {
+                throw ValidationException::withMessages(['sound_external_id' => ['Select a Jamendo track without a library audio_id.']]);
+            }
+            if (!filter_var($input->audio_settings['rendered'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                throw ValidationException::withMessages(['audio_settings.rendered' => ['Mix the Jamendo sound into the video on the client before uploading it.']]);
+            }
 
+            $sound = app(JamendoSoundService::class)->find($input->sound_external_id);
+            if (!$sound) {
+                throw ValidationException::withMessages(['sound_external_id' => ['The selected Jamendo sound is unavailable.']]);
+            }
+            $input->set('sound_name', mb_substr($sound['name'], 0, 120));
+            $input->set('sound_artist', mb_substr($sound['artist_name'], 0, 120));
+            $input->set('sound_preview_url', $sound['preview_url']);
+        } elseif ($input->sound_external_id !== null && $input->sound_external_id !== '') {
+            throw ValidationException::withMessages(['sound_external_id' => ['External track IDs require the Jamendo provider.']]);
+        }
+
+        $video = PendingUploads::locked($request->user('id'), function () use ($request, $input): Video {
             StorageService::validateOwner($input->storage_path, $request->user('id'), 'storage_path', 'videos', true);
             StorageService::validateOwner($input->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
             StorageService::validateOwner($input->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');
@@ -108,6 +126,13 @@ class VideoController extends Controller
             abort_if($video->refresh()->status === Video::STATUS_DELETED, 404, 'Video not found.');
 
             $data = $request->validated();
+            if ($video->sound_provider === 'jamendo' || $data->sound_provider === 'jamendo') {
+                foreach (['sound_provider', 'sound_external_id', 'sound_name', 'sound_artist', 'sound_preview_url'] as $field) {
+                    if ($data->has($field)) {
+                        throw ValidationException::withMessages([$field => ['Jamendo attribution cannot be changed after upload.']]);
+                    }
+                }
+            }
 
             StorageService::validateOwner($data->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
             StorageService::validateOwner($data->sound_preview_url, $request->user('id'), 'sound_preview_url', 'sounds');

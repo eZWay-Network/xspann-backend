@@ -21,6 +21,7 @@ class Video extends Model
         'audio_id',
         'audio_mode',
         'audio_settings',
+        'reuse_content',
         'storage_path',
         'thumbnail_url',
         'caption',
@@ -53,6 +54,7 @@ class Video extends Model
     ];
 
     protected array $casts = [
+        'reuse_content' => 'boolean',
         'audio_settings' => 'array',
         'duration' => 'integer',
         'high_quality_upload' => 'boolean',

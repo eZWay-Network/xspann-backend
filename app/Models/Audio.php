@@ -52,6 +52,7 @@ class Audio extends Model
                 $query->where('audios.origin', 'upload')
                     ->orWhereIn('audios.source_video_id', Video::select('videos.id')
                         ->published()
+                        ->where('videos.reuse_content', true)
                         ->where('videos.visibility', 'public')
                         ->visibleTo($viewer));
             });

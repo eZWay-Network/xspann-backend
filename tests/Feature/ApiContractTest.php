@@ -11,6 +11,9 @@ class ApiContractTest extends TestCase
         'GET /api/v1/me/saved-audios',
         'POST /api/v1/audios/{audio}/save',
         'DELETE /api/v1/audios/{audio}/save',
+        'GET /api/v1/sounds/jamendo',
+        'GET /api/v1/sounds/jamendo/{track}',
+        'GET /api/v1/sounds/jamendo/{track}/videos',
         'POST /api/v1/audios',
         'GET /api/v1/audios',
         'GET /api/v1/audios/{audio}',
@@ -127,7 +130,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(63, count($entries));
+        $this->assertSame(66, count($entries));
         $this->assertTrue($entries['notificationcontroller-clearall']['auth']);
         $this->assertSame('DELETE', $entries['notificationcontroller-clearall']['method']);
         $this->assertSame(['data' => ['message' => 'Read notifications cleared.']], $entries['notificationcontroller-clearall']['response']);
@@ -191,6 +194,7 @@ class ApiContractTest extends TestCase
             'audio_id',
             'audio_mode',
             'audio_settings',
+            'reuse_content',
             'audio',
             'video_url',
             'thumbnail_url',

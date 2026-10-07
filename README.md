@@ -152,7 +152,8 @@ Create a video with the `storage_path` returned by an upload. Optional fields ar
 | `caption` | Up to 2200 characters. Hashtags are returned as `tags`. |
 | `audio_id`, `audio_mode` | Optional reusable library sound ID; mode `replace` (default) or `mix`. Create only. |
 | `sound_name`, `sound_artist`, `sound_external_id` | Up to 120 characters each. |
-| `sound_provider` | `original`, `jamendo`, or `local`. |
+| `sound_provider` | `original`, `jamendo`, or `local`. Jamendo requires a verified `sound_external_id` and `audio_settings.rendered=true`. |
+| `reuse_content` | Boolean, default `true`. Set `false` to opt out of original-sound extraction and reuse. |
 | `location_name` | Up to 180 characters. |
 | `visibility` | `public`, `followers`, or `private`. |
 | `high_quality_upload`, `original_audio_muted` | JSON booleans. |
@@ -204,9 +205,37 @@ Apply `migration_2026_10_05_120000_audio_library.php` after the existing schema.
 4. The frontend's **Use this Sound** button submits that `audio_id` with the uploaded video's `storage_path` to `POST /api/v1/videos`. Optionally send `audio_mode=mix`; default is `replace`. These fields cannot be changed through PATCH after creation. An unavailable sound returns 422.
 5. `GET /api/v1/audios/{audio}/videos` lists visible published shorts using the sound. Video resources add `audio_id`, `audio_mode`, and nested `audio` with the original creator. Feeds eager-load these relations.
 
-Original sounds remain reusable only while their source video is public and published. Private/followers-only/deleted sources, inactive creators, and blocked relationships hide them from library discovery and other viewers' video resources. An owner may still inspect their own sound profile. Deleting the source also deletes its extracted library file/record and clears referencing video IDs; already rendered shorts retain their embedded soundtrack. Independently uploaded library sounds survive deletion of shorts that use them. Legacy `sound_*` fields remain for response compatibility; new integrations should use `audio_id` and the nested `audio` resource.
+Original sounds remain reusable only while their source video is public, published, and has `reuse_content=true`. Private/followers-only/deleted sources, inactive creators, and blocked relationships hide them from library discovery and other viewers' video resources. An owner may still inspect their own sound profile. Deleting the source also deletes its extracted library file/record and clears referencing video IDs; already rendered shorts retain their embedded soundtrack. Independently uploaded library sounds survive deletion of shorts that use them. Legacy `sound_*` fields remain for response compatibility; new integrations should use `audio_id` and the nested `audio` resource.
 
 Authenticated clients save with `POST /api/v1/audios/{audio}/save` (201 initially, 200 on repeat), unsave with `DELETE /api/v1/audios/{audio}/save`, and list with `GET /api/v1/me/saved-audios?page=1&limit=20` (maximum limit 100). Audio resources include `viewer.saved` for the signed-in viewer; guests receive false. The saved list returns ordinary audio resources, newest saves first, ready for the studio's `audio_id` selection. Unavailable/private/blocked sounds are hidden without discarding the save; they reappear if available again. Users can unsave hidden sounds by ID. Saves are private to the account and cascade when the audio or account is deleted.
+
+### Jamendo sounds and reuse permission
+
+Configure `JAMENDO_CLIENT_ID` and apply `migration_2026_10_07_120000_video_sound_reuse.php` before deploying. The migration adds `videos.reuse_content` (default true), an index for provider/track lookup, and expands `sound_preview_url` to 2048 characters on MySQL/PostgreSQL. Rollback leaves that increased URL capacity in place to preserve existing values. Restart queue workers after deploying.
+
+- `GET /api/v1/sounds/jamendo?q=summer&page=1&limit=20`: search/browse Jamendo. `q` is at most 100 characters, page 1–10000, limit 1–60. Returns `data` and `meta.current_page`, `per_page`, `has_more`. Pagination advances through upstream results; filtering may produce short or empty pages while `has_more=true`.
+- `GET /api/v1/sounds/jamendo/{track}`: sound profile, with Jamendo `id`, `provider`, `external_id`, `name`, `artist_id`, `artist_name`, `audio`, `preview_url`, `image`, `duration`, `license_url`, and `share_url`.
+- `GET /api/v1/sounds/jamendo/{track}/videos`: ordinary paginated video resources for visible, published shorts using this provider ID. No Jamendo call is made when loading this list or feeds.
+
+Search/profile data is cached for five minutes. The API filters tracks whose `audiodownload_allowed` is not true and returns 503 on configuration/provider failure, or 404 for unavailable track profiles. The preview and license fields follow the [Jamendo track API](https://developer.jamendo.com/v3.0/tracks); the download flag alone is not a license to synchronize music into a short. The client should retain the supplied artist/track attribution and license link.
+
+The client adds the selected track to its music editor and renders it into the video before uploading. Create the short with:
+
+```json
+{
+  "storage_path": "videos/1/upload.mp4",
+  "sound_provider": "jamendo",
+  "sound_external_id": "123",
+  "audio_settings": { "rendered": true },
+  "reuse_content": false
+}
+```
+
+Do not send `audio_id` for Jamendo. The backend verifies the track ID and fills `sound_name`, `sound_artist`, and `sound_preview_url` from Jamendo, ignoring client-provided attribution. Those fields plus `sound_provider` and `sound_external_id` are returned in video resources for profile navigation and future selection. Jamendo attribution cannot be changed through PATCH. Backend processing preserves the rendered mix (even when the original input was muted), transcodes the upload, and never downloads the external track or creates an `audios` row for it. Existing video trims still apply: submit the rendered result's trim range rather than the pre-render source range.
+
+For the checkbox **“Reuse this content — allow others to use your original audio”**, default to checked and submit `reuse_content=true`; unchecked submits false. Extraction requires this permission, no library audio or external provider, and audible original sound. Permission does not grant reuse of a selected Jamendo or library track. PATCH can revoke permission later: the existing original sound disappears from discovery, saved-sound lists, and other users' resources, and cannot be selected for new shorts. Already rendered shorts keep their embedded audio; issued playback URLs may remain usable until they expire. Re-enabling permission restores an existing extracted sound, but does not create one if extraction was skipped initially. Owners can still inspect their own hidden sound profile.
+
+Only backend APIs/docs are changed; the frontend music picker, rendering and checkbox must use this contract.
 
 Audio media uses the existing storage convention: full stable S3 URLs in the database, relative paths for local files, and public/signed URLs in resources. A previously issued signed URL remains valid until expiry; source privacy controls new API responses and reuse.
 
@@ -299,6 +328,9 @@ All paths below include the `/api/v1` prefix. Public reads, shares, and views ac
 | GET | `/api/v1/me/saved-audios` |
 | POST | `/api/v1/audios/{audio}/save` |
 | DELETE | `/api/v1/audios/{audio}/save` |
+| GET | `/api/v1/sounds/jamendo` |
+| GET | `/api/v1/sounds/jamendo/{track}` |
+| GET | `/api/v1/sounds/jamendo/{track}/videos` |
 | POST | `/api/v1/audios` |
 | GET | `/api/v1/audios` |
 | GET | `/api/v1/audios/{audio}` |
@@ -315,7 +347,7 @@ Outside the API prefix: `/uploads/*` is static media, `GET /up` checks health, a
 
 `ProcessVideo` uses Spark's durable `default` queue and native process runner. It stages managed sources locally, compresses them to H.264 High/yuv420p MP4 at 30 fps, CRF 23 with a 4 Mbps video ceiling, and AAC stereo at 128 kbps/48 kHz. Frames fit within 720×1280 portrait or 1280×720 landscape without upscaling. MP4 fast-start moves playback metadata ahead of media data ([FFmpeg documentation](https://ffmpeg.org/ffmpeg-formats.html#mov_002c-mp4_002c-ismv)). File size depends on duration and content; already efficient uploads may not become smaller. A valid, positive duration of at most 600 seconds is required. Decoding/transcoding errors fail the job and prevent publication; thumbnail extraction remains optional. The worker replaces `storage_path` only after successful encoding, keeps supplied thumbnails, stores measured duration, and removes unreferenced source uploads. Cleanup storage failures queue a retry through `DeleteUnusedMedia`.
 
-Selected library audio is looped or cut to the short's duration. `audio_mode=replace` is the default; `mix` combines original and library audio with equal normalized weights. `original_audio_muted=true` removes the original input from either mode. Without `audio_id`, audible original sound is extracted into a ready AAC/M4A library record in the same publication transaction. Silent or muted videos do not generate a track. Processing retries skip already published videos and cannot overwrite an owner deletion. Both local and S3 uploads follow this pipeline; the worker downloads S3 sources, uploads processed files to the configured disk, and removes temporary files. FFmpeg commands run with a 20-minute timeout; the processing lock lasts one hour.
+Selected library audio is looped or cut to the short's duration. `audio_mode=replace` is the default; `mix` combines original and library audio with equal normalized weights. `original_audio_muted=true` removes the original input from either mode. Without a library or external sound, and with `reuse_content=true`, audible original sound is extracted into a ready AAC/M4A library record in the same publication transaction. Silent or muted videos do not generate a track. Processing retries skip already published videos and cannot overwrite an owner deletion. Both local and S3 uploads follow this pipeline; the worker downloads S3 sources, uploads processed files to the configured disk, and removes temporary files. FFmpeg commands run with a 20-minute timeout; the processing lock lasts one hour.
 
 Trims, cuts, overlays, filters, effects and `scheduled_at` remain metadata; this pipeline normalizes the submitted visual content rather than applying those editor settings again.
 
@@ -340,7 +372,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 63 versioned API endpoints and middleware assignments. |
+| `routes/api.php` | The 66 versioned API endpoints and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -364,7 +396,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover all 63 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover all 66 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 

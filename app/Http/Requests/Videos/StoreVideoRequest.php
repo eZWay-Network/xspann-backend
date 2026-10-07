@@ -9,6 +9,7 @@ class StoreVideoRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'reuse_content' => ['sometimes', 'boolean'],
             'audio_id' => ['nullable', 'integer', 'min:1'],
             'audio_mode' => ['sometimes', 'string', ['in' => ['replace', 'mix']]],
             'audio_settings' => ['nullable', 'array'],

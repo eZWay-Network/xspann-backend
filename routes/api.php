@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\{
     AuthController,
     AudioController,
     AudioSaveController,
+    JamendoSoundController,
     CommentController,
     DiscoverController,
     FeedController,
@@ -23,6 +24,10 @@ use App\Http\Controllers\Api\V1\{
 use Spark\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    Route::get('/sounds/jamendo', [JamendoSoundController::class, 'index'])->middleware('throttle:60');
+    Route::get('/sounds/jamendo/{track}', [JamendoSoundController::class, 'show'])->middleware('throttle:60');
+    Route::get('/sounds/jamendo/{track}/videos', [JamendoSoundController::class, 'videos']);
+
     Route::get('/audios', [AudioController::class, 'index']);
     Route::get('/audios/{audio}', [AudioController::class, 'show']);
     Route::get('/audios/{audio}/videos', [AudioController::class, 'videos']);

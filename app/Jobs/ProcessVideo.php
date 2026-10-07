@@ -52,7 +52,11 @@ class ProcessVideo implements JobInterface
                             return false;
                         }
 
-                        if (isset($media['audio_path'])) {
+                        if (
+                            $current->reuse_content && !$current->audio_id
+                            && in_array($current->sound_provider, [null, 'original'], true)
+                            && isset($media['audio_path'])
+                        ) {
                             $audio = Audio::create([
                                 'user_id' => $video->user_id,
                                 'source_video_id' => $video->id,

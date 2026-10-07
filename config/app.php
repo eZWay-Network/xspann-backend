@@ -30,6 +30,8 @@ return [
     // Select cf-connecting-ip only when trusted peers overwrite that header.
     'trusted_proxy_header' => env('TRUSTED_PROXY_HEADER', 'x-forwarded-for'),
 
+    'jamendo_client_id' => env('JAMENDO_CLIENT_ID'),
+
     // Other settings
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:3000')),
     'google_client_id' => env('GOOGLE_CLIENT_ID'),

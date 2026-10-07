@@ -26,7 +26,7 @@ return new class {
             $table->boolean('original_audio_muted')->default(false);
             $table->string('sound_provider')->nullable();
             $table->string('sound_external_id')->nullable();
-            $table->string('sound_preview_url')->nullable();
+            $table->string('sound_preview_url', 2048)->nullable();
 
             $table->json('cut_points')->nullable();
             $table->json('filter_settings')->nullable();
