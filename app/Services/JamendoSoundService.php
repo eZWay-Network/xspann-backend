@@ -81,7 +81,22 @@ class JamendoSoundService
         $clientId = config('app.jamendo_client_id');
         abort_unless(!empty($clientId), 503, 'Jamendo sounds are not configured.');
 
-        $parameters += ['client_id' => $clientId, 'format' => 'json', 'type' => 'single albumtrack', 'audioformat' => 'mp32'];
+        $parameters = [
+            'client_id' => (string) $clientId,
+            'format' => 'json',
+        ];
+
+        if (!empty($parameters['id'] ?? null)) {
+            $parameters['id'] = (string) $parameters['id'];
+        } else {
+            $parameters = [
+                ...$parameters,
+                'offset' => (string) ($parameters['offset'] ?? '0'),
+                'limit' => (string) ($parameters['limit'] ?? '20'),
+                'search' => (string) ($parameters['search'] ?? ''),
+            ];
+        }
+
         $key = 'jamendo.tracks.' . hash('sha256', json_encode($parameters));
 
         return Cache::remember($key, function () use ($parameters): array {
