@@ -81,21 +81,21 @@ class JamendoSoundService
         $clientId = config('app.jamendo_client_id');
         abort_unless(!empty($clientId), 503, 'Jamendo sounds are not configured.');
 
-        $parameters = [
-            'client_id' => (string) $clientId,
-            'format' => 'json',
-        ];
-
         if (!empty($parameters['id'] ?? null)) {
-            $parameters['id'] = (string) $parameters['id'];
+            $parameters = ['id' => (string) $parameters['id']];
         } else {
             $parameters = [
-                ...$parameters,
                 'offset' => (string) ($parameters['offset'] ?? '0'),
                 'limit' => (string) ($parameters['limit'] ?? '20'),
                 'search' => (string) ($parameters['search'] ?? ''),
             ];
         }
+
+        $parameters = [
+            'client_id' => (string) $clientId,
+            'format' => 'json',
+            ...$parameters
+        ];
 
         $key = 'jamendo.tracks.' . hash('sha256', json_encode($parameters));
 
@@ -120,6 +120,6 @@ class JamendoSoundService
             );
 
             return $payload['results'];
-        }, '5 minutes');
+        }, '2 minutes');
     }
 }
