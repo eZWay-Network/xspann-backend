@@ -25,7 +25,7 @@ class ChunkUploads
         if ($chunk) {
             return [
                 ...$rules,
-                'chunk_index' => ['required', 'integer', 'regex:/^[0-9]+$/', 'min:0'],
+                'chunk_index' => ['required', 'numeric', 'regex:/^[0-9]+$/', 'min:0', 'max:9999'],
                 'chunk' => ['required', 'file', 'max:2048']
             ];
         }

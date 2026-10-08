@@ -23,7 +23,8 @@ class ViewController extends Controller
                 ->when(
                     $user,
                     fn($query) => $query->where('user_id', $user->id),
-                    fn($query) => $query->where(['ip_hash' => $ipHash, 'user_agent_hash' => $userAgentHash]),
+                    fn($query) => $query->whereNull('user_id')
+                        ->where(['ip_hash' => $ipHash, 'user_agent_hash' => $userAgentHash]),
                 )
                 ->exists();
 

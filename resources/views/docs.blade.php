@@ -115,8 +115,11 @@ Content-Type: application/json</pre>
                 <div>
                     <h3>Reading responses</h3>
                     <p>Successful resources are wrapped in <code>data</code>. Lists also return <code>links</code> and
-                        <code>meta</code>; use <code>links.next</code> until null. Pagination is page-based, with limits
-                        clamped to 1–100. Each endpoint lists its default.
+                        <code>meta</code>; use <code>links.next</code> until null for page-based lists.
+                        Home and Following also accept <code>pagination=cursor</code>: use
+                        <code>meta.next_cursor</code> while <code>meta.has_more</code> is true.
+                        Cursor feeds have no totals or numbered links. Omit the cursor to refresh;
+                        HTTP 410 means the cursor expired. Each endpoint lists its limits.
                     </p>
                     <p>Examples are illustrative, not live data. IDs and counts are integers; viewer flags are booleans.
                         Resource timestamps use UTC ISO 8601 strings and may be null. Nullable text/media fields can

@@ -51,6 +51,16 @@ class DocsController extends Controller
                 $entry['parameters'][] = ['name' => 'page', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Page number; default 1.'];
                 $entry['parameters'][] = ['name' => 'limit', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Items per page; default ' . $entry['limit'] . '. Clamped to 1–100.'];
             }
+            if (str_starts_with($key, 'FeedController@')) {
+                $entry['parameters'] = [
+                    ['name' => 'pagination', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'page (default, for existing clients) or cursor (recommended for infinite feeds).'],
+                    ['name' => 'cursor', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'Opaque meta.next_cursor from the previous response. URL-encode it. Omit on refresh. Bound to this viewer and feed; expires after one hour. Supplying it selects cursor mode.'],
+                    ['name' => 'page', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Legacy page number, 1–100000; default 1. Do not use with cursor mode.'],
+                    ['name' => 'limit', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Items per request, clamped to 1–100; default 10. Non-integer values return 422.'],
+                ];
+                $entry['errors']['422'] = 'Invalid query or cursor, or cursor belongs to another viewer/feed.';
+                $entry['errors']['410'] = 'Cursor expired. Discard it and refresh without a cursor.';
+            }
             if (str_starts_with($key, 'DiscoverController@')) {
                 $entry['parameters'] = [
                     ['name' => 'q', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'Optional search text, at most 100 characters. Surrounding whitespace is ignored. SQL wildcard characters are literal. Omit or clear to browse.'],
@@ -120,6 +130,12 @@ class DocsController extends Controller
                 $entry['response']['data']['viewer_reaction'] = 'love';
                 $entry['response']['data']['reactions']['love'] = 1;
             }
+            if (str_starts_with($key, 'FeedController@')) {
+                $entry['alternate'] = [
+                    'data' => $entry['response']['data'],
+                    'meta' => ['per_page' => 10, 'has_more' => true, 'next_cursor' => '<opaque-feed-cursor>'],
+                ];
+            }
             if ($key === 'UploadController@video') {
                 $entry['alternate'] = ['data' => ['upload_method' => 'multipart', 'upload_url' => url('/api/v1/uploads/videos/local'), 'storage_path' => null, 'headers' => [], 'field_name' => 'file', 'message' => 'Upload the video through the backend multipart endpoint.']];
             }
@@ -163,7 +179,7 @@ class DocsController extends Controller
         $add('AuthController@update', 'Authentication', 'Update your profile', 'Updates only submitted fields. Username must be unique. Nullable profile fields can be cleared with null. Managed avatar URLs must belong to you.', '$Profile', '200', ProfileUpdateRequest::class, ['name' => 'Alex Morgan', 'bio' => 'Making something new.']);
         $add('AuthController@changePassword', 'Authentication', 'Change your password', 'Requires the existing password. Revokes other access tokens while preserving the current token.', $message('Password changed successfully.'), '200', ['current_password' => ['required', 'string']] + $password, ['current_password' => 'example-password', 'password' => 'new-example-password', 'password_confirmation' => 'new-example-password']);
         $add('AuthController@refreshToken', 'Authentication', 'Rotate the access token', 'Requires a still-valid bearer token. Revokes that token and returns a replacement. Replace the stored token atomically; an expired token cannot be refreshed.', $session);
-        foreach (['FeedController@index' => ['Feed', 'Get the home feed', 'Published videos visible to the viewer, newest first. Use GET /discover for video search and popularity sorting.'], 'FeedController@following' => ['Feed', 'Get the following feed', 'Published videos from accounts you follow, newest first.'], 'VideoController@index' => ['Videos', 'List published videos', 'Published, visible videos ordered newest first.'], 'VideoController@mine' => ['Videos', 'List your videos', 'Your non-deleted videos, including processing and failed uploads. Pinned videos appear first, then newest first.'], 'UserController@videos' => ['Users', 'List a user’s videos', 'Published videos from the requested username, filtered by viewer visibility.'], 'LikeController@index' => ['Social actions', 'List your liked videos', 'Visible, published videos ordered by when you liked them.'], 'SaveController@index' => ['Social actions', 'List your saved videos', 'Visible, published videos ordered by when you saved them.']] as $action => [$group, $title, $description]) {
+        foreach (['FeedController@index' => ['Feed', 'Get the home feed', 'Unwatched published videos first. Cursor mode mixes two recent uploads with one popular pick from the last seven days, then uses watched videos only after unwatched videos run out. Recent uploads use descending ID; popularity uses engagement totals, then views and ID. The shortlist and watch-history cutoff are fixed for the cursor session; visibility is always rechecked. Refresh without a cursor to include new uploads and views. Legacy pages sort unwatched first, then recent-week videos, engagement, views and ID. Record views through POST /videos/{video}/view.'], 'FeedController@following' => ['Feed', 'Get the following feed', 'The same unwatched-first cursor feed, restricted to accounts you currently follow. Cursor responses contain data and meta.per_page, meta.has_more and meta.next_cursor, without totals or numbered links. Guest home-feed history uses the existing IP/user-agent hashes; signed-in history follows the account across devices.'], 'VideoController@index' => ['Videos', 'List published videos', 'Published, visible videos ordered newest first.'], 'VideoController@mine' => ['Videos', 'List your videos', 'Your non-deleted videos, including processing and failed uploads. Pinned videos appear first, then newest first.'], 'UserController@videos' => ['Users', 'List a user’s videos', 'Published videos from the requested username, filtered by viewer visibility.'], 'LikeController@index' => ['Social actions', 'List your liked videos', 'Visible, published videos ordered by when you liked them.'], 'SaveController@index' => ['Social actions', 'List your saved videos', 'Visible, published videos ordered by when you saved them.']] as $action => [$group, $title, $description]) {
             $add($action, $group, $title, $description, '$Video', '200', [], [], $action === 'VideoController@mine' ? 20 : 10);
         }
         $add(

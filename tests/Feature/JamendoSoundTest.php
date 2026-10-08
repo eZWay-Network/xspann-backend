@@ -66,7 +66,7 @@ class JamendoSoundTest extends TestCase
         $this->getJson('/api/v1/sounds/jamendo?q=hello&limit=2&page=2')->assertOk()
             ->assertJsonCount(1, 'data')->assertJsonPath('data.0.provider', 'jamendo')
             ->assertJsonPath('data.0.external_id', '123')->assertJsonPath('meta.has_more', true);
-        $this->assertSame(2, $this->http->parameters['offset']);
+        $this->assertSame('2', $this->http->parameters['offset']);
         $this->assertSame('hello', $this->http->parameters['search']);
         $this->getJson('/api/v1/sounds/jamendo?q=hello&limit=2&page=2')->assertOk();
         $this->assertSame(1, $this->http->calls);

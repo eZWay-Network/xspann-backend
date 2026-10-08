@@ -1,6 +1,6 @@
 # Xspann API
 
-A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses TinyCore 3.3.34.
+A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses TinyCore 4.1.0.
 
 Requires PHP 8.2+. Enable PDO and your database driver, `pdo_sqlite` for the default cache/queue/locks, `fileinfo`, `mbstring`, `openssl`, and `curl`. Install FFmpeg with libx264/AAC encoding and FFprobe for video compression, audio extraction, and cover generation. GD is used by the avatar upload test fixture.
 
@@ -40,6 +40,27 @@ curl -G 'https://dash-xspann.webermelon.dev/api/v1/discover/people' \
 The route-generated docs at `/` and their **Export JSON** action include both endpoints. No migration, dependency update, or email-verification change is required. Publish the controller, routes, and docs together before switching the mobile client from its current `/videos` and `/users/suggestions` implementation. The new endpoints use a 120-request throttle, matching the route's native middleware semantics.
 
 Run `php test --filter=DiscoverApiTest` for isolated search, ranking, privacy, pagination, validation, docs-export and bounded-query checks. The pre-existing email-verification expectations are intentionally unchanged.
+
+## Home and Following feeds
+
+`GET /api/v1/feed` and authenticated `GET /api/v1/feed/following` prioritize unwatched videos. Send `POST /api/v1/videos/{video}/view` after playback starts; that persisted history drives the next refresh. Signed-in history is account-wide. Guests reuse the existing anonymous IP/user-agent hashes, which are approximate and can change or be shared; they are not a permanent device identity.
+
+Use **cursor pagination** for infinite scrolling:
+
+```http
+GET /api/v1/feed?pagination=cursor&limit=10
+GET /api/v1/feed?pagination=cursor&limit=10&cursor=<URL-encoded-next_cursor>
+```
+
+Responses retain the standard video resources in `data`, with `meta: {per_page, has_more, next_cursor}`. There are no totals or page links in cursor mode. Continue using the returned cursor until `has_more=false`; `next_cursor` is then null. An empty page can occur if videos disappear during a request: continue if `has_more=true`. Omit the cursor when refreshing or returning to the feed. Cursors expire after one hour (HTTP 410); malformed, tampered, wrong-account or wrong-feed cursors return 422. Clients should discard an expired cursor and start again. Changing accounts must also clear the cursor.
+
+Each session mixes two recent unwatched uploads with one popular unwatched pick. Recent means descending upload ID. Up to 30 popular candidates are selected from videos created in the last seven days, ordered by likes + comments + saves + shares, then views and ID. The two lanes skip items already emitted by either lane, so a recent popular video appears only once. When one lane runs out, the other continues. Watched videos appear only after all eligible unwatched candidates are exhausted, newest upload first. This is a deterministic discovery mix, not an ML recommendation model or a score based on recent engagement events.
+
+The cursor fixes the maximum upload/view IDs and popular shortlist for the session. Posting new videos, recording views or changing popularity does not shift its pagination. A fresh request incorporates those changes. Privacy, blocks, active accounts and current follows are rechecked on every request. Related resources are batch-loaded; cursor requests use bounded ID queries and do not count the full feed or use growing SQL offsets. No server-side feed-session cache or additional queue is required.
+
+Existing clients can keep using `page` and receive the original `data/links/meta` envelope. Legacy pages rank unwatched first, then recent-week uploads, engagement, views and ID. Their ordering can shift as history or counters change; use cursor mode for stable scrolling. Feed `limit` is clamped to 1–100 (default 10), preserving the existing contract.
+
+Deployment: run `php spark migrate` to apply `migration_2026_10_08_090000_feed_indexes.php` (additive video/history indexes only), then clear the application's deployment caches as usual. Do not reset existing tables. The native cursor integration and refresh/animation updates are the next rollout step after this backend is deployed.
 
 ## Configuration
 
@@ -84,7 +105,7 @@ Successful single responses contain `data`. Native resource lists contain `data`
 }
 ```
 
-Lists accept `page` and `limit`. Defaults: 10 for feeds/video lists, 18 for suggestions, and 20 for comments, connections, and own posts. Limits are clamped to 1–100. A page beyond the last page returns an empty list while retaining the requested `current_page`.
+Lists accept `page` and `limit`. Defaults: 10 for feeds/video lists, 18 for suggestions, and 20 for comments, connections, and own posts. Limits are clamped to 1–100. The installed Spark paginator clamps a page beyond the last page to the final page; clients must stop when `links.next` is null. Discover validates its documented bounds rather than clamping invalid limits.
 
 Spark validation returns HTTP 422 with a message and field errors:
 

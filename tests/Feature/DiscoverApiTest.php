@@ -115,7 +115,12 @@ class DiscoverApiTest extends TestCase
         $this->getJson('/api/v1/discover?limit=1&page=2')->assertJsonPath('data.0.id', $viewed->id);
         $this->getJson('/api/v1/discover?sort=latest&limit=1')->assertJsonPath('data.0.id', $latest->id);
         $this->getJson('/api/v1/discover?sort=latest&limit=1&page=2')->assertJsonPath('data.0.id', $viewed->id);
-        $this->getJson('/api/v1/discover?sort=latest&limit=1&page=4')->assertOk()->assertJsonCount(0, 'data');
+        // The installed Spark paginator clamps out-of-range requests to the last page.
+        $this->getJson('/api/v1/discover?sort=latest&limit=1&page=4')
+            ->assertOk()
+            ->assertJsonPath('meta.current_page', 3)
+            ->assertJsonPath('data.0.id', $popular->id)
+            ->assertJsonPath('links.next', null);
     }
 
     public function testPeopleSearchIncludesFollowedAccountsAndRanksExactUsernameFirst(): void
