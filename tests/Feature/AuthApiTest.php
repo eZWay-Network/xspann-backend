@@ -34,6 +34,7 @@ class AuthApiTest extends TestCase
         $this->postJson('/api/v1/auth/register', [])->assertStatus(422)->assertJsonValidationErrors(['username', 'email', 'password']);
         $this->postJson('/api/v1/auth/register', ['username' => 'alice', 'email' => 'alice@example.com', 'password' => 'password123', 'password_confirmation' => 'different'])->assertStatus(422)->assertJsonValidationErrors(['username', 'email', 'password']);
         $this->postJson('/api/v1/auth/login', ['email' => 'alice@example.com', 'password' => 'wrong'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/login', ['email' => 'missing@example.com', 'password' => 'password123'])->assertStatus(422);
         $this->withToken('invalid')->getJson('/api/v1/auth/me')->assertStatus(401);
     }
 

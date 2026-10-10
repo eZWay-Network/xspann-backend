@@ -159,7 +159,13 @@ class ApiContractTest extends TestCase
     {
         $headers = ['Origin' => 'http://localhost:3000'];
         $this->postJson('/api/v1/auth/register', [], $headers)->assertStatus(422)->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
-        $this->getJson('/api/v1/videos/98765', $headers)->assertStatus(404)->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
+        foreach (['videos/98765', 'audios/98765', 'users/missing-user', 'comments/98765/replies'] as $path) {
+            $this->getJson('/api/v1/' . $path, $headers)
+                ->assertStatus(404)
+                ->assertHeader('Content-Type', 'application/json; charset=utf-8')
+                ->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
+        }
+
         $this->getJson('/api/v1/videos/not-a-number')->assertStatus(404);
         $this->getJson('/api/v1/auth/me', $headers)->assertStatus(401)->assertHeader('Content-Type', 'application/json; charset=utf-8');
     }

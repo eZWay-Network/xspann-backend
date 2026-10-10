@@ -47,7 +47,7 @@ class VideoDeletionTest extends TestCase
         storage('public')->put($video->storage_path, 'shared');
         storage('public')->put('thumbnails/2/other.jpg', 'other');
         (new DeleteVideo((int) $video->id))->handle();
-        $this->assertSame(false, Video::find($video->id));
+        $this->assertNull(Video::find($video->id));
         $this->assertTrue(storage('public')->exists($video->storage_path));
         $this->assertTrue(storage('public')->exists('thumbnails/2/other.jpg'));
     }
@@ -65,7 +65,7 @@ class VideoDeletionTest extends TestCase
             $this->assertSame('deleted', $video->refresh()->status);
             unlink($this->storagePath . '/fail-delete');
             (new DeleteVideo((int) $video->id))->handle();
-            $this->assertSame(false, Video::find($video->id));
+            $this->assertNull(Video::find($video->id));
             $this->assertFalse(is_file($this->storagePath . '/videos/1/sample.mp4'));
             $this->assertFalse(is_file($this->storagePath . '/thumbnails/1/cover.jpg'));
         } finally {

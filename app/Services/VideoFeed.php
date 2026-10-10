@@ -125,8 +125,10 @@ class VideoFeed
             'viewer' => $this->identity($request),
             'following' => $following,
             'expires' => time() + 3600,
-            'max_id' => (int) Video::max('id'),
-            'view_id' => (int) $this->viewer(query('video_views'), $request)->max('id'),
+            'max_id' => (int) (Video::orderDesc('id')->value('id') ?? 0),
+            'view_id' => (int) ($this->viewer(query('video_views'), $request)
+                ->orderDesc('id')
+                ->value('id') ?? 0),
             'phase' => 'unwatched',
             'slot' => 0,
             'popular' => [],

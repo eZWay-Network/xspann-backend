@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\{ProcessVideo, SendAccountEmail};
+use App\Jobs\{DeleteVideo, ProcessAudio, ProcessVideo, SendAccountEmail};
 use App\Models\Video;
 use App\Services\{StorageService, VideoMetadataExtractor, AccountNotifications, MediaProcessor};
 use Spark\Queue\Queue;
@@ -10,6 +10,24 @@ use Tests\TestCase;
 
 class QueueTest extends TestCase
 {
+    public function testJobsForMissingRecordsCompleteWithoutRetrying(): void
+    {
+        ProcessVideo::dispatch(98765)->send();
+        ProcessAudio::dispatch(98765)->send();
+        DeleteVideo::dispatch(98765)->send();
+        SendAccountEmail::dispatch(98765, 'Verify your email address', 'Verify your account.')->send();
+
+        $queue = app(Queue::class);
+
+        for ($i = 0; $i < 4; $i++) {
+            $queue->work(once: true, timeout: 5, sleep: 0, queue: 'default');
+        }
+
+        $this->assertDatabaseCount('jobs', 0);
+        $this->assertDatabaseCount('videos', 0);
+        $this->assertDatabaseCount('audios', 0);
+    }
+
     public function testVideoJobPublishesProcessedDurationAndIsIdempotent(): void
     {
         $video = $this->makeVideo($this->makeUser(), ['status' => 'processing', 'duration' => 20, 'thumbnail_url' => 'https://cdn.example.com/cover.jpg']);

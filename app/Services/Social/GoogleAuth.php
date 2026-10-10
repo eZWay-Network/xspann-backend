@@ -26,7 +26,7 @@ class GoogleAuth
             fn() => DB::transaction(function () use ($claims, $email) {
                 $identity = AuthIdentity::where('provider', 'google')
                     ->where('provider_id', $claims['sub'])
-                    ->first() ?: null;
+                    ->first();
 
                 $user = $identity?->user;
 
