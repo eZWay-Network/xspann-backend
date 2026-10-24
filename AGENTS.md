@@ -1,6 +1,8 @@
-# TinyMVC application development
+# TinyMVC / Spark application development
 
-For TinyMVC/Spark implementation, debugging, review, or test work, use the local [tinymvc-development skill](.agents/skills/tinymvc-development/SKILL.md). It selects focused references within the skill; read only the topics needed for the task.
+For TinyMVC / Spark implementation, debugging, review, or test work, use the local [tinymvc-spark skill entry point](.agents/skills/tinymvc-spark/SKILL.md). It loads the versioned skill from `vendor/tinymvc/tinycore/skills/tinymvc-spark/SKILL.md`; read only the topics needed for the task. Framework guidance is maintained in TinyCore and arrives with Composer dependency updates.
+
+Understand the framework architecture roles: `tinymvc` is the vendor; `tinymvc/spark` (Spark) is the root framework (using the `Spark\` PHP namespace alias, Spark facades, and `php spark` CLI runner); `tinymvc/tinycore` (TinyCore) is the core framework engine provided by TinyMVC; and `tinymvc/skeleton` (Skeleton) is the application boilerplate.
 
 Write clean, spacious Laravel-style PHP using Spark-native features first. Follow the skill’s required coding style: four-space indentation, one statement per line, deliberate blank lines, and readable multiline chains and arrays. Laravel-style formatting does not imply Laravel API compatibility. For feature design, the skill links to portable application examples: direct controllers, focused domain services, model scopes, and explicit resources. Follow the target application’s nearby conventions when choosing among these patterns.
 
