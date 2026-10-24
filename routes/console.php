@@ -10,14 +10,24 @@ command('greet', function (Prompt $prompt) {
 })->description('Show a Greeting Message');
 
 command('videos:retry', function (Prompt $prompt, array $args) {
-    $msg = VideoRetry::retry() ?
-        'Failed videos have been queued for retry.' : 'No failed or interrupted videos found.';
+    $id = null;
+    if (array_key_exists('id', $args)) {
+        $id = is_string($args['id'])
+            ? filter_var($args['id'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+            : false;
 
-    $prompt->message($msg);
-})->description('Retry processing for one failed or interrupted videos');
+        if ($id === false) {
+            throw new InvalidArgumentException('The --id option must be a positive video ID.');
+        }
+    }
+
+    $prompt->message(
+        VideoRetry::retry($id) ?
+        'Failed videos have been queued for retry.' : 'No failed or interrupted videos found.'
+    );
+})->description('Retry failed or interrupted videos, optionally using --id');
 
 command('uploads:prune', function (Prompt $prompt) {
     PruneUploads::dispatch();
-
     $prompt->message('Abandoned upload cleanup queued.');
 })->description('Queue cleanup of expired, unreferenced uploads and chunk sessions');

@@ -383,7 +383,7 @@ php spark queue:failed
 php spark videos:retry --id=123
 ```
 
-The video retry command changes a failed/processing video to `processing` and dispatches it again. Do not use a generic failed-job retry for a video still marked `failed`, since the job intentionally skips videos outside `processing`.
+The video retry command changes a failed/processing video to `processing` and dispatches it again. Use `--id=123` to retry only that video; omit `--id` to retry all failed or processing videos. Invalid IDs are rejected, and published/deleted videos are skipped. Do not use a generic failed-job retry for a video still marked `failed`, since the job intentionally skips videos outside `processing`.
 
 Deploy with `public/` as the web root. Keep `storage/`, the queue database, cache/lock directories, and the application database writable by the appropriate workers. SQLite queues/locks require a shared local filesystem; use Redis for coordination across hosts. Local uploads and chunk staging also require shared storage or consistent routing. Completed chunk sessions and processing temporary files are cleaned up; configure retention for abandoned upload sessions in `storage/temp/upload-chunks`.
 

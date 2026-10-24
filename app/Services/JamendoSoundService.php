@@ -98,28 +98,35 @@ class JamendoSoundService
         ];
 
         $key = 'jamendo.tracks.' . hash('sha256', json_encode($parameters));
+        if (Cache::has($key, eraseExpired: true)) {
+            return Cache::get($key);
+        }
 
-        return Cache::remember($key, function () use ($parameters): array {
-            try {
-                $response = Http::timeout(10)
-                    ->withRetry(0)
-                    ->get('https://api.jamendo.com/v3.0/tracks/', $parameters);
+        try {
+            $response = Http::timeout(10)
+                ->withRetry(0)
+                ->get('https://api.jamendo.com/v3.0/tracks/', $parameters);
 
-                $payload = $response->json();
-            } catch (\Throwable) {
-                abort(503, 'Jamendo sounds are temporarily unavailable.');
-            }
+            $payload = $response->json();
+        } catch (\Throwable) {
+            abort(503, 'Jamendo sounds are temporarily unavailable.');
+        }
 
-            abort_unless(
-                $response->status() === 200 && is_array($payload)
-                && ($payload['headers']['status'] ?? null) === 'success'
-                && is_array($payload['results'] ?? null)
-                && count(array_filter($payload['results'], 'is_array')) === count($payload['results']),
-                503,
-                'Jamendo sounds are temporarily unavailable.',
-            );
+        abort_unless(
+            $response->status() === 200 && is_array($payload)
+            && ($payload['headers']['status'] ?? null) === 'success'
+            && is_array($payload['results'] ?? null)
+            && count(array_filter($payload['results'], 'is_array')) === count($payload['results']),
+            503,
+            'Jamendo sounds are temporarily unavailable.',
+        );
 
-            return $payload['results'];
-        }, '2 minutes');
+        $result = $payload['results'];
+
+        if (!empty($result)) {
+            Cache::store($key, $result, '2 minutes');
+        }
+
+        return $result;
     }
 }

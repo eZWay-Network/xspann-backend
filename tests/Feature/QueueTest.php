@@ -113,7 +113,7 @@ class QueueTest extends TestCase
         $this->assertSame([], (new VideoMetadataExtractor())->extract($video));
         $video->fill(['status' => 'processing']);
         $video->save();
-        $this->assertThrows(\Throwable::class, fn () => (new ProcessVideo((int) $video->id))->handle());
+        $this->assertThrows(\Throwable::class, fn() => (new ProcessVideo((int) $video->id))->handle());
         $this->assertSame('processing', $video->refresh()->status);
         $this->assertSame([], glob($this->storagePath . '/temp/video-processing/*') ?: []);
     }
@@ -176,14 +176,72 @@ class QueueTest extends TestCase
     }
     public function testFailedVideoCanBeExplicitlyRetried(): void
     {
-        $video = $this->makeVideo($this->makeUser(), ['status' => 'failed']);
+        $user = $this->makeUser();
+        $video = $this->makeVideo($user, ['status' => 'failed']);
+        $other = $this->makeVideo($user, ['status' => 'failed']);
         $retry = new \App\Services\VideoRetry();
         $this->assertTrue($retry->retry((int) $video->id));
         $this->assertSame('processing', $video->refresh()->status);
+        $this->assertSame('failed', $other->refresh()->status);
+        $this->assertDatabaseCount('jobs', 1);
         $video->fill(['status' => 'deleted']);
         $video->save();
         $this->assertFalse($retry->retry((int) $video->id));
         $this->assertSame('deleted', $video->refresh()->status);
+        $this->assertFalse($retry->retry(98765));
+        $this->assertDatabaseCount('jobs', 1);
+        $this->assertTrue($retry->retry());
+        $this->assertSame('processing', $other->refresh()->status);
+        $this->assertDatabaseCount('jobs', 2);
+    }
+
+    public function testRetryCommandHonorsTheVideoIdAndRejectsInvalidIds(): void
+    {
+        $this->app->instance(\Spark\Console\Commands::class, new \Spark\Console\Commands());
+        require dirname(__DIR__, 2) . '/routes/console.php';
+
+        $user = $this->makeUser();
+        $video = $this->makeVideo($user, ['status' => 'failed']);
+        $other = $this->makeVideo($user, ['status' => 'failed']);
+        $console = new \Spark\Console\Console(command());
+
+        foreach (['', '0', '-1', 'invalid', true] as $id) {
+            $this->assertThrows(\InvalidArgumentException::class, fn() => $console->executeCommand('videos:retry', ['id' => $id]));
+        }
+
+        $this->assertSame('failed', $video->refresh()->status);
+        $this->assertDatabaseCount('jobs', 0);
+
+        $console->executeCommand('videos:retry', ['id' => (string) $video->id]);
+
+        $this->assertSame('processing', $video->refresh()->status);
+        $this->assertSame('failed', $other->refresh()->status);
+        $this->assertDatabaseCount('jobs', 1);
+    }
+
+    public function testRetryDoesNotResetVideosPublishedOrDeletedAfterSelection(): void
+    {
+        $user = $this->makeUser();
+        $published = $this->makeVideo($user, ['status' => 'processing']);
+        $deleted = $this->makeVideo($user, ['status' => 'failed']);
+        $this->app->mergeConfig(['app' => ['debug' => true]]);
+        $changed = false;
+
+        event()->addListener('app:db.queryExecuted', function (string $query) use ($published, $deleted, &$changed): void {
+            if ($changed || !str_starts_with($query, 'SELECT')) {
+                return;
+            }
+
+            $changed = true;
+            Video::whereKey($published->id)->update(['status' => 'published']);
+            Video::whereKey($deleted->id)->update(['status' => 'deleted']);
+        });
+
+        $this->assertFalse(\App\Services\VideoRetry::retry());
+        $this->assertTrue($changed);
+        $this->assertSame('published', $published->refresh()->status);
+        $this->assertSame('deleted', $deleted->refresh()->status);
+        $this->assertDatabaseCount('jobs', 0);
     }
 
     public function testRealFfmpegExtractsAPlayableVideoWhenInstalled(): void

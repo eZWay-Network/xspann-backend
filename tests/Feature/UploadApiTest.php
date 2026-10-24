@@ -21,11 +21,11 @@ class UploadApiTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->server?->stop();
-        if ($this->app->has('db')) {
-            $this->app->get('db')->disconnect();
+        try {
+            $this->server?->stop();
+        } finally {
+            parent::tearDown();
         }
-        parent::tearDown();
     }
 
     private function startServer(): void
@@ -93,11 +93,18 @@ class UploadApiTest extends TestCase
             ['POST', '/api/v1/auth/register', 422],
             ['GET', '/api/v1/videos/98765', 404],
             ['GET', '/api/v1/auth/me', 401],
+            ['GET', '/api/v1/missing-endpoint', 404],
+            ['PUT', '/api/v1/auth/login', 405],
         ] as [$method, $path, $status]) {
             $this->server->request($method, $path, headers: $headers)
                 ->assertStatus($status)
+                ->assertHeader('Content-Type', 'application/json; charset=utf-8')
                 ->assertHeader('Access-Control-Allow-Origin', $headers['Origin']);
         }
+
+        $this->server->request('PUT', '/api/v1/auth/login', headers: $headers)
+            ->assertStatus(405)
+            ->assertHeader('Allow', 'POST');
     }
 
     public function testRealMultipartVideoAudioAndAvatarUploads(): void
