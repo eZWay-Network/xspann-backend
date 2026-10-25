@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'transport' => env('MAIL_TRANSPORT', 'smtp'), // Supported: "mail", "sendmail", "smtp", "log"
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', 'Spark')
