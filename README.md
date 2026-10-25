@@ -87,7 +87,7 @@ CORS origins and allowed headers are in `config/cors.php`. The existing frontend
 
 `CorsControl` uses Spark's native middleware without an override. Core includes CORS headers on validation/abort responses and rejects disallowed preflights with `403`; allowed preflights return `204`.
 
-For AWS or Spaces, use `FILESYSTEM_DISK=s3` with the `AWS_*` settings in `config/storage.php`. AWS can omit `AWS_ENDPOINT`; Spark derives the regional origin. For Spaces, set it to the regional Spaces origin. Use `AWS_URL` for the public bucket/CDN URL. Signing always uses the storage origin. Keep objects private with the default `temporary_urls=true` disk setting. The API issues native signed GET URLs, valid for `storage.media_url_ttl` seconds (3600 by default), for video, thumbnail, avatar, audio, and cover fields. Stable S3 URLs are stored in the database; expiring signatures are never persisted. This avoids requiring anonymous reads to private objects. The storage key needs read, write, and delete access to managed media. Existing public objects remain public until their permissions are changed.
+For AWS or Spaces, use `FILESYSTEM_DISK=s3` with the `AWS_*` settings in `config/storage.php`. AWS can omit `AWS_ENDPOINT`; Spark derives the regional origin. For Spaces, set it to the regional Spaces origin. Use `AWS_URL` for the public bucket/CDN URL. Signing always uses the storage origin. Keep objects private with the default `temporary_urls=true` disk setting. The API issues native signed GET URLs, valid for `storage.media_url_ttl` seconds (3600 by default), for video, thumbnail, avatar, audio, and cover fields. Stable disk:key references (for example, `s3:videos/1/clip.mp4`) are stored in the database; expiring signatures are never persisted. This avoids requiring anonymous reads to private objects. The storage key needs read, write, and delete access to managed media. Existing public objects remain public until their permissions are changed.
 
 Bucket CORS must allow your frontend origins, `PUT`, `GET`, and `HEAD`, including the upload response headers and media range requests. API CORS cannot configure the bucket. See the official [Spaces CORS guide](https://docs.digitalocean.com/products/spaces/how-to/configure-cors/) and [presigned URL support](https://docs.digitalocean.com/products/spaces/reference/s3-compatibility/). The app uses native Spark `temporaryUploadUrl()`, `temporaryUrl()`, and streaming `downloadFile()`. Set `temporary_urls=false` only for a disk whose public bucket/CDN URLs are accessible. Signed playback uses the origin, not the configured CDN URL.
 
@@ -244,7 +244,7 @@ The client adds the selected track to its music editor and renders it into the v
 
 ```json
 {
-  "storage_path": "videos/1/upload.mp4",
+  "storage_path": "public:videos/1/upload.mp4",
   "sound_provider": "jamendo",
   "sound_external_id": "123",
   "audio_settings": { "rendered": true },
@@ -258,7 +258,7 @@ For the checkbox **“Reuse this content — allow others to use your original a
 
 Only backend APIs/docs are changed; the frontend music picker, rendering and checkbox must use this contract.
 
-Audio media uses the existing storage convention: full stable S3 URLs in the database, relative paths for local files, and public/signed URLs in resources. A previously issued signed URL remains valid until expiry; source privacy controls new API responses and reuse.
+Audio media uses the same disk:key storage references as videos, with public/signed URLs in resources. A previously issued signed URL remains valid until expiry; source privacy controls new API responses and reuse.
 
 ### Upload flow
 
@@ -281,11 +281,11 @@ Chunk requests contain `upload_id` (UUID), zero-based `chunk_index`, `total_chun
 Audio uploads return `audio_url`; create the library entry separately through `POST /audios`. Avatar uploads return `avatar_url`. Keep PHP, reverse-proxy, and web-server body limits above the allowed upload size plus multipart overhead.
 ### Media storage
 
-- The public disk uses the local filesystem. Media fields store relative paths, such as `videos/1/clip.mp4`. The private `local` disk remains separate.
-- S3 media fields store full stable URLs for video, avatar, thumbnail, and sound preview. Cover URLs are derived from the latest visible video. Upload responses keep `storage_path` as the object key for frontend compatibility; model writes normalize it to the full S3 URL.
-- Local response paths resolve through native `media_url()` to `APP_URL/uploads/...`. Configured private S3 media resolves through native `temporaryUrl()`; external media URLs pass through unchanged. Refresh the API response after a signed URL expires.
-- `videos.storage_path` is the only stored video source: a relative path for the public disk, or a stable full URL for S3. `video_url` is a resource output, not a duplicate database column. Upload responses retain the object key in `storage_path` for frontend compatibility.
-- Managed files must belong to the current account and the correct media directory. API writes cannot turn another account’s private media path into a signed URL. Keep old disk configuration available when changing upload destinations so existing S3 URLs can still be resolved and deleted.
+- Managed media fields store `disk:key` references, such as `public:videos/1/clip.mp4`, `s3:avatars/1/avatar.png`, or `local:sounds/1/source.wav`. The disk name is its configured name, including custom disks such as `spaces`.
+- Upload responses return this reference in `storage_path`; pass it back unchanged when creating videos or audio. The `video_url`, `audio_url`, and `avatar_url` response fields remain full public or signed URLs.
+- Resources resolve the referenced disk, independently of the current default disk. S3 uses signed GET URLs when `temporary_urls` is enabled, otherwise the configured public/CDN URL. Local disks use their configured public URL; a private disk without one returns no public URL.
+- Existing unprefixed paths are still read from `public`, and existing configured media URLs remain supported. New bare-key writes use the current upload disk; new managed URL writes normalize to `disk:key`. External URLs, including Google avatars and Jamendo previews, remain unchanged. No database migration is required.
+- Cleanup recognizes equivalent legacy and prefixed references, preserving shared files. `videos.storage_path` remains the only stored video source; `video_url` is a resource output, not a duplicate database column.
 
 `public/uploads` links to `storage/uploads`. Deploy that symlink (or configure the equivalent server alias). Nginx/Apache or the object store serves files and handles byte ranges; there is no PHP media controller. If your deployment omits symlinks, create it with `ln -s ../storage/uploads public/uploads`. Changing `APP_URL` automatically changes local media response URLs without rewriting stored paths. Local public files are directly accessible to anyone who knows their URL; API visibility is not filesystem access control. Signed S3 URLs are also usable by anyone holding them until expiry, including after a visibility or block change. Use private S3 storage when file access needs to expire.
 

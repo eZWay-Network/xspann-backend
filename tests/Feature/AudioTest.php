@@ -89,16 +89,16 @@ class AudioTest extends TestCase
         $track = $this->track($owner->id, ['origin' => 'original', 'source_video_id' => $source->id]);
         $source->update(['audio_id' => $track->id]);
         $reused = $this->makeVideo($other, ['audio_id' => $track->id]);
-        storage('public')->put($track->storage_path, 'sound');
-        storage('public')->put($reused->storage_path, 'reused-video');
+        storage('public')->put($this->mediaKey($track->storage_path), 'sound');
+        storage('public')->put($this->mediaKey($reused->storage_path), 'reused-video');
         $this->asUser($owner)->deleteJson('/api/v1/videos/' . $source->id)->assertOk();
         $this->asUser($other)->getJson('/api/v1/audios/' . $track->id)->assertStatus(404);
         $this->getJson('/api/v1/videos/' . $reused->id)->assertOk()->assertJsonPath('data.audio', null);
         (new DeleteVideo($source->id))->handle();
         $this->assertDatabaseMissing('audios', ['id' => $track->id]);
         $this->assertSame(null, $reused->refresh()->audio_id);
-        $this->assertTrue(storage('public')->exists($reused->storage_path));
-        $this->assertFalse(storage('public')->exists($track->storage_path));
+        $this->assertTrue(storage('public')->exists($this->mediaKey($reused->storage_path)));
+        $this->assertFalse(storage('public')->exists($this->mediaKey($track->storage_path)));
     }
 
     public function testLibraryAndFeedQueriesDoNotGrowWithMoreTracks(): void
@@ -143,7 +143,7 @@ class AudioTest extends TestCase
         $binaries = $this->realTools();
         $owner = $this->makeUser();
         $video = $this->makeVideo($owner, ['status' => 'processing']);
-        $source = storage('public')->path($video->storage_path);
+        $source = storage('public')->path($this->mediaKey($video->storage_path));
         \Spark\Utils\File::ensureDirectoryExists(dirname($source));
         Process::run([
             $binaries['ffmpeg'],
@@ -171,7 +171,7 @@ class AudioTest extends TestCase
         $video->refresh();
         $this->assertSame('published', $video->status);
         $this->assertFalse(is_file($source));
-        $output = storage('public')->path($video->storage_path);
+        $output = storage('public')->path($this->mediaKey($video->storage_path));
         $probe = json_decode(Process::run([
             $binaries['ffprobe'],
             '-v',
@@ -202,7 +202,7 @@ class AudioTest extends TestCase
             (new ProcessVideo($reused->id))->handle();
             $this->assertSame('published', $reused->refresh()->status);
             $this->assertSame($track->id, $reused->audio_id);
-            Process::run([$binaries['ffmpeg'], '-v', 'error', '-i', storage('public')->path($reused->storage_path), '-f', 'null', '-'], timeout: 30)->throw();
+            Process::run([$binaries['ffmpeg'], '-v', 'error', '-i', storage('public')->path($this->mediaKey($reused->storage_path)), '-f', 'null', '-'], timeout: 30)->throw();
         }
         $this->assertDatabaseCount('audios', 1);
         $this->assertSame([], glob($this->storagePath . '/temp/media-processing/*'));
@@ -214,7 +214,7 @@ class AudioTest extends TestCase
         $this->app->mergeConfig(['app' => $binaries]);
         $owner = $this->makeUser();
         $audio = $this->track($owner->id, ['status' => 'processing', 'storage_path' => 'sounds/1/source.wav']);
-        $source = storage('public')->path($audio->storage_path);
+        $source = storage('public')->path($this->mediaKey($audio->storage_path));
         \Spark\Utils\File::ensureDirectoryExists(dirname($source));
         Process::run([$binaries['ffmpeg'], '-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=0.5', $source])->throw();
         (new ProcessAudio($audio->id))->handle();
@@ -224,7 +224,7 @@ class AudioTest extends TestCase
         $this->assertDatabaseCount('audios', 1);
 
         $video = $this->makeVideo($owner, ['status' => 'processing', 'original_audio_muted' => true]);
-        $source = storage('public')->path($video->storage_path);
+        $source = storage('public')->path($this->mediaKey($video->storage_path));
         \Spark\Utils\File::ensureDirectoryExists(dirname($source));
         Process::run([$binaries['ffmpeg'], '-v', 'error', '-f', 'lavfi', '-i', 'color=s=32x32:d=0.5', '-f', 'lavfi', '-i', 'sine=duration=0.5', '-shortest', $source])->throw();
         (new ProcessVideo($video->id))->handle();
@@ -238,7 +238,7 @@ class AudioTest extends TestCase
             '-show_streams',
             '-of',
             'json',
-            storage('public')->path($video->storage_path),
+            storage('public')->path($this->mediaKey($video->storage_path)),
         ])->throw()->output(), true);
         $this->assertSame(['video'], array_column($probe['streams'], 'codec_type'));
     }
@@ -252,10 +252,10 @@ class AudioTest extends TestCase
             'sound_preview_url' => $track->storage_path,
             'status' => 'deleted',
         ]);
-        storage('public')->put($track->storage_path, 'library audio');
+        storage('public')->put($this->mediaKey($track->storage_path), 'library audio');
         (new DeleteVideo($video->id))->handle();
         $this->assertDatabaseHas('audios', ['id' => $track->id]);
-        $this->assertTrue(storage('public')->exists($track->storage_path));
+        $this->assertTrue(storage('public')->exists($this->mediaKey($track->storage_path)));
     }
 
     public function testDeletingAnOriginalPreservesItsFileWhileAnotherAudioUsesIt(): void
@@ -264,13 +264,13 @@ class AudioTest extends TestCase
         $video = $this->makeVideo($owner, ['status' => 'deleted']);
         $original = $this->track($owner->id, ['origin' => 'original', 'source_video_id' => $video->id]);
         $copy = $this->track($owner->id, ['storage_path' => $original->storage_path, 'status' => 'processing']);
-        storage('public')->put($original->storage_path, 'shared audio');
+        storage('public')->put($this->mediaKey($original->storage_path), 'shared audio');
 
         (new DeleteVideo($video->id))->handle();
 
         $this->assertDatabaseMissing('audios', ['id' => $original->id]);
         $this->assertDatabaseHas('audios', ['id' => $copy->id]);
-        $this->assertTrue(storage('public')->exists($copy->storage_path));
+        $this->assertTrue(storage('public')->exists($this->mediaKey($copy->storage_path)));
     }
 
     public function testPublishingPreservesAThumbnailChangedDuringEncoding(): void
@@ -329,11 +329,11 @@ class AudioTest extends TestCase
     {
         $owner = $this->makeUser();
         $audio = $this->track($owner->id, ['status' => 'processing']);
-        storage('public')->put($audio->storage_path, 'not audio');
+        storage('public')->put($this->mediaKey($audio->storage_path), 'not audio');
         ProcessAudio::dispatch($audio->id)->send();
         app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0);
         $this->assertSame('failed', $audio->refresh()->status);
-        $this->assertTrue(storage('public')->exists($audio->storage_path));
+        $this->assertTrue(storage('public')->exists($this->mediaKey($audio->storage_path)));
         $this->getJson('/api/v1/audios')->assertJsonCount(0, 'data');
         $this->assertSame([], glob($this->storagePath . '/temp/media-processing/*') ?: []);
     }

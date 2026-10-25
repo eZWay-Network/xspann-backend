@@ -48,11 +48,7 @@ class PendingUploads
                     }
 
                     $disk = storage($upload->disk);
-                    $values = [$disk->url($path)];
-                    if (config('storage.disks.' . $upload->disk . '.driver') === 'local') {
-                        $values[] = $path;
-                        $values[] = media_url($path);
-                    }
+                    $values = StorageService::referenceValues($upload->disk . ":$path");
 
                     $referenced = User::whereIn('avatar', $values)->exists()
                         || Audio::whereIn('storage_path', $values)->exists()

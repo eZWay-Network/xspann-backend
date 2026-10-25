@@ -16,7 +16,7 @@ class VideoDeletionTest extends TestCase
         $other = $this->makeUser('other');
         $video = $this->makeVideo($owner, ['thumbnail_url' => 'thumbnails/1/cover.jpg', 'sound_preview_url' => 'sounds/1/audio.mp3']);
         foreach ([$video->storage_path, $video->thumbnail_url, $video->sound_preview_url] as $path) {
-            storage('public')->put($path, 'file');
+            storage('public')->put($this->mediaKey($path), 'file');
         }
         $comment = Comment::create(['user_id' => $other->id, 'video_id' => $video->id, 'body' => 'Hi']);
         query('comments_reacts')->insert(['user_id' => $owner->id, 'comment_id' => $comment->id]);
@@ -34,7 +34,7 @@ class VideoDeletionTest extends TestCase
             $this->assertDatabaseCount($table, 0);
         }
         foreach ([$video->storage_path, $video->thumbnail_url, $video->sound_preview_url] as $path) {
-            $this->assertFalse(storage('public')->exists($path));
+            $this->assertFalse(storage('public')->exists($this->mediaKey($path)));
         }
         (new DeleteVideo((int) $video->id))->handle();
     }
@@ -44,11 +44,11 @@ class VideoDeletionTest extends TestCase
         $owner = $this->makeUser();
         $video = $this->makeVideo($owner, ['thumbnail_url' => 'thumbnails/2/other.jpg', 'sound_preview_url' => 'https://music.example.com/audio.mp3', 'status' => 'deleted']);
         $this->makeVideo($owner); // Same video key is still referenced.
-        storage('public')->put($video->storage_path, 'shared');
+        storage('public')->put($this->mediaKey($video->storage_path), 'shared');
         storage('public')->put('thumbnails/2/other.jpg', 'other');
         (new DeleteVideo((int) $video->id))->handle();
         $this->assertNull(Video::find($video->id));
-        $this->assertTrue(storage('public')->exists($video->storage_path));
+        $this->assertTrue(storage('public')->exists($this->mediaKey($video->storage_path)));
         $this->assertTrue(storage('public')->exists('thumbnails/2/other.jpg'));
     }
 

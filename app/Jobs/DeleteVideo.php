@@ -36,15 +36,16 @@ class DeleteVideo implements JobInterface
                         continue;
                     }
 
+                    $values = StorageService::referenceValues($value);
                     $shared = Video::whereNotKey($video->id)
                         ->where(
                             fn($query) => $query
-                                ->where('storage_path', $value)
-                                ->orWhere('thumbnail_url', $value)
-                                ->orWhere('sound_preview_url', $value)
+                                ->whereIn('storage_path', $values)
+                                ->orWhereIn('thumbnail_url', $values)
+                                ->orWhereIn('sound_preview_url', $values)
                         )->exists();
 
-                    $shared = $shared || Audio::where('storage_path', $value)->exists();
+                    $shared = $shared || Audio::whereIn('storage_path', $values)->exists();
 
                     if (!$shared && !storage($location['disk'])->delete($location['key'])) {
                         throw new \RuntimeException('Could not remove video media.');
@@ -53,12 +54,13 @@ class DeleteVideo implements JobInterface
 
                 foreach (Audio::where('source_video_id', $video->id)->get() as $audio) {
                     $location = StorageService::location($audio->storage_path);
-                    $shared = Audio::whereNotKey($audio->id)->where('storage_path', $audio->storage_path)->exists()
+                    $values = StorageService::referenceValues($audio->storage_path);
+                    $shared = Audio::whereNotKey($audio->id)->whereIn('storage_path', $values)->exists()
                         || Video::whereNotKey($video->id)
                             ->where(fn($query) => $query
-                                ->where('storage_path', $audio->storage_path)
-                                ->orWhere('thumbnail_url', $audio->storage_path)
-                                ->orWhere('sound_preview_url', $audio->storage_path))
+                                ->whereIn('storage_path', $values)
+                                ->orWhereIn('thumbnail_url', $values)
+                                ->orWhereIn('sound_preview_url', $values))
                             ->exists();
 
                     if ($location && !$shared && !storage($location['disk'])->delete($location['key'])) {

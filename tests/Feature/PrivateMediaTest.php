@@ -26,10 +26,10 @@ class PrivateMediaTest extends TestCase
                 $this->assertArrayHasKey('X-Amz-Signature', $query);
                 $server->request('GET', substr($url, strlen($server->url)))->assertOk();
             }
-            $this->assertSame('https://cdn.example.com/videos/1/sample.mp4', $video->refresh()->storage_path);
-            $this->assertSame('https://cdn.example.com/thumbnails/1/cover.jpg', StorageService::storedValue($data['thumbnail_url']));
+            $this->assertSame('s3:videos/1/sample.mp4', $video->refresh()->storage_path);
+            $this->assertSame('s3:thumbnails/1/cover.jpg', StorageService::storedValue($data['thumbnail_url']));
             $this->asUser($owner)->patchJson('/api/v1/videos/' . $video->id, ['thumbnail_url' => $data['thumbnail_url']])->assertOk();
-            $this->assertSame('https://cdn.example.com/thumbnails/1/cover.jpg', $video->refresh()->thumbnail_url);
+            $this->assertSame('s3:thumbnails/1/cover.jpg', $video->refresh()->thumbnail_url);
             $this->asUser($this->makeUser('other'))->postJson('/api/v1/videos', ['storage_path' => $data['video_url']])->assertStatus(422);
             $this->postJson('/api/v1/videos', ['storage_path' => 'videos/2/../../secret.txt'])->assertStatus(422);
             $this->assertSame('https://cdn.example.com/private/secret.txt', StorageService::publicUrl('https://cdn.example.com/private/secret.txt'));

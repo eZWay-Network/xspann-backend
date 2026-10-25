@@ -93,12 +93,12 @@ class QueueTest extends TestCase
     {
         $user = $this->makeUser();
         $video = $this->makeVideo($user, ['cover_time' => 100]);
-        storage('public')->put($video->storage_path, 'fixture-video');
+        storage('public')->put($this->mediaKey($video->storage_path), 'fixture-video');
         $this->fakeVideoTools();
         $result = (new VideoMetadataExtractor())->extract($video);
         $this->assertSame(13, $result['duration']);
-        $this->assertSame($result['thumbnail_path'], $result['thumbnail_url']);
-        $this->assertSame('fixture-thumbnail', storage('public')->get($result['thumbnail_path']));
+        $this->assertSame('public:' . $result['thumbnail_path'], $result['thumbnail_url']);
+        $this->assertSame('fixture-thumbnail', storage('public')->get($this->mediaKey($result['thumbnail_path'])));
         $arguments = json_decode(file_get_contents($this->storagePath . '/arguments.json'), true);
         $this->assertSame('12.15', $arguments[array_search('-ss', $arguments) + 1]);
         $this->assertSame('file,pipe', $arguments[array_search('-protocol_whitelist', $arguments) + 1]);
@@ -108,7 +108,7 @@ class QueueTest extends TestCase
     public function testExtractorFailureLeavesNoTemporaryFiles(): void
     {
         $video = $this->makeVideo($this->makeUser());
-        storage('public')->put($video->storage_path, 'bad-video');
+        storage('public')->put($this->mediaKey($video->storage_path), 'bad-video');
         $this->app->mergeConfig(['app' => ['ffprobe' => '/nonexistent/ffprobe', 'ffmpeg' => '/nonexistent/ffmpeg']]);
         $this->assertSame([], (new VideoMetadataExtractor())->extract($video));
         $video->fill(['status' => 'processing']);
@@ -121,7 +121,7 @@ class QueueTest extends TestCase
     public function testDefaultCoverTimeStaysInsideShortVideos(): void
     {
         $video = $this->makeVideo($this->makeUser());
-        storage('public')->put($video->storage_path, 'fixture-video');
+        storage('public')->put($this->mediaKey($video->storage_path), 'fixture-video');
         $this->fakeVideoTools('0.52');
 
         $metadata = (new VideoMetadataExtractor())->extract($video);
@@ -129,7 +129,7 @@ class QueueTest extends TestCase
 
         $this->assertSame('0.42', $arguments[array_search('-ss', $arguments) + 1]);
         $this->assertSame(1, $metadata['duration']);
-        $this->assertTrue(storage('public')->exists($metadata['thumbnail_path']));
+        $this->assertTrue(storage('public')->exists($this->mediaKey($metadata['thumbnail_path'])));
         $this->assertSame([], glob($this->storagePath . '/temp/video-processing/*'));
     }
 
@@ -259,7 +259,7 @@ class QueueTest extends TestCase
             $this->markTestSkipped('Install FFmpeg and FFprobe to run the real decoder integration.');
         }
         $video = $this->makeVideo($this->makeUser());
-        $source = storage('public')->path($video->storage_path);
+        $source = storage('public')->path($this->mediaKey($video->storage_path));
         \Spark\Utils\File::ensureDirectoryExists(dirname($source));
         \Spark\Console\Process::run([
             $binaries['ffmpeg'],
@@ -276,7 +276,7 @@ class QueueTest extends TestCase
         $this->app->mergeConfig(['app' => $binaries]);
         $metadata = (new VideoMetadataExtractor())->extract($video);
         $this->assertSame(1, $metadata['duration']);
-        $image = storage('public')->path($metadata['thumbnail_path']);
+        $image = storage('public')->path($this->mediaKey($metadata['thumbnail_path']));
         $this->assertSame('image/jpeg', mime_content_type($image));
         $this->assertSame(720, getimagesize($image)[0]);
     }

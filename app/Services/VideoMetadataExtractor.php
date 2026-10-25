@@ -30,7 +30,7 @@ class VideoMetadataExtractor
             $disk = Storage::disk($location['disk']);
             $key = $location['key'];
 
-            $source = $location['disk'] === 'public' ? $disk->path($key) : null;
+            $source = config('storage.disks.' . $location['disk'] . '.driver') === 'local' ? $disk->path($key) : null;
             if ($source !== null && !File::isFile($source)) {
                 throw new \RuntimeException('Uploaded video was not found.');
             }

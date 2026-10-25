@@ -148,6 +148,8 @@ class ApiContractTest extends TestCase
         $this->assertSame(900, $entries['uploadcontroller-videochunk']['rate']);
         $this->assertSame('multipart/form-data', $entries['uploadcontroller-videochunk']['contentType']);
         $this->assertSame('multipart', $entries['uploadcontroller-video']['alternate']['data']['upload_method']);
+        $this->assertSame('s3:videos/1/example.mp4', $entries['uploadcontroller-video']['response']['data']['storage_path']);
+        $this->assertSame('public:videos/1/example.mp4', $entries['uploadcontroller-local']['response']['data']['storage_path']);
         $this->assertSame(18, $entries['usercontroller-suggestions']['response']['meta']['per_page']);
         $this->assertSame(null, $entries['authcontroller-register']['response']['data']['token']);
         $this->assertSame('username', $entries['usercontroller-show']['parameters'][0]['name']);

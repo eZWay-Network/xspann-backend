@@ -71,6 +71,16 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
         return $this->withToken($this->token($user));
     }
 
+    protected function mediaKey(string $value): string
+    {
+        $location = \App\Services\StorageService::location($value);
+        if (!$location) {
+            throw new \InvalidArgumentException('Expected a managed media reference.');
+        }
+
+        return $location['key'];
+    }
+
     protected function useS3(array $config = []): void
     {
         $this->app->mergeConfig([

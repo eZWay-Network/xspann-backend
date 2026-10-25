@@ -4,7 +4,9 @@ namespace App\Services;
 
 use Spark\Facades\Hash;
 use Spark\Foundation\Exceptions\ValidationException;
-use Spark\Storage\Storage;
+use Spark\Storage\{Storage, StoragePath};
+use InvalidArgumentException;
+use function array_key_exists;
 use function in_array;
 use function strlen;
 
@@ -79,46 +81,56 @@ class StorageService
         return self::disk()->putFileAs(dirname($path), $localPath, basename($path));
     }
 
-    public static function storedValue(?string $path): ?string
+    /** Normalize a new write; bare upload keys belong to the current upload disk. */
+    public static function storedValue(?string $value): ?string
     {
-        if (empty($path)) {
+        if ($value === null || $value === '') {
             return null;
         }
 
-        if (filter_var($path, FILTER_VALIDATE_URL)) {
-            if ($location = self::location($path)) {
-                return $location['disk'] === 'public' ? $location['key'] : storage($location['disk'])->url($location['key']);
-            }
-            return self::relativePath($path);
+        if (filter_var($value, FILTER_VALIDATE_URL)) {
+            $location = self::location($value);
+
+            return $location ? $location['disk'] . ':' . $location['key'] : $value;
         }
 
-        if (config('storage.disks.' . self::diskName() . '.driver') === 's3') {
-            return self::disk()->url($path);
+        $reference = str_contains($value, ':') ? $value : self::diskName() . ':' . ltrim($value, '/');
+        $location = self::location($reference);
+
+        if (!$location) {
+            throw new InvalidArgumentException('Invalid media disk or key.');
         }
 
-        return ltrim($path, '/');
+        return $location['disk'] . ':' . $location['key'];
     }
 
-    public static function relativePath(?string $value): ?string
+    public static function publicUrl(?string $value): ?string
     {
-        $prefix = rtrim(media_url(), '/') . '/';
-
-        return $value && str_starts_with($value, $prefix) ? substr($value, strlen($prefix)) : $value;
-    }
-
-    public static function publicUrl(?string $url): ?string
-    {
-        if (
-            $url && ($location = self::location($url)) && $location['disk'] !== 'public'
-            && config('storage.disks.' . $location['disk'] . '.temporary_urls', true)
-        ) {
-            return storage($location['disk'])->temporaryUrl($location['key'], max(60, min(604800, (int) config('storage.media_url_ttl', 3600))));
+        if (!$value) {
+            return null;
         }
 
-        return $url ? media_url($url) : null;
+        $location = self::location($value);
+        if (!$location) {
+            return filter_var($value, FILTER_VALIDATE_URL) ? $value : null;
+        }
+
+        $config = config('storage.disks.' . $location['disk'], []);
+        $disk = storage($location['disk']);
+
+        if (($config['driver'] ?? null) === 's3' && ($config['temporary_urls'] ?? true)) {
+            return $disk->temporaryUrl($location['key'], max(60, min(604800, (int) config('storage.media_url_ttl', 3600))));
+        }
+
+        // A private local disk has no public route; never invent an uploads URL for it.
+        if (($config['driver'] ?? null) === 'local' && empty($config['url'])) {
+            return null;
+        }
+
+        return $disk->url($location['key']);
     }
 
-    /** Resolve only configured media locations; never fetch or delete arbitrary URLs. */
+    /** Read explicit references and legacy values without depending on the default disk. */
     public static function location(?string $value): ?array
     {
         if (!$value) {
@@ -126,44 +138,90 @@ class StorageService
         }
 
         if (!filter_var($value, FILTER_VALIDATE_URL)) {
-            return ['disk' => 'public', 'key' => ltrim($value, '/')];
+            [$disk, $key] = str_contains($value, ':')
+                ? explode(':', $value, 2)
+                : ['public', ltrim($value, '/')];
+
+            return self::normalizeLocation($disk, $key);
         }
 
         $url = strtok($value, '?');
-        $public = rtrim(media_url(), '/') . '/';
-        if (str_starts_with($url, $public)) {
-            return ['disk' => 'public', 'key' => rawurldecode(substr($url, strlen($public)))];
-        }
-
         foreach (config('storage.disks', []) as $name => $config) {
-            if (($config['driver'] ?? null) !== 's3' || empty($config['key']) || empty($config['secret']) || empty($config['bucket'])) {
-                continue;
+            $bases = [];
+            if (!empty($config['url'])) {
+                $bases[] = rtrim($config['url'], '/') . '/';
+            }
+            if ($name === 'public') {
+                $bases[] = rtrim(media_url(), '/') . '/';
+            }
+            if (($config['driver'] ?? null) === 's3' && !empty($config['key']) && !empty($config['secret']) && !empty($config['bucket'])) {
+                $disk = storage($name);
+                $bases[] = dirname($disk->url('__media__')) . '/';
+                $bases[] = dirname(strtok($disk->temporaryUrl('__media__'), '?')) . '/';
             }
 
-            $disk = storage($name);
-            $base = dirname($disk->url('__media__')) . '/';
+            foreach (array_unique($bases) as $base) {
+                if (str_starts_with($url, $base)) {
+                    $key = rawurldecode(substr($url, strlen($base)));
+                    if (!preg_match('~^(videos|thumbnails|avatars|sounds)/[1-9][0-9]*/[^/]+$~D', $key)) {
+                        return null;
+                    }
 
-            if (!str_starts_with($url, $base)) {
-                $base = dirname(strtok($disk->temporaryUrl('__media__'), '?')) . '/';
-            }
-
-            if (str_starts_with($url, $base)) {
-                $key = rawurldecode(substr($url, strlen($base)));
-                return preg_match('~^(videos|thumbnails|avatars|sounds)/[1-9][0-9]*/[^/]+$~D', $key)
-                    ? ['disk' => $name, 'key' => $key] : null;
+                    return self::normalizeLocation($name, $key);
+                }
             }
         }
 
         return null;
     }
 
-    public static function validateOwner(?string $value, int $userId, string $field, string $kind, bool $required = false): void
+    /** Equivalent stored values, so cleanup preserves both new and legacy references. */
+    public static function referenceValues(string $value): array
     {
         $location = self::location($value);
+        if (!$location) {
+            return [$value];
+        }
+
+        ['disk' => $disk, 'key' => $key] = $location;
+        $config = config("storage.disks.$disk", []);
+        $values = [$value, "$disk:$key"];
+
+        if ($disk === 'public') {
+            $values[] = $key;
+            $values[] = media_url($key);
+        }
+        if (($config['driver'] ?? null) === 's3' || !empty($config['url'])) {
+            $values[] = storage($disk)->url($key);
+        }
+
+        return array_values(array_unique($values));
+    }
+
+    private static function normalizeLocation(string $disk, string $key): ?array
+    {
+        if (!array_key_exists($disk, config('storage.disks', []))) {
+            return null;
+        }
+
+        try {
+            return ['disk' => $disk, 'key' => StoragePath::normalize($key)];
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    public static function validateOwner(?string $value, int $userId, string $field, string $kind, bool $required = false): void
+    {
+        try {
+            $location = self::location(self::storedValue($value));
+        } catch (InvalidArgumentException) {
+            throw ValidationException::withMessages([$field => ['Select a file uploaded by this account.']]);
+        }
+
         if ((!$location && $required) || ($location && !preg_match('~^' . $kind . '/' . $userId . '/[a-z0-9_-][a-z0-9._-]*$~Di', $location['key']))) {
             throw ValidationException::withMessages([$field => ['Select a file uploaded by this account.']]);
         }
-        $location = self::location(self::storedValue($value));
         if ($location && !storage($location['disk'])->exists($location['key'])) {
             throw ValidationException::withMessages([$field => ['The upload is missing or has expired. Please upload it again.']]);
         }

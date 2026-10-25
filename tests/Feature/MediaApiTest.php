@@ -8,7 +8,7 @@ use Tests\TestCase;
 
 class MediaApiTest extends TestCase
 {
-    public function testPublicMediaStoresPathsAndResourcesReturnFullUrls(): void
+    public function testPublicMediaStoresDiskReferencesAndResourcesReturnFullUrls(): void
     {
         $user = $this->makeUser();
         $this->asUser($user);
@@ -26,20 +26,20 @@ class MediaApiTest extends TestCase
 
         $this->assertDatabaseHas('videos', [
             'id' => $video->json('data.id'),
-            'storage_path' => 'videos/1/clip.mp4',
-            'thumbnail_url' => 'thumbnails/1/cover.jpg',
-            'sound_preview_url' => 'sounds/1/audio.mp3',
+            'storage_path' => 'public:videos/1/clip.mp4',
+            'thumbnail_url' => 'public:thumbnails/1/cover.jpg',
+            'sound_preview_url' => 'public:sounds/1/audio.mp3',
         ]);
         $this->putJson('/api/v1/auth/profile', ['avatar' => media_url('avatars/1/avatar.png')])
             ->assertOk()->assertJsonPath('data.avatar', media_url('avatars/1/avatar.png'));
-        $this->assertDatabaseHas('users', ['id' => $user->id, 'avatar' => 'avatars/1/avatar.png']);
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'avatar' => 'public:avatars/1/avatar.png']);
         Video::find($video->json('data.id'))->update(['status' => 'published']);
         $this->flushHeaders()->getJson('/api/v1/users/suggestions')->assertOk()
             ->assertJsonPath('data.0.cover_url', media_url('thumbnails/1/cover.jpg'))
             ->assertJsonPath('data.0.cover_video_url', media_url('videos/1/clip.mp4'));
     }
 
-    public function testS3MediaKeysBecomePublicUrlsForEveryModelField(): void
+    public function testS3MediaStoresDiskReferencesForEveryModelField(): void
     {
         $this->useS3();
         $user = $this->makeUser();
@@ -49,12 +49,12 @@ class MediaApiTest extends TestCase
             'thumbnail_url' => 'thumbnails/1/cover.jpg',
             'sound_preview_url' => 'sounds/1/audio.mp3',
         ]);
-        $this->assertDatabaseHas('users', ['id' => $user->id, 'avatar' => 'https://cdn.example.com/avatars/1/avatar.png']);
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'avatar' => 's3:avatars/1/avatar.png']);
         $this->assertDatabaseHas('videos', [
             'id' => $video->id,
-            'storage_path' => 'https://cdn.example.com/videos/1/cloud.mp4',
-            'thumbnail_url' => 'https://cdn.example.com/thumbnails/1/cover.jpg',
-            'sound_preview_url' => 'https://cdn.example.com/sounds/1/audio.mp3',
+            'storage_path' => 's3:videos/1/cloud.mp4',
+            'thumbnail_url' => 's3:thumbnails/1/cover.jpg',
+            'sound_preview_url' => 's3:sounds/1/audio.mp3',
         ]);
 
         $this->app->mergeConfig(['storage' => ['default' => 'public']]);

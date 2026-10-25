@@ -27,12 +27,13 @@ class DeleteUnusedMedia implements JobInterface
                     continue;
                 }
 
-                $referenced = Video::where('storage_path', $value)
-                    ->orWhere('thumbnail_url', $value)
-                    ->orWhere('sound_preview_url', $value)
+                $values = StorageService::referenceValues($value);
+                $referenced = Video::whereIn('storage_path', $values)
+                    ->orWhereIn('thumbnail_url', $values)
+                    ->orWhereIn('sound_preview_url', $values)
                     ->exists();
 
-                if ($referenced || Audio::where('storage_path', $value)->exists()) {
+                if ($referenced || Audio::whereIn('storage_path', $values)->exists()) {
                     continue;
                 }
 

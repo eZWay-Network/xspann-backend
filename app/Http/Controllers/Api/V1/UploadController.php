@@ -35,6 +35,7 @@ class UploadController extends Controller
                 $uploadUrl = $disk->temporaryUploadUrl($path, 900, $contentType, $acl);
 
                 PendingUploads::track($request->user('id'), $path);
+                $reference = StorageService::storedValue($path);
 
                 $headers = ['Content-Type' => $contentType];
 
@@ -45,8 +46,8 @@ class UploadController extends Controller
                 return json([
                     'data' => [
                         'upload_method' => 'signed_url',
-                        'storage_path' => $path,
-                        'video_url' => StorageService::publicUrl($disk->url($path)),
+                        'storage_path' => $reference,
+                        'video_url' => StorageService::publicUrl($reference),
                         'upload_url' => $uploadUrl,
                         'headers' => $headers,
                     ],
@@ -89,12 +90,13 @@ class UploadController extends Controller
         $data = $request->validate(ChunkUploads::rules());
 
         $path = $chunks->complete($request->user('id'), $data->toArray());
+        $reference = StorageService::storedValue($path);
 
         return json([
             'data' => [
                 'upload_method' => 'chunked',
-                'storage_path' => $path,
-                'video_url' => StorageService::publicUrl(StorageService::storedValue($path)),
+                'storage_path' => $reference,
+                'video_url' => StorageService::publicUrl($reference),
             ],
         ], 201);
     }
@@ -102,12 +104,13 @@ class UploadController extends Controller
     private function upload(Request $request, string $kind, string $urlKey): Response
     {
         $path = StorageService::storeFile($request->user('id'), $request->file('file'), $kind);
+        $reference = StorageService::storedValue($path);
 
         return json([
             'data' => [
                 'upload_method' => 'multipart',
-                'storage_path' => $path,
-                $urlKey => StorageService::publicUrl(StorageService::storedValue($path)),
+                'storage_path' => $reference,
+                $urlKey => StorageService::publicUrl($reference),
             ],
         ], 201);
     }

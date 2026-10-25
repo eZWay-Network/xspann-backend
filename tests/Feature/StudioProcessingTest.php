@@ -89,7 +89,7 @@ class StudioProcessingTest extends TestCase
             'audio_mode' => 'replace',
             'audio_settings' => ['rendered' => true, 'original_volume' => 0, 'sound_volume' => 0],
         ]);
-        $source = storage('public')->path($video->storage_path);
+        $source = storage('public')->path($this->mediaKey($video->storage_path));
         File::ensureDirectoryExists(dirname($source));
         Process::run([
             $tools['ffmpeg'],
@@ -119,7 +119,7 @@ class StudioProcessingTest extends TestCase
             '-v',
             'error',
             '-i',
-            storage('public')->path($result['storage_path']),
+            storage('public')->path($this->mediaKey($result['storage_path'])),
             '-t',
             '0.5',
             '-vn',
@@ -158,7 +158,7 @@ class StudioProcessingTest extends TestCase
             'crop_mode' => 'fill',
             'filter_settings' => ['saturation' => 0, 'contrast' => 100, 'brightness' => 100],
         ]);
-        $source = storage('public')->path($video->storage_path);
+        $source = storage('public')->path($this->mediaKey($video->storage_path));
         File::ensureDirectoryExists(dirname($source));
         Process::run([
             $tools['ffmpeg'],
@@ -179,7 +179,7 @@ class StudioProcessingTest extends TestCase
             $source,
         ])->throw();
         $result = app(MediaProcessor::class)->video($video);
-        $output = storage('public')->path($result['storage_path']);
+        $output = storage('public')->path($this->mediaKey($result['storage_path']));
         $probe = json_decode(Process::run([
             $tools['ffprobe'],
             '-v',
@@ -229,7 +229,7 @@ class StudioProcessingTest extends TestCase
             'status' => 'ready',
             'duration' => 2,
         ]);
-        $sound = storage('public')->path($track->storage_path);
+        $sound = storage('public')->path($this->mediaKey($track->storage_path));
         File::ensureDirectoryExists(dirname($sound));
         Process::run([
             $tools['ffmpeg'],
@@ -254,7 +254,7 @@ class StudioProcessingTest extends TestCase
             'trim_start' => 0.2,
             'trim_end' => 2.7,
         ]);
-        $source = storage('public')->path($video->storage_path);
+        $source = storage('public')->path($this->mediaKey($video->storage_path));
         File::ensureDirectoryExists(dirname($source));
         Process::run([
             $tools['ffmpeg'],
@@ -271,7 +271,7 @@ class StudioProcessingTest extends TestCase
             $source,
         ])->throw();
         $result = app(MediaProcessor::class)->video($video);
-        $output = storage('public')->path($result['storage_path']);
+        $output = storage('public')->path($this->mediaKey($result['storage_path']));
         $pcmPath = $this->storagePath . '/samples.pcm';
         Process::run([
             $tools['ffmpeg'],

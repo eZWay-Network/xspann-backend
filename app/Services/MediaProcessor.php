@@ -231,8 +231,9 @@ class MediaProcessor
         if ($size < 1 || $size > $maxBytes) {
             throw new \RuntimeException('Media exceeds the supported size range.');
         }
-        $source = $location['disk'] === 'public' ? $disk->path($location['key']) : $this->temporary($temporary);
-        if ($location['disk'] !== 'public') {
+        $local = config('storage.disks.' . $location['disk'] . '.driver') === 'local';
+        $source = $local ? $disk->path($location['key']) : $this->temporary($temporary);
+        if (!$local) {
             $disk->downloadFile($location['key'], $source);
         }
         $allowed = str_starts_with($location['key'], 'videos/') ? ChunkUploads::MIME_TYPES : self::AUDIO_MIME_TYPES;

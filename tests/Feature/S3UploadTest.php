@@ -35,7 +35,7 @@ class S3UploadTest extends TestCase
             ->assertOk()->assertJsonPath('data.upload_method', 'signed_url');
         $data = $response->json('data');
         $this->assertSame('example.s3.us-east-1.amazonaws.com', parse_url($data['upload_url'], PHP_URL_HOST));
-        $this->assertSame('https://cdn.example.com/' . $data['storage_path'], $data['video_url']);
+        $this->assertSame('https://cdn.example.com/' . $this->mediaKey($data['storage_path']), $data['video_url']);
         $this->assertSame(['Content-Type' => 'video/mp4'], $data['headers']);
         parse_str(parse_url($data['upload_url'], PHP_URL_QUERY), $query);
         $this->assertSame('900', $query['X-Amz-Expires']);
@@ -43,7 +43,7 @@ class S3UploadTest extends TestCase
 
         $this->useS3(['endpoint' => 'http://127.0.0.1:9000', 'use_path_style_endpoint' => true, 'token' => 'temporary-token', 'acl' => 'public-read']);
         $data = $this->postJson('/api/v1/uploads/videos/signed-url', ['filename' => 'clip.webm', 'content_type' => 'video/webm'])->assertOk()->json('data');
-        $this->assertSame('/example/' . $data['storage_path'], parse_url($data['upload_url'], PHP_URL_PATH));
+        $this->assertSame('/example/' . $this->mediaKey($data['storage_path']), parse_url($data['upload_url'], PHP_URL_PATH));
         $this->assertSame(['Content-Type' => 'video/webm', 'x-amz-acl' => 'public-read'], $data['headers']);
         parse_str(parse_url($data['upload_url'], PHP_URL_QUERY), $query);
         $this->assertSame('temporary-token', $query['X-Amz-Security-Token']);
@@ -61,25 +61,25 @@ class S3UploadTest extends TestCase
             $upload = $this->postJson('/api/v1/uploads/videos/signed-url', ['filename' => 'clip.mp4', 'content_type' => 'video/mp4'])->assertOk()->json('data');
             $bytes = pack('N', 24) . 'ftypmp42' . pack('N', 0) . 'mp42isom' . str_repeat("\0", 128);
             $server->request('PUT', substr($upload['upload_url'], strlen($server->url)), $bytes, $upload['headers'])->assertOk();
-            $this->assertSame($bytes, file_get_contents($this->storagePath . '/' . $upload['storage_path']));
+            $this->assertSame($bytes, file_get_contents($this->storagePath . '/' . $this->mediaKey($upload['storage_path'])));
             $id = $this->postJson('/api/v1/videos', ['storage_path' => $upload['storage_path']])->assertStatus(201)->json('data.id');
             app(Queue::class)->work(once: true, timeout: 5, sleep: 0);
             $video = Video::find($id);
             $this->assertSame('published', $video->status);
-            $this->assertTrue(str_starts_with($video->storage_path, 'https://cdn.example.com/videos/1/'));
+            $this->assertTrue(str_starts_with($video->storage_path, 's3:videos/1/'));
             $this->assertFalse($upload['video_url'] === $video->storage_path);
-            $this->assertFalse(storage('s3')->exists($upload['storage_path']));
+            $this->assertFalse(storage('s3')->exists($this->mediaKey($upload['storage_path'])));
             $this->assertTrue(storage('s3')->exists(\App\Services\StorageService::location($video->storage_path)['key']));
             $this->assertSame(13, $video->duration);
-            $this->assertTrue(str_starts_with($video->thumbnail_url, 'https://cdn.example.com/thumbnails/1/'));
-            $this->assertSame('fixture-thumbnail', file_get_contents($this->storagePath . '/' . substr($video->thumbnail_url, strlen('https://cdn.example.com/'))));
+            $this->assertTrue(str_starts_with($video->thumbnail_url, 's3:thumbnails/1/'));
+            $this->assertSame('fixture-thumbnail', file_get_contents($this->storagePath . '/' . $this->mediaKey($video->thumbnail_url)));
             $this->getJson('/api/v1/feed')->assertOk()
-                ->assertJsonPath('data.0.video_url', $video->storage_path)
-                ->assertJsonPath('data.0.thumbnail_url', $video->thumbnail_url)
-                ->assertJsonPath('data.0.user.cover_url', $video->thumbnail_url);
+                ->assertJsonPath('data.0.video_url', \App\Services\StorageService::publicUrl($video->storage_path))
+                ->assertJsonPath('data.0.thumbnail_url', \App\Services\StorageService::publicUrl($video->thumbnail_url))
+                ->assertJsonPath('data.0.user.cover_url', \App\Services\StorageService::publicUrl($video->thumbnail_url));
             $this->assertSame([], glob($this->storagePath . '/temp/video-processing/*'));
             $requests = file_get_contents($this->storagePath . '/requests.log');
-            $this->assertTrue(str_contains($requests, 'GET ' . $upload['storage_path']));
+            $this->assertTrue(str_contains($requests, 'GET ' . $this->mediaKey($upload['storage_path'])));
 
             $video->storage_path = 'https://unrelated.example.com/video.mp4';
             $this->assertSame([], (new VideoMetadataExtractor())->extract($video));

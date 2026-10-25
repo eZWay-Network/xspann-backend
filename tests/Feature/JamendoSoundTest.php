@@ -188,7 +188,7 @@ class JamendoSoundTest extends TestCase
             (new ProcessVideo($video->id))->handle();
             $this->assertSame('published', $video->refresh()->status);
             $this->assertSame(null, $video->audio_id);
-            $probe = json_decode(Process::run([$tools['ffprobe'], '-v', 'error', '-show_streams', '-of', 'json', storage('public')->path($video->storage_path)])->throw()->output(), true);
+            $probe = json_decode(Process::run([$tools['ffprobe'], '-v', 'error', '-show_streams', '-of', 'json', storage('public')->path($this->mediaKey($video->storage_path))])->throw()->output(), true);
             $this->assertTrue(in_array('audio', array_column($probe['streams'], 'codec_type'), true));
         }
         $this->assertSame(0, Audio::count());

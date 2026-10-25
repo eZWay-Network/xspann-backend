@@ -221,8 +221,10 @@ Content-Type: application/json</pre>
                 </li>
             </ol>
             <div class="callout"><strong>Media URLs may expire.</strong> Private storage can return temporary playback
-                URLs. Fetch the API resource again to refresh them. Keep storage_path from the upload response for post
-                creation. Avatar and sound uploads return URLs to use in the corresponding profile or video fields.
+                URLs. Fetch the API resource again to refresh them. Pass the upload's <code>storage_path</code>
+                unchanged when creating a video or audio entry. It includes the disk, for example
+                <code>public:videos/1/clip.mp4</code> or <code>s3:videos/1/clip.mp4</code>.
+                Avatar and sound uploads also return URLs to use in the corresponding profile or video fields.
             </div>
         </section>
         <div class="reference-heading">
