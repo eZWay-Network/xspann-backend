@@ -7,7 +7,7 @@ use App\Http\Requests\Auth\{LoginRequest, RegisterRequest, ProfileUpdateRequest}
 use App\Models\User;
 use App\Http\Resources\ProfileResource;
 use App\Services\AccountNotifications;
-use App\Services\{PendingUploads, StorageService};
+use App\Services\{MediaProcessor, PendingUploads, StorageService};
 use App\Services\Social\GoogleAuth;
 use Spark\Carbon;
 use Spark\Facades\Auth;
@@ -73,11 +73,19 @@ class AuthController extends Controller
 
     public function update(ProfileUpdateRequest $request): JsonResource
     {
-        PendingUploads::locked($request->user('id'), function () use ($request): void {
+        $oldAvatar = PendingUploads::locked($request->user('id'), function () use ($request): ?string {
             StorageService::validateOwner($request->validated('avatar'), $request->user('id'), 'avatar', 'avatars');
 
-            $request->user()->update($request->validated());
+            $user = $request->user()->refresh();
+            $oldAvatar = $user->getOriginal('avatar');
+            $user->update($request->validated());
+
+            return $request->validated()->has('avatar') && $oldAvatar !== $user->avatar ? $oldAvatar : null;
         });
+
+        if ($oldAvatar) {
+            MediaProcessor::cleanup($request->user('id'), [$oldAvatar]);
+        }
 
         return ProfileResource::make(User::withApiData($request->user(), true)->findOrFail($request->user('id')));
     }

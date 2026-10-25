@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\{Audio, Video};
+use App\Models\{Audio, User, Video};
 use App\Services\{PendingUploads, StorageService};
 use Spark\Queue\Contracts\JobInterface;
 use Spark\Queue\Dispatchable;
@@ -23,7 +23,7 @@ class DeleteUnusedMedia implements JobInterface
         PendingUploads::locked($this->userId, function (): void {
             foreach (array_unique(array_filter($this->paths)) as $value) {
                 $location = StorageService::location($value);
-                if (!$location || !preg_match("~^(videos|thumbnails|sounds)/{$this->userId}/[^/]+$~D", $location['key'])) {
+                if (!$location || !preg_match("~^(videos|thumbnails|sounds|avatars)/{$this->userId}/[^/]+$~D", $location['key'])) {
                     continue;
                 }
 
@@ -33,7 +33,7 @@ class DeleteUnusedMedia implements JobInterface
                     ->orWhereIn('sound_preview_url', $values)
                     ->exists();
 
-                if ($referenced || Audio::whereIn('storage_path', $values)->exists()) {
+                if ($referenced || Audio::whereIn('storage_path', $values)->exists() || User::whereIn('avatar', $values)->exists()) {
                     continue;
                 }
 
