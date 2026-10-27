@@ -10,6 +10,35 @@ use Tests\TestCase;
 
 class QueueTest extends TestCase
 {
+    public function testNamedFileQueueProcessesJobsWithoutUsingTheDatabaseQueue(): void
+    {
+        ProcessVideo::dispatch(98765)->onConnection('file')->onQueue('media')->send();
+        $queue = \Spark\Facades\Queue::connection('file');
+
+        $this->assertCount(1, $queue->getJobs(queue: 'media'));
+        $this->assertDatabaseCount('jobs', 0);
+
+        $queue->work(once: true, timeout: 5, sleep: 0, queue: 'media');
+
+        $this->assertSame([], $queue->getJobs());
+        $this->assertSame([], $queue->getFailedJobs());
+    }
+
+    public function testRecurringJobsRegisterOnceWhenTheQueueIsResolvedAgain(): void
+    {
+        $jobs = [
+            job(\App\Jobs\PruneUploads::class)->repeatDaily(),
+            job([\App\Services\VideoRetry::class, 'retry'])->repeatHourly(),
+        ];
+
+        $this->app->withQueue($jobs);
+        \Spark\Facades\Queue::connection();
+        \Spark\Facades\Queue::purge();
+        \Spark\Facades\Queue::connection();
+
+        $this->assertDatabaseCount('jobs', 2);
+    }
+
     public function testJobsForMissingRecordsCompleteWithoutRetrying(): void
     {
         ProcessVideo::dispatch(98765)->send();

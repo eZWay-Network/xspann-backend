@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Spark\Facades\Lock;
+use Spark\Facades\Cache;
 use Spark\Utils\File;
 use Spark\Foundation\Exceptions\ValidationException;
 use function in_array;
@@ -188,6 +188,9 @@ class ChunkUploads
             throw new \InvalidArgumentException('Invalid upload ID.');
         }
 
-        return Lock::withLock("uploads.$userId.$uploadId", fn() => $callback(temp_dir("upload-chunks/$userId/$uploadId")), timeout: 600, waitTimeout: 10);
+        return Cache::lock("uploads.$userId.$uploadId", 600)->block(
+            10,
+            fn() => $callback(temp_dir("upload-chunks/$userId/$uploadId"))
+        );
     }
 }

@@ -230,7 +230,7 @@ class GoogleAuthTest extends TestCase
 
     public function testRefreshesRotatedKeysAndLimitsUnknownKeyRefreshes(): void
     {
-        Cache::store('google.certificates', ['old-key' => openssl_pkey_get_details($this->privateKey)['key']], '+1 hour');
+        Cache::put('google.certificates', ['old-key' => openssl_pkey_get_details($this->privateKey)['key']], '+1 hour');
         $this->postJson('/api/v1/auth/social/google', ['token' => $this->tokenFor()])->assertOk();
         $this->assertSame(1, $this->http->calls);
         $this->postJson('/api/v1/auth/social/google', ['token' => $this->tokenFor(keyId: 'unknown')])->assertStatus(401);

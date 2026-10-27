@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\{Audio, Video};
 use App\Services\{MediaProcessor, PendingUploads};
-use Spark\Facades\{DB, Lock};
+use Spark\Facades\{DB, Cache};
 use Spark\Queue\Contracts\JobInterface;
 use Spark\Queue\Dispatchable;
 use Throwable;
@@ -21,7 +21,7 @@ class ProcessVideo implements JobInterface
 
     public function handle(): void
     {
-        Lock::withLock("videos.process.$this->videoId", function (): void {
+        Cache::lock("videos.process.$this->videoId", 3600)->block(5, function (): void {
             $video = Video::find($this->videoId);
             if (!$video || $video->status !== Video::STATUS_PROCESSING) {
                 return;
@@ -79,7 +79,7 @@ class ProcessVideo implements JobInterface
             }
 
             MediaProcessor::cleanup($video->user_id, [$video->storage_path, ...$paths]);
-        }, timeout: 3600, waitTimeout: 5);
+        });
     }
 
     public function failed(Throwable $exception): void

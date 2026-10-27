@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Audio;
 use App\Services\MediaProcessor;
-use Spark\Facades\Lock;
+use Spark\Facades\Cache;
 use Spark\Queue\Contracts\JobInterface;
 use Spark\Queue\Dispatchable;
 use Throwable;
@@ -21,7 +21,7 @@ class ProcessAudio implements JobInterface
 
     public function handle(): void
     {
-        Lock::withLock("audios.process.$this->audioId", function (): void {
+        Cache::lock("audios.process.$this->audioId", 3600)->block(5, function (): void {
             $audio = Audio::find($this->audioId);
             if (!$audio || $audio->status !== 'processing') {
                 return;
@@ -38,7 +38,7 @@ class ProcessAudio implements JobInterface
             }
 
             MediaProcessor::cleanup($audio->user_id, [$updated ? $audio->storage_path : $media['storage_path']]);
-        }, timeout: 3600, waitTimeout: 5);
+        });
     }
 
     public function failed(Throwable $exception): void

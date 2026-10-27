@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\{Audio, User, Video};
-use Spark\Facades\{DB, Lock};
+use Spark\Facades\{DB, Cache};
 
 class PendingUploads
 {
@@ -25,7 +25,7 @@ class PendingUploads
 
     public static function locked(int $userId, callable $callback): mixed
     {
-        return Lock::withLock("media.attach.$userId", $callback, timeout: 1800, waitTimeout: 10);
+        return Cache::lock("media.attach.$userId", 1800)->block(10, $callback);
     }
 
     public static function prune(int $cutoff): void

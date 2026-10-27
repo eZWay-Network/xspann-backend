@@ -4,7 +4,7 @@ namespace App\Services\Social;
 
 use App\Models\{AuthIdentity, User};
 use App\Services\StorageService;
-use Spark\Facades\{Cache, DB, Hash, Http, Lock};
+use Spark\Facades\{Cache, DB, Http};
 use Spark\Utils\JWT;
 use function array_key_exists;
 use function count;
@@ -21,8 +21,8 @@ class GoogleAuth
         $claims = $this->verify($token);
         $email = strtolower($claims['email']);
 
-        return Lock::withLock(
-            'accounts.google.' . hash('sha256', $email),
+        return Cache::lock('accounts.google.' . hash('sha256', $email), 10)->block(
+            5,
             fn() => DB::transaction(function () use ($claims, $email) {
                 $identity = AuthIdentity::where('provider', 'google')
                     ->where('provider_id', $claims['sub'])
@@ -97,9 +97,7 @@ class GoogleAuth
                 }
 
                 return $user;
-            }),
-            timeout: 10,
-            waitTimeout: 5
+            })
         );
     }
 
@@ -193,7 +191,7 @@ class GoogleAuth
 
         $ttl = min(86400, (int) ($matches[1] ?? 300) - max(0, (int) $response->header('Age', 0)));
         if ($ttl > 0) {
-            Cache::store('google.certificates', $certificates, "+$ttl seconds");
+            Cache::put('google.certificates', $certificates, "+$ttl seconds");
         }
 
         return $certificates;

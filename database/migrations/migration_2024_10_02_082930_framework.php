@@ -13,7 +13,7 @@ return new class {
         });
 
         Schema::create('caches', function (Blueprint $table) {
-            $table->string('key')->primary();
+            $table->string('key');
             $table->string('group')->nullable()->index();
             $table->longText('data');
             $table->bigInteger('expiration')->default(0)->index();
@@ -21,7 +21,7 @@ return new class {
         });
 
         Schema::create('locks', function (Blueprint $table) {
-            $table->string('key')->primary()->unique();
+            $table->string('key')->primary();
             $table->string('owner')->index();
             $table->bigInteger('expiration')->index();
         });

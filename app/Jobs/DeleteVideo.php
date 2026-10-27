@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\{Audio, Video};
 use App\Services\{PendingUploads, StorageService};
-use Spark\Facades\Lock;
+use Spark\Facades\Cache;
 use Spark\Queue\Contracts\JobInterface;
 use Spark\Queue\Dispatchable;
 
@@ -21,7 +21,7 @@ class DeleteVideo implements JobInterface
 
     public function handle(): void
     {
-        Lock::withLock("videos.process.$this->videoId", function () {
+        Cache::lock("videos.process.$this->videoId", 3600)->block(5, function () {
             $video = Video::find($this->videoId);
             if (!$video || $video->status !== Video::STATUS_DELETED) {
                 return;
@@ -72,6 +72,6 @@ class DeleteVideo implements JobInterface
                 // Foreign keys cascade to comments, reactions and video social records.
                 $video->delete();
             });
-        }, timeout: 3600, waitTimeout: 5);
+        });
     }
 }

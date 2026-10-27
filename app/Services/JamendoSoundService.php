@@ -124,7 +124,7 @@ class JamendoSoundService
         $result = $payload['results'];
 
         if (!empty($result)) {
-            Cache::store($key, $result, '2 minutes');
+            Cache::put($key, $result, '2 minutes');
         }
 
         return $result;

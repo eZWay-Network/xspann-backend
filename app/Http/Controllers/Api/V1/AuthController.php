@@ -11,9 +11,9 @@ use App\Services\{MediaProcessor, PendingUploads, StorageService};
 use App\Services\Social\GoogleAuth;
 use Spark\Carbon;
 use Spark\Facades\Auth;
+use Spark\Facades\Cache;
 use Spark\Facades\DB;
 use Spark\Facades\Hash;
-use Spark\Facades\Lock;
 use Spark\Foundation\Exceptions\ValidationException;
 use Spark\Http\{Request, Resources\JsonResource, Response};
 
@@ -110,7 +110,7 @@ class AuthController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        Lock::withLock('accounts.reset.' . hash('sha256', $input->email()), function () use ($input) {
+        Cache::lock('accounts.reset.' . hash('sha256', $input->email()), 10)->block(5, function () use ($input) {
             DB::transaction(function () use ($input) {
                 $reset = query('password_reset_tokens')
                     ->where('email', $input->email())
@@ -129,7 +129,7 @@ class AuthController extends Controller
                 query('jwt_access_tokens')->where('user_id', $user->id)->delete();
                 query('password_reset_tokens')->where('email', $user->email)->delete();
             });
-        }, timeout: 10, waitTimeout: 5);
+        });
 
         return json(['data' => ['message' => 'Password reset successfully. Please log in again.']]);
     }

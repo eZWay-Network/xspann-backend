@@ -6,7 +6,7 @@ use App\Jobs\SendAccountEmail;
 use App\Models\User;
 use Spark\Carbon;
 use Spark\Http\Request;
-use Spark\Facades\{Hash, Lock};
+use Spark\Facades\{Hash, Cache};
 use function is_scalar;
 use function is_string;
 
@@ -16,7 +16,7 @@ class AccountNotifications
     {
         $key = 'accounts.reset.' . hash('sha256', $user->email);
 
-        Lock::withLock($key, function () use ($user) {
+        Cache::lock($key, 10)->block(5, function () use ($user) {
             $existing = query('password_reset_tokens')
                 ->where('email', $user->email)
                 ->first();
@@ -42,7 +42,7 @@ class AccountNotifications
                 . "<br/><br/>If you did not request a password reset, please ignore this email.";
 
             SendAccountEmail::dispatch($user->id, 'Reset your password', $body);
-        }, timeout: 10, waitTimeout: 5);
+        });
     }
 
     public function verificationUrl(User $user, ?int $expires = null): string
