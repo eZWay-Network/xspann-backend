@@ -14,7 +14,7 @@ return new class {
 
         Schema::create('caches', function (Blueprint $table) {
             $table->string('key');
-            $table->string('group')->nullable()->index();
+            $table->string('group');
             $table->longText('data');
             $table->bigInteger('expiration')->default(0)->index();
             $table->unique(['key', 'group']);
