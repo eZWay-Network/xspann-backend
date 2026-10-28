@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\AccountNotifications;
+use Spark\Facades\Queue;
 use Tests\TestCase;
 
 class AuthApiTest extends TestCase
@@ -15,7 +16,7 @@ class AuthApiTest extends TestCase
         $this->assertTrue(password_verify('password123', User::find(1)->password));
         $this->assertSame(null, $response->json('data.token'));
         $this->assertDatabaseCount('jwt_access_tokens', 0);
-        $this->assertSame(1, (int) app(\Spark\Queue\Queue::class)->getConnection()->query('SELECT COUNT(*) FROM jobs')->fetchColumn());
+        $this->assertCount(1, Queue::getJobs());
         $this->postJson('/api/v1/auth/login', ['email' => 'alice@example.com', 'password' => 'password123'])->assertStatus(403);
         $this->getJson((new AccountNotifications())->verificationUrl(User::find(1)))->assertOk();
         $login = $this->postJson('/api/v1/auth/login', ['email' => 'alice@example.com', 'password' => 'password123'])->assertOk();
@@ -146,12 +147,12 @@ class AuthApiTest extends TestCase
         $user = $this->makeUser();
         $user->update(['email_verified_at' => null]);
         $this->postJson('/api/v1/auth/email/verification-notification', ['email' => $user->email])->assertOk();
-        $this->assertSame(1, (int) app(\Spark\Queue\Queue::class)->getConnection()->query("SELECT COUNT(*) FROM jobs WHERE queue = 'default'")->fetchColumn());
+        $this->assertCount(1, Queue::getJobs(queue: 'default'));
         $user->update(['email_verified_at' => now()]);
         $verified = $this->postJson('/api/v1/auth/email/verification-notification', ['email' => $user->email])->assertOk();
         $unknown = $this->postJson('/api/v1/auth/email/verification-notification', ['email' => 'unknown@example.com'])->assertOk();
         $this->assertSame($verified->json(), $unknown->json());
-        $this->assertSame(1, (int) app(\Spark\Queue\Queue::class)->getConnection()->query('SELECT COUNT(*) FROM jobs')->fetchColumn());
+        $this->assertCount(1, Queue::getJobs());
     }
 
     public function testExpiredPasswordResetIsRejected(): void

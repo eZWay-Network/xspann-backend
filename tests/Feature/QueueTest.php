@@ -74,7 +74,8 @@ class QueueTest extends TestCase
         $this->assertDatabaseHas('videos', ['id' => $video->id, 'status' => 'published', 'duration' => 12, 'thumbnail_url' => 'https://cdn.example.com/cover.jpg']);
         (new ProcessVideo((int) $video->id))->handle();
         $this->assertSame(1, $extractor->calls);
-        $this->assertSame(0, (int) app(Queue::class)->getConnection()->query('SELECT COUNT(*) FROM jobs')->fetchColumn());
+        $this->assertSame([], app(Queue::class)->getJobs());
+        $this->assertSame([], app(Queue::class)->getFailedJobs());
     }
 
     public function testWorkerMarksUnexpectedProcessingFailureFailed(): void
@@ -90,7 +91,13 @@ class QueueTest extends TestCase
         $queue = app(Queue::class);
         $queue->work(once: true, timeout: 5, sleep: 0, queue: 'default');
         $this->assertSame('failed', $video->refresh()->status);
-        $this->assertSame('failed', $queue->getConnection()->query('SELECT status FROM jobs')->fetchColumn());
+        $this->assertCount(1, $queue->getJobs(status: 'failed'));
+        $failedJobs = $queue->getFailedJobs();
+        $this->assertCount(1, $failedJobs);
+        $this->assertTrue($failedJobs[0]->isFailed());
+        $this->assertSame(ProcessVideo::class, $failedJobs[0]->getCallback());
+        $this->assertSame([(int) $video->id], $failedJobs[0]->getParameters());
+        $this->assertTrue(str_contains($failedJobs[0]->getReasonFailed(), 'Decoder unavailable'));
     }
 
     public function testMissingLocalUploadCannotPublish(): void
@@ -222,6 +229,22 @@ class QueueTest extends TestCase
         $this->assertTrue($retry->retry());
         $this->assertSame('processing', $other->refresh()->status);
         $this->assertDatabaseCount('jobs', 2);
+    }
+
+    public function testInterruptedProcessingVideoCanBeExplicitlyRetried(): void
+    {
+        $user = $this->makeUser();
+        $video = $this->makeVideo($user, ['status' => Video::STATUS_PROCESSING]);
+        $other = $this->makeVideo($user, ['status' => Video::STATUS_FAILED]);
+
+        $this->assertTrue(\App\Services\VideoRetry::retry((int) $video->id));
+
+        $jobs = app(Queue::class)->getJobs(queue: 'default');
+        $this->assertCount(1, $jobs);
+        $this->assertSame(ProcessVideo::class, $jobs[0]->getCallback());
+        $this->assertSame([(int) $video->id], $jobs[0]->getParameters());
+        $this->assertSame(Video::STATUS_PROCESSING, $video->refresh()->status);
+        $this->assertSame(Video::STATUS_FAILED, $other->refresh()->status);
     }
 
     public function testRetryCommandHonorsTheVideoIdAndRejectsInvalidIds(): void

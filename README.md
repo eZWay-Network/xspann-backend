@@ -1,6 +1,6 @@
 # Xspann API
 
-A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses TinyCore 4.1.0.
+A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses TinyCore 4.2.9.
 
 Requires PHP 8.2+. Enable PDO and your database driver, `pdo_sqlite` for the default cache/queue/locks, `fileinfo`, `mbstring`, `openssl`, and `curl`. Install FFmpeg with libx264/AAC encoding and FFprobe for video compression, audio extraction, and cover generation. GD is used by the avatar upload test fixture.
 
@@ -79,8 +79,8 @@ Deployment: run `php spark migrate` to apply `migration_2026_10_08_090000_feed_i
 | `FILESYSTEM_DISK` | `public` for locally served media; `s3` for AWS or compatible object storage. The `local` disk is private and is not a public-media destination. |
 | `VIDEO_UPLOAD_MODE` | `signed` allows direct browser uploads on S3 disks. Default `local` sends uploads through the backend to `FILESYSTEM_DISK`. |
 | `FFMPEG_BINARY`, `FFPROBE_BINARY` | Executable names or absolute paths. |
-| `CACHE_DRIVER`, `QUEUE_DRIVER` | `sqlite` by default; use `redis` with the `REDIS_*` settings when appropriate. |
-| `MAIL_SMTP`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_ENCRYPTION` | Native mailer transport. Set `MAIL_SMTP=true` for SMTP. |
+| `CACHE_STORE`, `QUEUE_CONNECTION` | `database` by default, using the application database; `file` and `redis` are also configured. Redis uses the `REDIS_*` settings. |
+| `MAIL_TRANSPORT`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_ENCRYPTION` | Native mailer transport. Set `MAIL_TRANSPORT=smtp` for SMTP (the default). |
 | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | Sender identity. |
 
 CORS origins and allowed headers are in `config/cors.php`. The existing frontend uses bearer headers, not cookie authentication. Add any additional deployed frontend origins there.
@@ -385,7 +385,7 @@ php spark videos:retry --id=123
 
 The video retry command changes a failed/processing video to `processing` and dispatches it again. Use `--id=123` to retry only that video; omit `--id` to retry all failed or processing videos. Invalid IDs are rejected, and published/deleted videos are skipped. Do not use a generic failed-job retry for a video still marked `failed`, since the job intentionally skips videos outside `processing`.
 
-Deploy with `public/` as the web root. Keep `storage/`, the queue database, cache/lock directories, and the application database writable by the appropriate workers. SQLite queues/locks require a shared local filesystem; use Redis for coordination across hosts. Local uploads and chunk staging also require shared storage or consistent routing. Completed chunk sessions and processing temporary files are cleaned up; configure retention for abandoned upload sessions in `storage/temp/upload-chunks`.
+Deploy with `public/` as the web root. Keep `storage/`, cache/lock directories, and the application database writable by the appropriate workers. The default database queue uses the `jobs` and `failed_jobs` tables; database cache/locks use `caches` and `locks`. SQLite and file drivers require a shared local filesystem; use Redis or a shared server database for coordination across hosts. Local uploads and chunk staging also require shared storage or consistent routing. Completed chunk sessions and processing temporary files are cleaned up; configure retention for abandoned upload sessions in `storage/temp/upload-chunks`.
 
 Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough for the final transfer. Align PHP `upload_max_filesize`/`post_max_size` and the web server body limit with the upload endpoints you expose. Chunk completion retains its parts after a storage error so it can be retried; a lost successful response requires a fresh upload session. Keep disk configuration consistent between HTTP and queue workers and restart workers after changing it.
 
@@ -398,11 +398,11 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
 | `app/Http/Resources` | Native Spark JsonResource classes for users, profiles, videos, comments, and notifications. |
-| `app/Services/VideoStorage.php` | Native storage and media URL handling. |
+| `app/Services/StorageService.php` | Native storage and media URL handling. |
 | `app/Services/ChunkUploads.php` | Chunk manifests, locking, assembly, and cleanup. |
 | `app/Jobs` | Durable video processing, deletion, and email delivery. |
 | `app/Http/Controllers/DocsController.php`, `resources/views/docs.blade.php` | Registered-route metadata and the Blade API reference. |
-| `FRAMEWORK.md` | TinyMVC development reference; verify behavior against installed TinyCore. |
+| `.agents/skills/tinymvc-spark/SKILL.md` | Entry point for the installed TinyCore development guidance. |
 
 List queries use native eager loading, `withCount`, `withExists`, `withSum`, and subqueries for author covers and viewer state. Resources do not query the database. Query-count tests compare one-item and twelve-item pages across feeds, comments, replies, followers, profiles, and saved/liked/own posts. Music catalog lookup remains in the frontend, as before.
 

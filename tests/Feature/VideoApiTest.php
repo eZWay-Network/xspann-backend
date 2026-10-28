@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\{Video, Follow};
+use App\Jobs\ProcessVideo;
+use Spark\Facades\Queue;
 use Tests\TestCase;
 
 class VideoApiTest extends TestCase
@@ -53,8 +55,10 @@ class VideoApiTest extends TestCase
         $response = $this->postJson('/api/v1/videos', $data)->assertStatus(201)->assertJsonPath('data.status', 'processing')
             ->assertJsonPath('data.edit.trim_start', 1.5)->assertJsonPath('data.edit.effect_settings.arFace', 'Smile');
         $this->assertDatabaseHas('videos', ['id' => $response->json('data.id'), 'user_id' => $user->id, 'visibility' => 'followers']);
-        $queue = app(\Spark\Queue\Queue::class)->getConnection();
-        $this->assertSame(1, (int) $queue->query("SELECT COUNT(*) FROM jobs WHERE queue = 'default'")->fetchColumn());
+        $jobs = Queue::getJobs(queue: 'default');
+        $this->assertCount(1, $jobs);
+        $this->assertSame(ProcessVideo::class, $jobs[0]->getCallback());
+        $this->assertSame([$response->json('data.id')], $jobs[0]->getParameters());
     }
 
     public function testEditorValidationAndOwnership(): void

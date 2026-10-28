@@ -18,11 +18,12 @@ class VideoRetry
         foreach ($ids as $id) {
             // A worker may have published or deleted the video since it was selected.
             $updated = Video::whereKey($id)
-                ->where('status', Video::STATUS_FAILED)
+                ->whereIn('status', [Video::STATUS_FAILED, Video::STATUS_PROCESSING])
                 ->update(['status' => Video::STATUS_PROCESSING, 'updated_at' => now()]);
 
-            if ($updated === 0) {
-                continue; // The video was not updated, likely because it was already processed or deleted.
+            // MySQL can report zero changed rows for an already-processing video.
+            if ($updated === 0 && !Video::whereKey($id)->where('status', Video::STATUS_PROCESSING)->exists()) {
+                continue;
             }
 
             ProcessVideo::dispatch((int) $id);

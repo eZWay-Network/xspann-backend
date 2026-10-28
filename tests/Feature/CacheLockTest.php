@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\PendingUploads;
 use RuntimeException;
-use Spark\Facades\{Cache, Lock, Queue};
+use Spark\Facades\Cache;
 use Spark\Foundation\Application;
 use Tests\TestCase;
 
@@ -38,9 +38,9 @@ class CacheLockTest extends TestCase
 
             $this->assertThrows(RuntimeException::class, function (): void {
                 PendingUploads::locked(1, function (): void {
-                    $this->assertFalse(Lock::lock('media.attach.1', 30)->get());
+                    $this->assertFalse(Cache::lock('media.attach.1', 30)->get());
                     Cache::flush();
-                    $this->assertFalse(Lock::lock('media.attach.1', 30)->get());
+                    $this->assertFalse(Cache::lock('media.attach.1', 30)->get());
 
                     throw new RuntimeException('Attachment failed.');
                 });

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\{AuthIdentity, User};
 use Spark\Utils\JWT;
 use Spark\Facades\Cache;
+use Spark\Facades\Queue;
 use Spark\Http\Client\{Http, HttpResponse};
 use Spark\Http\Client\Contracts\HttpResponseContract;
 use Tests\TestCase;
@@ -77,7 +78,7 @@ class GoogleAuthTest extends TestCase
         $this->assertDatabaseCount('users', 1);
         $this->assertSame(1, $this->http->calls);
         $this->assertDatabaseCount('auth_identities', 1);
-        $this->assertSame(0, (int) app(\Spark\Queue\Queue::class)->getConnection()->query('SELECT COUNT(*) FROM jobs')->fetchColumn());
+        $this->assertSame([], Queue::getJobs());
     }
 
     public function testLinksAnExistingVerifiedAccountWithoutReplacingItsProfileOrPassword(): void
