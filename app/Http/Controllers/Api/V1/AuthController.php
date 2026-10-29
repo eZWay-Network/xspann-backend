@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\{LoginRequest, RegisterRequest, ProfileUpdateRequest};
 use App\Models\User;
-use App\Http\Resources\ProfileResource;
+use App\Http\Resources\AccountResource;
 use App\Services\AccountNotifications;
 use App\Services\{MediaProcessor, PendingUploads, StorageService};
 use App\Services\Social\GoogleAuth;
@@ -21,8 +21,11 @@ class AuthController extends Controller
 {
     public function register(RegisterRequest $request, AccountNotifications $notifications): Response
     {
+        \App\Services\PolicyEnrollment::validate($request->validated()->all());
+
         $user = DB::transaction(function () use ($request) {
             $user = User::create($request->validated());
+            \App\Services\PolicyEnrollment::complete($user, $request->validated()->all(), 'registration');
             StorageService::validateOwner($user->avatar, $user->id, 'avatar', 'avatars');
 
             return $user;
@@ -32,7 +35,7 @@ class AuthController extends Controller
 
         return json([
             'data' => [
-                'user' => ProfileResource::make(User::withApiData($user, true)->findOrFail($user->id)),
+                'user' => AccountResource::make(User::withApiData($user, true)->findOrFail($user->id)),
                 'token' => null,
                 'token_expires_at' => null,
                 'message' => 'We have sent you an email to verify your account. Please check your inbox or spam folder.',
@@ -50,7 +53,7 @@ class AuthController extends Controller
             ]);
         }
 
-        abort_unless($user->status === 'active', 403, 'This account is not active.');
+        abort_unless(in_array($user->status, ['active', 'suspended'], true), 403, 'This account is not active.');
 
         abort_unless($user->hasVerifiedEmail(), 403, 'Please verify your email address before logging in.');
 
@@ -66,14 +69,14 @@ class AuthController extends Controller
 
     public function me(): JsonResource
     {
-        return ProfileResource::make(
+        return AccountResource::make(
             User::with('authIdentities')->withApiData(Auth::user(), true)->findOrFail(Auth::id())
         );
     }
 
     public function update(ProfileUpdateRequest $request): JsonResource
     {
-        $oldAvatar = PendingUploads::locked($request->user('id'), function () use ($request): ?string {
+        $oldAvatar = PendingUploads::attach($request->user('id'), function () use ($request): ?string {
             StorageService::validateOwner($request->validated('avatar'), $request->user('id'), 'avatar', 'avatars');
 
             $user = $request->user()->refresh();
@@ -87,7 +90,7 @@ class AuthController extends Controller
             MediaProcessor::cleanup($request->user('id'), [$oldAvatar]);
         }
 
-        return ProfileResource::make(User::withApiData($request->user(), true)->findOrFail($request->user('id')));
+        return AccountResource::make(User::withApiData($request->user(), true)->findOrFail($request->user('id')));
     }
 
     public function forgotPassword(Request $request, AccountNotifications $notifications): Response
@@ -128,6 +131,8 @@ class AuthController extends Controller
 
                 query('jwt_access_tokens')->where('user_id', $user->id)->delete();
                 query('password_reset_tokens')->where('email', $user->email)->delete();
+                query('account_action_tokens')->where('user_id', $user->id)->delete();
+                query('staff_sessions')->where('user_id', $user->id)->delete();
             });
         });
 
@@ -149,6 +154,8 @@ class AuthController extends Controller
 
         DB::transaction(function () use ($request) {
             $request->user()->update(['password' => $request->validated('password'), 'remember_token' => null]);
+            query('account_action_tokens')->where('user_id', $request->user('id'))->delete();
+            query('staff_sessions')->where('user_id', $request->user('id'))->delete();
 
             query('jwt_access_tokens')
                 ->where('user_id', $request->user('id'))
@@ -212,12 +219,23 @@ class AuthController extends Controller
         return json(['data' => $this->payload($service->user($request->validated('token')))]);
     }
 
-    private function payload(User $user): array
+    public function payload(User $user): array
     {
+        if (!$user->onboarded_at) {
+            return [
+                'onboarding_required' => true,
+                'onboarding_token' => \App\Services\AccountSecurity::issue($user->id, 'onboarding', 600),
+                'token' => null,
+                'token_expires_at' => null,
+                'required_policies' => config('policies.documents'),
+            ];
+        }
+
         $expires = time() + max(1, config('app.api_token_expiration_minutes')) * 60;
 
         return [
-            'user' => ProfileResource::make(User::withApiData($user, true)->findOrFail($user->id)),
+            'user' => AccountResource::make(User::withApiData($user, true)->findOrFail($user->id)),
+            'restricted_access' => $user->status !== 'active',
             'token' => Auth::createToken($user, ['exp' => $expires]),
             'token_expires_at' => Carbon::parse($expires)
         ];

@@ -136,6 +136,17 @@ class ChunkUploads
         });
     }
 
+    public function deleteForUser(int $userId): void
+    {
+        foreach (glob(temp_dir("upload-chunks/$userId/*"), GLOB_ONLYDIR) ?: [] as $directory) {
+            $this->locked($userId, basename($directory), function (string $directory): void {
+                if (is_dir($directory) && !File::deleteDirectory($directory)) {
+                    throw new \RuntimeException('Cannot remove account upload chunks.');
+                }
+            });
+        }
+    }
+
     public function prune(int $cutoff): void
     {
         foreach (glob(temp_dir('upload-chunks/*/*'), GLOB_ONLYDIR) ?: [] as $directory) {

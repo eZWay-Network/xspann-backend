@@ -218,7 +218,7 @@
     const blob = new Blob(
       [
         JSON.stringify(
-          { title: "XSpann API reference", version: "v1", ...reference },
+          { title: "XPN Social API reference", version: "v1", ...reference },
           null,
           2,
         ),
@@ -228,7 +228,7 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "xspann-api-reference.json";
+    link.download = "xpn-social-api-reference.json";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify("API reference exported");

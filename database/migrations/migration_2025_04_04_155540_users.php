@@ -9,13 +9,15 @@ return new class {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name')->nullable()->index();
-            $table->string('username')->unique();
+            $table->string('username', 30)->unique();
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password')->nullable();
-            $table->string('avatar')->nullable();
+            $table->string('avatar', 2048)->nullable();
             $table->text('bio')->nullable();
             $table->string('status')->default('active')->index();
+            $table->text('date_of_birth')->nullable(); // Encrypted; never returned in public resources.
+            $table->timestamp('onboarded_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

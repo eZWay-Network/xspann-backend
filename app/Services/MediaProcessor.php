@@ -46,9 +46,6 @@ class MediaProcessor
             // Native Studio uploads already contain the final mix. Keep audio_id for attribution,
             // but never add the library track again or apply its original mixing gain twice.
             $renderedAudio = filter_var($settings['rendered'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            if ($video->sound_provider === 'jamendo' && (!$renderedAudio || !$metadata['audio'])) {
-                throw new \RuntimeException('Jamendo shorts must contain client-rendered audio.');
-            }
             $defaultVolume = $video->audio_id && $video->audio_mode === 'mix' && !$video->original_audio_muted && $metadata['audio'] ? 0.5 : 1;
             $originalVolume = $renderedAudio ? 1 : max(0, min(1, (float) ($settings['original_volume'] ?? $defaultVolume)));
             $soundVolume = max(0, min(1, (float) ($settings['sound_volume'] ?? $defaultVolume)));
@@ -146,7 +143,6 @@ class MediaProcessor
 
             if (
                 $video->reuse_content && !$video->audio_id
-                && in_array($video->sound_provider, [null, 'original'], true)
                 && !$video->original_audio_muted && $originalVolume > 0 && $processed['audio']
             ) {
                 $sound = $this->temporary($temporary);

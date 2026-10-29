@@ -5,8 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description"
-        content="XSpann API v1 reference: authentication, endpoints, request parameters, responses and upload workflows.">
-    <title>XSpann API — Developer reference</title>
+        content="XPN Social API v1 reference: authentication, endpoints, request parameters, responses and upload workflows.">
+    <title>XPN Social API — Developer reference</title>
     <link rel="stylesheet" href="{{ url('/docs/api-docs.css') }}">
     <script src="{{ url('/docs/api-docs.js') }}" defer></script>
 </head>
@@ -14,7 +14,7 @@
 <body>
     <a class="skip-link" href="#main">Skip to documentation</a>
     <header class="topbar">
-        <a class="brand" href="#overview"><span class="brand-mark">x</span> xspann <span
+        <a class="brand" href="#overview"><span class="brand-mark">x</span> XPN Social <span
                 class="brand-divider"></span><span class="brand-label">Developers</span></a>
         <div class="top-actions"><span class="version">API v1</span><button id="export-docs" type="button"
                 hidden>Export reference ↓</button><button id="menu-toggle" type="button" aria-expanded="false"
@@ -51,7 +51,7 @@
     <main id="main">
         <section id="overview" class="hero">
             <div class="eyebrow">DOCUMENTATION <span>/</span> REST API</div>
-            <h1>Build with XSpann<span>.</span></h1>
+            <h1>Build with XPN Social<span>.</span></h1>
             <p class="lead">Everything you need to connect your frontend.<br>From the first sign-in to the next video.
             </p>
             <div class="hero-tags"><span>{{ $endpointCount }} endpoints</span><span>JSON responses</span><span>Bearer
@@ -70,10 +70,10 @@
             <div class="section-kicker">START HERE</div>
             <h2>Authentication & authorization</h2>
             <p>Public endpoints work without a token. An optional bearer token personalizes viewer state and visibility.
-                Protected endpoints require a valid JWT belonging to an <strong>active, email-verified account</strong>.
+                Protected endpoints require a valid JWT belonging to an <strong>active, email-verified, onboarded adult account</strong>.
             </p>
             <ol class="steps">
-                <li><strong>Register</strong> with email, username and a confirmed password. The response has
+                <li><strong>Register</strong> with email, username, a confirmed password, adult birth date and current policy acceptance. The response has
                     <code>token: null</code>.
                 </li>
                 <li><strong>Verify your email</strong> using the complete signed link from the email, then call
@@ -362,16 +362,16 @@ Authorization: Bearer &lt;access-token&gt;
                                 cover_url and cover_video_url may be null.</td>
                         </tr>
                         <tr>
-                            <td>Profile / MyProfile</td>
-                            <td>Adds email, nullable email_verified_at and integer likes_count/videos_count; omits cover
-                                fields. Only GET /auth/me loads social_identities: an array of linked identity records
+                            <td>Profile / AccountProfile / MyProfile</td>
+                            <td>Adds integer likes_count/videos_count; omits cover
+                                fields. AccountProfile and MyProfile include the owner’s email and verification date. Only GET /auth/me loads social_identities: an array of linked identity records
                                 (id, user_id, provider, provider_id, created_at).</td>
                         </tr>
                         <tr>
                             <td>Video</td>
                             <td>duration is nullable integer seconds. visibility is public, followers or private. status
                                 is processing, published, failed or deleted (deleted resources are hidden). tags is a
-                                string array extracted from caption. music falls back to “Original sound”. stats
+                                string array extracted from caption. Audio attribution is in the nested audio resource. stats
                                 contains integer counts; viewer contains booleans.</td>
                         </tr>
                         <tr>
@@ -467,7 +467,7 @@ Authorization: Bearer &lt;access-token&gt;
                 no authentication. Returns HTTP 200 with <code>{"status":"ok"}</code>. It confirms the application
                 responds, not dependency readiness.</p>
         </section>
-        <footer class="page-footer"><span class="brand">xspann <span class="muted">/ API reference</span></span><a
+        <footer class="page-footer"><span class="brand">Xspann <span class="muted">/ XPN Social API reference</span></span><a
                 href="#overview">Back to top ↑</a></footer>
     </main>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

@@ -39,7 +39,7 @@ class MediaReferenceTest extends TestCase
         storage('public')->put('videos/1/clip.mp4', 'uploaded');
         $this->useS3();
 
-        $response = $this->asUser($user)->postJson('/api/v1/videos', ['storage_path' => 'public:videos/1/clip.mp4'])
+        $response = $this->asUser($user)->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'public:videos/1/clip.mp4'])
             ->assertStatus(201)
             ->assertJsonPath('data.video_url', media_url('videos/1/clip.mp4'));
 
@@ -53,11 +53,11 @@ class MediaReferenceTest extends TestCase
 
         foreach (['missing:videos/1/clip.mp4', 'public:../secret', 'public:/videos/1/clip.mp4', 'public:', 's3:videos/1/../../secret'] as $value) {
             $this->assertNull(StorageService::location($value));
-            $this->postJson('/api/v1/videos', ['storage_path' => $value])
+            $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => $value])
                 ->assertStatus(422)->assertJsonValidationErrors(['storage_path']);
         }
 
-        $this->postJson('/api/v1/videos', ['storage_path' => 'public:videos/2/clip.mp4'])
+        $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'public:videos/2/clip.mp4'])
             ->assertStatus(422)->assertJsonValidationErrors(['storage_path']);
     }
 

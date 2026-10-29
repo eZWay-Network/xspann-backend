@@ -18,7 +18,7 @@ class UpdateVideoRequest extends FormRequest
             'location_name' => ['nullable', 'string', 'max:180'],
             'visibility' => ['nullable', 'string', ['in' => ['public', 'followers', 'private']]],
             'high_quality_upload' => ['nullable', 'boolean'],
-            'scheduled_at' => ['nullable', 'date'],
+            'scheduled_at' => ['prohibited'],
             'pinned' => ['nullable', 'boolean'],
             'trim_start' => ['nullable', 'numeric', 'min:0'],
             'trim_end' => ['nullable', 'numeric', 'gt:trim_start'],
@@ -34,11 +34,17 @@ class UpdateVideoRequest extends FormRequest
             'filter_settings.saturation' => ['nullable', 'numeric', 'min:0', 'max:250'],
             'filter_settings.warmth' => ['nullable', 'numeric', 'min:-100', 'max:100'],
             'filter_settings.preset' => ['nullable', 'string', 'max:60'],
-            'sound_name' => ['nullable', 'string', 'max:120'],
-            'sound_artist' => ['nullable', 'string', 'max:120'],
-            'sound_provider' => ['nullable', 'string', ['in' => ['original', 'jamendo', 'local']]],
-            'sound_external_id' => ['nullable', 'string', 'max:120'],
-            'sound_preview_url' => ['nullable', 'url', 'max:2048'],
+            'sound_name' => ['prohibited'],
+            'sound_artist' => ['prohibited'],
+            'sound_provider' => ['prohibited'],
+            'sound_external_id' => ['prohibited'],
+            'sound_preview_url' => ['prohibited'],
         ];
     }
+
+    public function passedValidation(): void
+    {
+        \App\Services\ContentRights::rejectRemoved($this->all());
+    }
+
 }

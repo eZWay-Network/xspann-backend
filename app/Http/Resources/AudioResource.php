@@ -13,8 +13,10 @@ class AudioResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
-            'audio_url' => $this->status === 'ready' ? StorageService::publicUrl($this->storage_path) : null,
+            'audio_url' => $this->status === 'ready' && $this->moderation_status === 'approved' ? StorageService::publicUrl($this->storage_path) : null,
             'duration' => $this->duration,
+            'reuse_allowed' => $this->reuse_allowed,
+            'moderation_status' => $this->moderation_status,
             'origin' => $this->origin,
             'status' => $this->status,
             'source_video_id' => $this->source_video_id,

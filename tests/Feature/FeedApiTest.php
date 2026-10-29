@@ -182,17 +182,10 @@ class FeedApiTest extends TestCase
         $this->assertSame([3, 2, 1], $this->allIds(limit: 1));
     }
 
-    public function testFeedIndexMigrationCanRollBackWithoutRemovingData(): void
+    public function testConsolidatedBaselineIncludesFeedIndexes(): void
     {
-        $this->makeVideo($this->makeUser());
-        $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_10_08_090000_feed_indexes.php';
         $names = ['idx_views_user_history', 'idx_views_guest_history', 'idx_videos_feed'];
         $this->assertSame(3, query('sqlite_master')->whereIn('name', $names)->count());
-        $migration->down();
-        $this->assertSame(0, query('sqlite_master')->whereIn('name', $names)->count());
-        $migration->up();
-        $this->assertSame(3, query('sqlite_master')->whereIn('name', $names)->count());
-        $this->assertDatabaseCount('videos', 1);
     }
 
     public function testDocsExportBothFeedPaginationContracts(): void

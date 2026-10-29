@@ -8,12 +8,30 @@ use Tests\TestCase;
 class ApiContractTest extends TestCase
 {
     private const ROUTES = [
+        'GET /api/v1/policies',
+        'POST /api/v1/auth/onboarding',
+        'POST /api/v1/auth/reauthenticate',
+        'POST /api/v1/me/policy-acceptances',
+        'POST /api/v1/account/deletion-requests',
+        'POST /api/v1/account/deletion-confirmations',
+        'POST /api/v1/me/deletion-requests',
+        'POST /api/v1/me/export-requests',
+        'GET /api/v1/me/export-requests/{export}',
+        'GET /api/v1/me/export-requests/{export}/download',
+        'GET /api/v1/me/reports/{report}',
+        'GET /api/v1/me/moderation-decisions',
+        'GET /api/v1/me/moderation-appeals',
+        'POST /api/v1/me/moderation-appeals',
+        'GET /api/v1/admin/reports',
+        'GET /api/v1/admin/reports/{report}',
+        'POST /api/v1/admin/reports/{report}/decision',
+        'GET /api/v1/admin/moderation-appeals',
+        'POST /api/v1/admin/moderation-appeals/{appeal}/decision',
+        'PATCH /api/v1/audios/{audio}',
+        'DELETE /api/v1/audios/{audio}',
         'GET /api/v1/me/saved-audios',
         'POST /api/v1/audios/{audio}/save',
         'DELETE /api/v1/audios/{audio}/save',
-        'GET /api/v1/sounds/jamendo',
-        'GET /api/v1/sounds/jamendo/{track}',
-        'GET /api/v1/sounds/jamendo/{track}/videos',
         'POST /api/v1/audios',
         'GET /api/v1/audios',
         'GET /api/v1/audios/{audio}',
@@ -88,7 +106,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($actual);
         $this->assertSame($expected, $actual);
-        $this->get('/')->assertOk()->assertSee('XSpann API')->assertSee('/api/v1/uploads/videos/complete');
+        $this->get('/')->assertOk()->assertSee('XPN Social API')->assertSee('/api/v1/uploads/videos/complete');
     }
 
     public function testBladeDocsContainEveryRouteAndEscapeConfiguration(): void
@@ -120,7 +138,7 @@ class ApiContractTest extends TestCase
                 $operations[] = $entry['method'] . ' ' . $entry['route'];
                 $entries[$entry['id']] = $entry;
                 $this->assertTrue(strlen($entry['description']) > 20);
-                $this->assertTrue(array_key_exists('data', $entry['response']));
+                $this->assertTrue(array_key_exists($entry['id'] === 'privacycontroller-download' ? 'account' : 'data', $entry['response']));
                 foreach ($entry['parameters'] as $parameter) {
                     $this->assertTrue(in_array($parameter['in'], ['path', 'query', 'body'], true));
                 }
@@ -130,7 +148,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(66, count($entries));
+        $this->assertSame(84, count($entries));
         $this->assertTrue($entries['notificationcontroller-clearall']['auth']);
         $this->assertSame('DELETE', $entries['notificationcontroller-clearall']['method']);
         $this->assertSame(['data' => ['message' => 'Read notifications cleared.']], $entries['notificationcontroller-clearall']['response']);
@@ -160,7 +178,7 @@ class ApiContractTest extends TestCase
     public function testValidationAndMissingRecordsAreJsonWithCors(): void
     {
         $headers = ['Origin' => 'http://localhost:3000'];
-        $this->postJson('/api/v1/auth/register', [], $headers)->assertStatus(422)->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(), ], $headers)->assertStatus(422)->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
         foreach (['videos/98765', 'audios/98765', 'users/missing-user', 'comments/98765/replies'] as $path) {
             $this->getJson('/api/v1/' . $path, $headers)
                 ->assertStatus(404)
@@ -203,22 +221,16 @@ class ApiContractTest extends TestCase
             'audio_mode',
             'audio_settings',
             'reuse_content',
+            'moderation_status',
             'audio',
             'video_url',
             'thumbnail_url',
             'caption',
-            'sound_name',
-            'sound_artist',
-            'sound_provider',
-            'sound_external_id',
-            'sound_preview_url',
-            'music',
             'tags',
             'duration',
             'location_name',
             'visibility',
             'high_quality_upload',
-            'scheduled_at',
             'pinned_at',
             'edit',
             'status',
@@ -234,7 +246,7 @@ class ApiContractTest extends TestCase
         $this->assertSame($data, $this->getJson('/api/v1/videos')->assertOk()->json('data.0'));
         $this->assertSame($data, $this->getJson('/api/v1/videos/' . $video->id)->assertOk()->json('data'));
         $profile = $this->getJson('/api/v1/users/alice')->assertOk()->json('data');
-        $this->assertFields(['id', 'name', 'username', 'email', 'email_verified_at', 'avatar', 'bio', 'followers_count', 'following_count', 'likes_count', 'videos_count', 'following'], $profile);
+        $this->assertFields(['id', 'name', 'username', 'avatar', 'bio', 'followers_count', 'following_count', 'likes_count', 'videos_count', 'following'], $profile);
         $comment = $this->asUser($user)->postJson('/api/v1/videos/' . $video->id . '/comments', ['body' => 'Hello'])->assertStatus(201)->json('data');
         $this->assertFields(['id', 'video_id', 'parent_id', 'body', 'user', 'created_at', 'replies_count', 'reactions', 'viewer_reaction'], $comment);
         $this->assertSame($comment, $this->getJson('/api/v1/videos/' . $video->id . '/comments')->assertOk()->json('data.0'));

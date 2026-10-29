@@ -20,6 +20,8 @@ class CommentReactionController extends Controller
         $this->visible($request, $comment);
 
         VideoActions::transaction((int) $comment->video_id, function (Video $video) use ($request, $comment, $notifications): void {
+            $this->visible($request, $comment);
+
             $attributes = ['comment_id' => $comment->id, 'user_id' => $request->user('id')];
             $exists = CommentReaction::where($attributes)->exists();
             $reaction = $request->validated('reaction_type', 'like');

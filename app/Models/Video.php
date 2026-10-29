@@ -22,15 +22,15 @@ class Video extends Model
         'audio_mode',
         'audio_settings',
         'reuse_content',
+        'rights_version',
+        'rights_confirmed_at',
+        'moderation_status',
         'storage_path',
         'thumbnail_url',
         'caption',
-        'sound_name',
-        'sound_artist',
         'location_name',
         'visibility',
         'high_quality_upload',
-        'scheduled_at',
         'pinned_at',
         'trim_start',
         'trim_end',
@@ -41,9 +41,6 @@ class Video extends Model
         'original_audio_muted',
         'filter_settings',
         'effect_settings',
-        'sound_provider',
-        'sound_external_id',
-        'sound_preview_url',
         'duration',
         'status',
         'views_count',
@@ -55,10 +52,10 @@ class Video extends Model
 
     protected array $casts = [
         'reuse_content' => 'boolean',
+        'rights_confirmed_at' => 'datetime',
         'audio_settings' => 'array',
         'duration' => 'integer',
         'high_quality_upload' => 'boolean',
-        'scheduled_at' => 'datetime',
         'pinned_at' => 'datetime',
         'trim_start' => 'decimal:2',
         'trim_end' => 'decimal:2',
@@ -75,11 +72,6 @@ class Video extends Model
     ];
 
     public function setThumbnailUrlAttribute(?string $value): ?string
-    {
-        return StorageService::storedValue($value);
-    }
-
-    public function setSoundPreviewUrlAttribute(?string $value): ?string
     {
         return StorageService::storedValue($value);
     }
@@ -131,7 +123,8 @@ class Video extends Model
 
     public function scopeVisibleTo(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
-        return $query->whereIn('videos.user_id', User::select('users.id')->visibleTo($viewer))
+        return $query->where('videos.moderation_status', 'approved')
+            ->whereIn('videos.user_id', User::select('users.id')->visibleTo($viewer))
             ->where(function (QueryBuilder $query) use ($viewer): void {
                 $query->where('videos.visibility', 'public');
 

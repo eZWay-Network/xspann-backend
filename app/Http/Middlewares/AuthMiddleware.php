@@ -14,6 +14,8 @@ class AuthMiddleware extends Middleware
 
             abort_unless($request->user()->hasVerifiedEmail(), 403, 'Please verify your email address.');
 
+            abort_unless((bool) $request->user('onboarded_at'), 403, 'Complete account onboarding.');
+
             return $next($request);
         }, ...$guards);
     }

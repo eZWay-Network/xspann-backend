@@ -9,7 +9,7 @@ class AudioSaveTest extends TestCase
 {
     private function audio(int $userId, array $attributes = []): Audio
     {
-        return Audio::create([
+        return Audio::create(['reuse_allowed' => true, 'rights_version' => config('policies.rights_version'), 'rights_confirmed_at' => now(),
             'user_id' => $userId,
             'title' => 'Studio sound',
             'storage_path' => "sounds/$userId/sound.m4a",

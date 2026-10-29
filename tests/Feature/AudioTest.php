@@ -12,7 +12,7 @@ class AudioTest extends TestCase
 {
     private function track(int $userId, array $attributes = []): Audio
     {
-        return Audio::create([
+        return Audio::create(['reuse_allowed' => true, 'rights_version' => config('policies.rights_version'), 'rights_confirmed_at' => now(),
             'user_id' => $userId,
             'title' => 'A reusable sound',
             'storage_path' => "sounds/$userId/track.m4a",
@@ -33,14 +33,13 @@ class AudioTest extends TestCase
         $this->getJson('/api/v1/audios/' . $track->id)->assertOk()->assertJsonPath('data.title', $track->title);
 
         storage('public')->put('videos/2/upload.mp4', 'uploaded');
-        $id = $this->asUser($viewer)->postJson('/api/v1/videos', [
+        $id = $this->asUser($viewer)->postJson('/api/v1/videos', [...$this->videoRights(),
             'storage_path' => 'videos/2/upload.mp4',
             'audio_id' => $track->id,
-            'sound_name' => 'Forged title',
         ])->assertStatus(201)->assertJsonPath('data.audio.creator.id', $creator->id)
             ->assertJsonPath('data.audio_id', $track->id)
             ->assertJsonPath('data.audio_mode', 'replace')
-            ->assertJsonPath('data.sound_name', $track->title)->json('data.id');
+            ->assertJsonPath('data.audio.title', $track->title)->json('data.id');
         $this->patchJson('/api/v1/videos/' . $id, ['audio_id' => $track->id])->assertStatus(422);
         Video::whereKey($id)->update(['status' => 'published']);
         $this->getJson('/api/v1/audios/' . $track->id . '/videos')->assertOk()->assertJsonPath('data.0.id', $id);
@@ -56,7 +55,7 @@ class AudioTest extends TestCase
         $this->getJson('/api/v1/audios')->assertJsonCount(0, 'data');
         $this->getJson('/api/v1/audios/' . $track->id)->assertStatus(404);
         storage('public')->put('videos/2/upload.mp4', 'uploaded');
-        $this->asUser($viewer)->postJson('/api/v1/videos', ['storage_path' => 'videos/2/upload.mp4', 'audio_id' => $track->id])
+        $this->asUser($viewer)->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'videos/2/upload.mp4', 'audio_id' => $track->id])
             ->assertStatus(422)->assertJsonValidationErrors(['audio_id']);
         $source->update(['visibility' => 'public']);
         $this->getJson('/api/v1/audios')->assertJsonCount(1, 'data');
@@ -65,8 +64,8 @@ class AudioTest extends TestCase
         $source->update(['visibility' => 'public']);
         Block::create(['blocker_id' => $creator->id, 'blocked_id' => $viewer->id]);
         $this->getJson('/api/v1/audios/' . $track->id)->assertStatus(404);
-        $this->postJson('/api/v1/videos', ['storage_path' => 'videos/2/upload.mp4', 'audio_id' => 99999])->assertStatus(422);
-        $this->postJson('/api/v1/videos', ['storage_path' => 'videos/2/upload.mp4', 'audio_mode' => 'invalid'])->assertStatus(422);
+        $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'videos/2/upload.mp4', 'audio_id' => 99999])->assertStatus(422);
+        $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'videos/2/upload.mp4', 'audio_mode' => 'invalid'])->assertStatus(422);
     }
 
     public function testProcessingUploadsAreVisibleOnlyToTheirOwnerAndCannotBeUsed(): void
@@ -78,7 +77,7 @@ class AudioTest extends TestCase
         $this->asUser($owner)->getJson('/api/v1/audios/' . $track->id)->assertOk()
             ->assertJsonPath('data.status', 'processing')->assertJsonPath('data.audio_url', null);
         storage('public')->put('videos/1/upload.mp4', 'uploaded');
-        $this->postJson('/api/v1/videos', ['storage_path' => 'videos/1/upload.mp4', 'audio_id' => $track->id])->assertStatus(422);
+        $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'videos/1/upload.mp4', 'audio_id' => $track->id])->assertStatus(422);
     }
 
     public function testDeletingTheOriginalHidesItsSoundWithoutDeletingReusedVideos(): void
@@ -249,7 +248,6 @@ class AudioTest extends TestCase
         $track = $this->track($owner->id);
         $video = $this->makeVideo($owner, [
             'audio_id' => $track->id,
-            'sound_preview_url' => $track->storage_path,
             'status' => 'deleted',
         ]);
         storage('public')->put($this->mediaKey($track->storage_path), 'library audio');

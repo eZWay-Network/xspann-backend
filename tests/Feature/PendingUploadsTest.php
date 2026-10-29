@@ -28,28 +28,26 @@ class PendingUploadsTest extends TestCase
         $this->upload('avatars/1/profile.png');
         $this->upload('videos/1/queued.mp4');
         $this->upload('thumbnails/1/cover.jpg');
-        $this->upload('sounds/1/preview.m4a');
         $this->upload('sounds/1/queued.m4a');
         $user->update(['avatar' => 'avatars/1/profile.png']);
         $this->makeVideo($user, [
             'storage_path' => 'videos/1/queued.mp4',
             'thumbnail_url' => 'thumbnails/1/cover.jpg',
-            'sound_preview_url' => 'sounds/1/preview.m4a',
             'status' => 'processing',
         ]);
-        Audio::create(['user_id' => 1, 'title' => 'Queued audio', 'storage_path' => 'sounds/1/queued.m4a']);
+        Audio::create(['reuse_allowed' => true, 'rights_version' => config('policies.rights_version'), 'rights_confirmed_at' => now(), 'user_id' => 1, 'title' => 'Queued audio', 'storage_path' => 'sounds/1/queued.m4a']);
 
         (new PruneUploads())->handle();
         foreach (['avatars', 'videos', 'sounds', 'thumbnails'] as $kind) {
             $this->assertFalse(storage('public')->exists("$kind/1/abandoned.mp4"));
         }
-        foreach (['videos/1/recent.mp4', 'avatars/1/profile.png', 'videos/1/queued.mp4', 'thumbnails/1/cover.jpg', 'sounds/1/preview.m4a', 'sounds/1/queued.m4a'] as $path) {
+        foreach (['videos/1/recent.mp4', 'avatars/1/profile.png', 'videos/1/queued.mp4', 'thumbnails/1/cover.jpg', 'sounds/1/queued.m4a'] as $path) {
             $this->assertTrue(storage('public')->exists($path));
         }
         $this->assertSame(1, query('pending_uploads')->count());
         (new PruneUploads())->handle();
         $this->assertSame(1, query('pending_uploads')->count());
-        $this->asUser($user)->postJson('/api/v1/videos', ['storage_path' => 'videos/1/abandoned.mp4'])
+        $this->asUser($user)->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'videos/1/abandoned.mp4'])
             ->assertStatus(422)->assertJsonValidationErrors(['storage_path']);
     }
 
@@ -59,13 +57,13 @@ class PendingUploadsTest extends TestCase
         $this->makeUser('bob');
         $this->upload('sounds/1/sound.wav');
         storage('public')->put('sounds/2/sound.wav', 'uploaded');
-        $this->postJson('/api/v1/audios', ['title' => 'Sound', 'storage_path' => 'sounds/1/sound.wav'])->assertStatus(401);
+        $this->postJson('/api/v1/audios', [...$this->audioRights(), 'title' => 'Sound', 'storage_path' => 'sounds/1/sound.wav'])->assertStatus(401);
         $this->asUser($user);
         foreach (['sounds/2/sound.wav', 'sounds/1/missing.wav', 'https://external.example/sound.wav', 'videos/1/video.mp4'] as $path) {
-            $this->postJson('/api/v1/audios', ['title' => 'Sound', 'storage_path' => $path])->assertStatus(422);
+            $this->postJson('/api/v1/audios', [...$this->audioRights(), 'title' => 'Sound', 'storage_path' => $path])->assertStatus(422);
         }
-        $this->postJson('/api/v1/audios', ['storage_path' => 'sounds/1/sound.wav'])->assertStatus(422);
-        $this->postJson('/api/v1/audios', ['title' => 'Sound', 'storage_path' => 'sounds/1/sound.wav', 'status' => 'ready', 'user_id' => 2])
+        $this->postJson('/api/v1/audios', [...$this->audioRights(), 'storage_path' => 'sounds/1/sound.wav'])->assertStatus(422);
+        $this->postJson('/api/v1/audios', [...$this->audioRights(), 'title' => 'Sound', 'storage_path' => 'sounds/1/sound.wav', 'status' => 'ready', 'user_id' => 2])
             ->assertStatus(201)->assertJsonPath('data.status', 'processing')->assertJsonPath('data.audio_url', null)
             ->assertJsonPath('data.creator.id', 1);
         (new PruneUploads())->handle();

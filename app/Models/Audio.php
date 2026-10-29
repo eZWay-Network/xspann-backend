@@ -20,9 +20,13 @@ class Audio extends Model
         'origin',
         'status',
         'duration',
+        'reuse_allowed',
+        'rights_version',
+        'rights_confirmed_at',
+        'moderation_status',
     ];
 
-    protected array $casts = ['duration' => 'integer'];
+    protected array $casts = ['duration' => 'integer', 'reuse_allowed' => 'boolean', 'rights_confirmed_at' => 'datetime'];
 
     public function user(): BelongsTo
     {
@@ -47,13 +51,24 @@ class Audio extends Model
     public function scopeAvailableTo(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
         return $query->where('audios.status', 'ready')
+            ->where('audios.moderation_status', 'approved')
+            ->where(function (QueryBuilder $query) use ($viewer): void {
+                $query->where('audios.reuse_allowed', true);
+                if ($viewer) {
+                    $query->orWhere('audios.user_id', $viewer->id);
+                }
+            })
             ->whereIn('audios.user_id', User::select('users.id')->visibleTo($viewer))
             ->where(function (QueryBuilder $query) use ($viewer): void {
                 $query->where('audios.origin', 'upload')
                     ->orWhereIn('audios.source_video_id', Video::select('videos.id')
                         ->published()
-                        ->where('videos.reuse_content', true)
-                        ->where('videos.visibility', 'public')
+                        ->where(function (QueryBuilder $query) use ($viewer): void {
+                            $query->where(fn($query) => $query->where('videos.reuse_content', true)->where('videos.visibility', 'public'));
+                            if ($viewer) {
+                                $query->orWhere('videos.user_id', $viewer->id);
+                            }
+                        })
                         ->visibleTo($viewer));
             });
     }

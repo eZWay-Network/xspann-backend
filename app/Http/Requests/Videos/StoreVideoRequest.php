@@ -9,7 +9,9 @@ class StoreVideoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'reuse_content' => ['sometimes', 'boolean'],
+            'reuse_content' => ['required', 'boolean'],
+            'rights_confirmed' => ['required', 'accepted'],
+            'rights_version' => ['required', 'string', 'max:40'],
             'audio_id' => ['nullable', 'integer', 'min:1'],
             'audio_mode' => ['sometimes', 'string', ['in' => ['replace', 'mix']]],
             'audio_settings' => ['nullable', 'array'],
@@ -20,12 +22,12 @@ class StoreVideoRequest extends FormRequest
             'storage_path' => ['required', 'string', 'max:2048'],
             'thumbnail_url' => ['nullable', 'url', 'max:2048'],
             'caption' => ['nullable', 'string', 'max:2200'],
-            'sound_name' => ['nullable', 'string', 'max:120'],
-            'sound_artist' => ['nullable', 'string', 'max:120'],
+            'sound_name' => ['prohibited'],
+            'sound_artist' => ['prohibited'],
             'location_name' => ['nullable', 'string', 'max:180'],
             'visibility' => ['nullable', 'string', ['in' => ['public', 'followers', 'private']]],
             'high_quality_upload' => ['nullable', 'boolean'],
-            'scheduled_at' => ['nullable', 'date'],
+            'scheduled_at' => ['prohibited'],
             'trim_start' => ['nullable', 'numeric', 'min:0'],
             'trim_end' => ['nullable', 'numeric', 'gt:trim_start'],
             'cut_points' => ['nullable', 'array', 'max:20'],
@@ -45,9 +47,15 @@ class StoreVideoRequest extends FormRequest
             'effect_settings.background' => ['nullable', 'string', 'max:60'],
             'effect_settings.sticker' => ['nullable', 'string', 'max:60'],
             'effect_settings.visual' => ['nullable', 'string', 'max:60'],
-            'sound_provider' => ['nullable', 'string', ['in' => ['original', 'jamendo', 'local']]],
-            'sound_external_id' => ['nullable', 'string', 'max:120'],
-            'sound_preview_url' => ['nullable', 'url', 'max:2048'],
+            'sound_provider' => ['prohibited'],
+            'sound_external_id' => ['prohibited'],
+            'sound_preview_url' => ['prohibited'],
         ];
     }
+
+    public function passedValidation(): void
+    {
+        \App\Services\ContentRights::rejectRemoved($this->all());
+    }
+
 }

@@ -196,7 +196,7 @@ class QueueTest extends TestCase
             }
         };
         $this->app->instance(\Spark\Utils\Mail::class, $mail);
-        $this->postJson('/api/v1/auth/register', [
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(),
             'username' => 'alice',
             'email' => 'alice@example.com',
             'password' => 'password123',

@@ -30,7 +30,6 @@ class DeleteUnusedMedia implements JobInterface
                 $values = StorageService::referenceValues($value);
                 $referenced = Video::whereIn('storage_path', $values)
                     ->orWhereIn('thumbnail_url', $values)
-                    ->orWhereIn('sound_preview_url', $values)
                     ->exists();
 
                 if ($referenced || Audio::whereIn('storage_path', $values)->exists() || User::whereIn('avatar', $values)->exists()) {

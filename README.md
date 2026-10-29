@@ -1,4 +1,4 @@
-# Xspann API
+# XPN Social API
 
 A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses TinyCore 4.2.9.
 
@@ -20,6 +20,20 @@ php spark queue:work --sleep=1
 ```
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
+
+## Step 1 reset and account operations
+
+After reviewing this step, run `php spark migrate:fresh` **once** on your local development database. This deliberately replaces the old prelaunch schema and deletes database data; it does not clear stored media. The agent has not reset your database. The resulting baseline is frozen: from Step 2 onward, use new forward migrations and `php spark migrate` only. The seeder creates no accounts or known passwords.
+
+`GET /api/v1/policies` supplies policy versions/URLs and the content-rights declaration. New Google signups receive `onboarding_required=true`, an opaque ten-minute `onboarding_token`, and no access token. POST that token with adult birth date and policy versions to `/auth/onboarding`. Birth dates are encrypted and appear only in the owner's private data export.
+
+Staff is separate from account ownership and future artist billing. After registering and verifying an adult account, enroll it on a trusted terminal with `php spark staff:enroll --user=<id> --role=moderator` (or `admin`). Configure the authenticator and confirm its code; the command also handles trusted-operator MFA recovery. `php spark staff:revoke --user=<id>` revokes access. No public API grants staff roles. Staff call `/auth/reauthenticate` with `purpose=staff`, their credential and a fresh TOTP before using `/admin/*`. The resulting staff access lasts 15 minutes and is bound to that JWT. Keep at least two reviewers for independent appeals.
+
+Sensitive privacy actions consume a five-minute single-use proof from `/auth/reauthenticate` (`purpose=export_data` or `delete_account`). Exports stay encrypted on the private `local` disk for 24 hours; their five-minute download links also require owner authentication. Account deletion immediately disables activity/revokes sessions, then removes personal records and managed media through a retryable job. `/account/deletion-requests` and `/account/deletion-confirmations` provide email recovery when ordinary access is unavailable. Public requests return generic responses and never delete from an email address alone.
+
+Run a separate `php spark queue:work --queue=privacy` consumer alongside the existing default worker. Minute-level `FoundationMaintenance` recovers interrupted privacy work, expires tokens/exports and retries tombstoned media deletion; `php spark accounts:maintenance` runs it manually. After correcting a failed request's underlying problem, `php spark accounts:retry --request=<id>` resets its bounded attempt count. Routine errors expose only safe error codes; investigate with the private request reference. Configure shared cache locks and private export storage when deploying multiple workers/hosts.
+
+Closed report evidence without active restrictions/open appeals and audit events have a configurable 365-day retention; completed privacy references retain 30 days. Active cases retain necessary evidence while active. Deletion removes account identifiers via nullable foreign keys; reported content snapshots may remain under this retention. Pending-upload cleanup entries deliberately survive owner deletion for up to the normal 48-hour pruning window, so previously signed PUT URLs cannot create permanent orphan objects. Keep `APP_KEY` stable for encrypted data. Policy text/URLs and support ownership must be in place before public enrollment.
 
 ## Discover API
 
@@ -60,7 +74,7 @@ The cursor fixes the maximum upload/view IDs and popular shortlist for the sessi
 
 Existing clients can keep using `page` and receive the original `data/links/meta` envelope. Legacy pages rank unwatched first, then recent-week uploads, engagement, views and ID. Their ordering can shift as history or counters change; use cursor mode for stable scrolling. Feed `limit` is clamped to 1–100 (default 10), preserving the existing contract.
 
-Deployment: run `php spark migrate` to apply `migration_2026_10_08_090000_feed_indexes.php` (additive video/history indexes only), then clear the application's deployment caches as usual. Do not reset existing tables. The native cursor integration and refresh/animation updates are the next rollout step after this backend is deployed.
+Feed indexes are folded into the Step 1 migration baseline. No separate historical fix migration is needed.
 
 ## Configuration
 
@@ -120,16 +134,16 @@ Missing authentication returns 401. Ownership failures return 403. Unavailable/h
 
 ### Authentication and account payloads
 
-- Register: `username`, `email`, `password`, `password_confirmation`; optional `name`, `avatar`, `bio`. Usernames use ASCII letters, numbers, dashes, and underscores (3–30 characters); passwords require at least 8 characters. `device_name` may be sent by the existing frontend.
+- Register: `username`, `email`, `password`, `password_confirmation`, `date_of_birth` (18+), and `accepted_policies` (current terms/privacy/community versions); optional `name`, `avatar`, `bio`. Usernames use ASCII letters, numbers, dashes, and underscores (3–30 characters); passwords require at least 8 characters. `device_name` may be sent by the existing frontend.
 - Registration returns 201 with `data.user`, null `data.token`/`data.token_expires_at`, and a verification message. It queues a signed confirmation link; no session is issued.
-- Login: `email`, `password`, optional `device_name` (100 characters). Login (200) and refresh (200) return `data.user`, `data.token`, and `data.token_expires_at`. Login and protected endpoints require `status=active` and a verified email; otherwise they return 403.
+- Login: `email`, `password`, optional `device_name` (100 characters). Login (200) and refresh (200) return `data.user`, `data.token`, and `data.token_expires_at`. Normal protected endpoints require an active, verified, onboarded account. Suspended verified users can log in with `restricted_access=true` for their own privacy, policy and appeal flows; ordinary actions return 403. Deleting accounts cannot log in.
 - Profile update: any of `username`, `name`, `avatar`, `bio`. `avatar` accepts a full media URL, `bio` is at most 120 characters. Upload an avatar first and then save its returned URL through this endpoint.
 - Password change: `current_password`, `password`, `password_confirmation`. The current token stays valid; other sessions are revoked.
 - Forgot password: `email`. The response deliberately does not disclose whether an account exists. Reset email requests for one account are separated by 60 seconds.
 - Reset password: `email`, `token`, `password`, `password_confirmation`. Tokens expire after 60 minutes, are single-use, and revoke all sessions when used.
 - Verification resend is public and accepts `email`. It returns the same message for unknown, inactive, and already verified accounts. Confirmation links expire after 60 minutes; opening a valid link verifies the address, then the user can log in. Refresh replaces the current access token. Logout revokes the current token.
 
-Profiles include: `id`, `name`, `username`, `email`, `email_verified_at`, `avatar`, `bio`, `followers_count`, `following_count`, `likes_count`, `videos_count`, and `following`. Public profiles include email. Embedded user summaries retain cover URLs and counts.
+Profiles include: `id`, `name`, `username`, `email`, `email_verified_at`, `avatar`, `bio`, `followers_count`, `following_count`, `likes_count`, `videos_count`, and `following`. Public profiles omit email, email-verification dates, birth dates and social-provider identities. Owner-only account responses include email and verification state. Embedded user summaries retain cover URLs and counts.
 
 ### Social sign-in
 
@@ -143,7 +157,7 @@ After changing these settings on a deployed server, run `php spark config:clear`
 
 Signature verification uses native `Spark\Utils\JWT` with RS256 explicitly allowed, plus application checks for Google claims. Deploy a TinyCore build with RSA JWT support and enable OpenSSL; no separate JWT package is required.
 
-The users migration defines `auth_identities` and a nullable password. Existing databases must match this updated schema; `php spark migrate` does not replay an already-applied users migration. No migration reset is needed for the test suite, which creates disposable databases.
+The one-time Step 1 baseline includes `auth_identities`, nullable passwords, private encrypted birth dates and enrollment timestamps. Tests rebuild only disposable databases.
 
 Send the `credential` from Google Identity Services as an **ID token**, not an OAuth access token:
 
@@ -159,7 +173,7 @@ The endpoint returns HTTP 200 for both creation and login, using the same `data.
 
 Signatures are checked against cached Google public keys, along with issuer, audience, expiry, and verified email. Accounts retain Google's stable subject ID. Existing accounts can link automatically when Google establishes ownership through Gmail or Google Workspace; other matching email addresses return 409 and require password login. This follows Google's [ID-token verification guidance](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token).
 
-New accounts are active and email-verified, with a generated username, Google name/avatar when available, and no password. Users can edit their profile and use password reset to establish a password. Existing profiles and verified-account passwords stay intact. Linking an unverified registration clears its password and revokes its old tokens/reset requests. Inactive accounts cannot sign in. Returning Google users are matched by subject ID; a changed Google email does not silently replace the app email.
+New accounts are active and email-verified, with a generated username, Google name/avatar when available, and no password. Users can edit their profile and use password reset to establish a password. Existing profiles and verified-account passwords stay intact. Linking an unverified registration clears its password, claimed age/policy acceptance and old tokens/reset requests, then requires fresh onboarding. Suspended verified accounts receive recovery-only access; deleting accounts cannot sign in. Returning Google users are matched by subject ID; a changed Google email does not silently replace the app email.
 
 Errors: 404 for unsupported providers, 422 for invalid request fields, 401 for invalid Google credentials, 403 for inactive accounts, 409 for account-link conflicts, 429 for throttling, and 503 for missing configuration or unavailable Google keys. Google sign-in requires no confirmation email. The API never stores the submitted Google token or exposes provider identities in public user resources.
 
@@ -169,16 +183,13 @@ Create a video with the `storage_path` returned by an upload. Optional fields ar
 
 | Fields | Accepted values |
 | --- | --- |
-| `thumbnail_url`, `sound_preview_url` | Public URLs, up to 2048 characters. `video_url` is an output field derived from `storage_path`. |
+| `thumbnail_url` | Public URLs, up to 2048 characters. `video_url` is an output field derived from `storage_path`. |
 | `caption` | Up to 2200 characters. Hashtags are returned as `tags`. |
 | `audio_id`, `audio_mode` | Optional reusable library sound ID; mode `replace` (default) or `mix`. Create only. |
-| `sound_name`, `sound_artist`, `sound_external_id` | Up to 120 characters each. |
-| `sound_provider` | `original`, `jamendo`, or `local`. Jamendo requires a verified `sound_external_id` and `audio_settings.rendered=true`. |
-| `reuse_content` | Boolean, default `true`. Set `false` to opt out of original-sound extraction and reuse. |
+| `reuse_content` | Required boolean; no implicit grant. Set `false` to disable original-sound extraction and reuse. |
 | `location_name` | Up to 180 characters. |
 | `visibility` | `public`, `followers`, or `private`. |
 | `high_quality_upload`, `original_audio_muted` | JSON booleans. |
-| `scheduled_at` | Date/time string. |
 | `trim_start`, `cover_time` | Nonnegative numbers. |
 | `trim_end` | Number greater than `trim_start`; send the start alongside it. |
 | `cut_points` | Up to 20 nonnegative numbers. Returned as a JSON list. |
@@ -187,7 +198,7 @@ Create a video with the `storage_path` returned by an upload. Optional fields ar
 | `filter_settings` | `brightness` 0–200, `contrast`/`saturation` 0–250, `warmth` -100–100, `preset` up to 60 characters. |
 | `effect_settings` | `arFace`, `background`, `sticker`, `visual`, each up to 60 characters. Create only. |
 
-PATCH supports the editable metadata and `pinned`; it does not replace `storage_path` or `video_url`. Responses contain nested `edit`, `stats`, and `viewer` objects, author summary, sound fields, dates, and status. Creation returns 201 with `status=processing`; the worker publishes it. Deletion sets `status=deleted` immediately and queues physical media and database cleanup.
+PATCH supports the editable metadata and `pinned`; it does not replace `storage_path` or `video_url`. Responses contain nested `edit`, `stats`, and `viewer` objects, author summary, canonical nested audio, dates, moderation status, and processing status. Creation returns 201 with `status=processing`; the worker publishes it. Deletion sets `status=deleted` immediately and queues physical media and database cleanup.
 
 Only published, visible videos enter feeds. Owners can see their unpublished/private videos through the single-video and own-posts endpoints. Followers-only videos require following the author. Likes and saves are idempotent: their first POST returns 201 with `created=true`; repeats return 200 with `created=false`. Following returns 201 even if already followed. Self-following returns 422.
 
@@ -197,14 +208,14 @@ Comments accept `body` (up to 1000 characters) and optional `parent_id` belongin
 
 - Block/unblock a numeric user ID with POST/DELETE `/users/{user}/block`; GET `/me/blocks` lists your blocks. Blocking removes follows in both directions and hides the blocked account’s profile, videos, comments, and interactions from the other account. Guests can still see public content.
 - POST `/comments/{comment}/reaction` accepts `reaction_type`: `like` (default when omitted), `love`, `haha`, `wow`, `sad`, or `angry`. Each account has one reaction per comment; another POST replaces it. DELETE removes it. Comment resources include `replies_count`, counts under `reactions`, and `viewer_reaction` (null when absent).
-- POST `/reports` accepts exactly one of `video_id` or `reported_user_id`, a required `reason` (255 characters), and optional `details` (2000 characters). Reports always start with `status=open`.
+- POST `/reports` accepts exactly one of `video_id`, `reported_user_id`, `audio_id` or `comment_id`, a required `reason` (255 characters), and optional `details` (2000 characters). Reports always start with `status=open`.
 - GET `/notifications` lists only your notifications. PATCH `/notifications/{notification}/read` marks one read; PATCH `/notifications/read-all` marks yours read. DELETE `/notifications/clear-all` permanently removes only your read notifications, preserving unread items and other users’ notifications. It requires no body and returns 200 with `data.message`: `Read notifications cleared.`, including when nothing remains to clear. Social actions generate in-app notifications; self-actions and blocked activity are excluded.
 
 ### Abandoned uploads
 
-Apply `migration_2026_10_05_120000_audio_library.php` before deploying the upload changes; it includes the `pending_uploads` table. If an earlier version of this migration was already applied, add the missing table through a new migration before deploying—rerunning an applied migration does not update its schema. Multipart avatar/video/audio uploads, completed chunk uploads, and signed S3 targets are recorded in `pending_uploads`. Stable paths stay in their final storage location; “pending” is a database state, so attaching a large S3 object does not need a second copy. S3 URLs remain stable in the database and API resources resolve playback URLs as before.
+The Step 1 baseline includes the pending-upload cleanup ledger. Multipart avatar/video/audio uploads, completed chunk uploads, and signed S3 targets are recorded in `pending_uploads`. Stable paths stay in their final storage location; “pending” is a database state, so attaching a large S3 object does not need a second copy. S3 URLs remain stable in the database and API resources resolve playback URLs as before.
 
-`PruneUploads` removes pending files older than `storage.pending_upload_hours` (48 hours by default, minimum 24) only if no user avatar, video source/thumbnail/sound preview, or audio source references them. Processing and failed records count as references, preserving queued work and retry sources. The pending record is retired once the file is referenced or successfully deleted. Missing objects are safe to retry; storage errors keep their tracking records and fail the job for retry. Expired chunk sessions are removed under the same session lock used by chunk upload/completion, using last activity. Attachment and pruning share an account lock; attaching a file that was already removed returns 422.
+`PruneUploads` removes pending files older than `storage.pending_upload_hours` (48 hours by default, minimum 24) only if no user avatar, video source/thumbnail, or audio source references them. Processing and failed records count as references, preserving queued work and retry sources. The pending record is retired once the file is referenced or successfully deleted. Missing objects are safe to retry; storage errors keep their tracking records and fail the job for retry. Expired chunk sessions are removed under the same session lock used by chunk upload/completion, using last activity. Attachment and pruning share an account lock; attaching a file that was already removed returns 422.
 
 Schedule this command twice daily on **one scheduler host**, while the normal queue worker remains running:
 
@@ -218,47 +229,25 @@ This cleanup covers uploads tracked after this migration. It deliberately does n
 
 ### Audio library and “Use this Sound”
 
-Apply `migration_2026_10_05_120000_audio_library.php` after the existing schema. It creates `audios` and adds nullable `videos.audio_id` plus `audio_mode` (default `replace`), with foreign keys. The existing initial migrations are preserved. No application database is migrated by the tests.
+The Step 1 baseline includes `audios`, `audio_saves` and canonical `videos.audio_id`/`audio_mode`/`audio_settings`. Video/audio foreign keys are created and rolled back in dependency order. No application database is migrated by tests.
 
-1. Upload a custom sound through `POST /api/v1/uploads/sounds/local` using multipart `file`. This only stores the file and returns `upload_method`, `storage_path`, and `audio_url`. Then send `POST /api/v1/audios` with that `storage_path` and a required `title` (1–120 characters). The returned `data.id` identifies the new library entry. Audio conversion runs asynchronously through `ProcessAudio` on the default queue.
+1. Upload a custom sound through `POST /api/v1/uploads/sounds/local` using multipart `file`. This only stores the file and returns `upload_method`, `storage_path`, and `audio_url`. Then send `POST /api/v1/audios` with that `storage_path` and a required `title` (1–120 characters), `rights_confirmed=true`, current `rights_version`, and explicit `reuse_allowed`. The returned `data.id` identifies the new library entry. Audio conversion runs asynchronously through `ProcessAudio` on the default queue.
 2. Poll `GET /api/v1/audios/{audio}` until `status=ready`. Only the owner can view processing/failed uploads; failed uploads can be uploaded again. Library audio is limited to 50 MiB and 600 seconds.
 3. Browse `GET /api/v1/audios?q=title&page=1&limit=20`, then show the sound profile from `GET /api/v1/audios/{audio}`. Resources include `id`, `title`, `audio_url`, `duration`, `origin`, `status`, `source_video_id`, `videos_count`, `creator`, and `created_at`.
-4. The frontend's **Use this Sound** button submits that `audio_id` with the uploaded video's `storage_path` to `POST /api/v1/videos`. Optionally send `audio_mode=mix`; default is `replace`. These fields cannot be changed through PATCH after creation. An unavailable sound returns 422.
+4. The frontend's **Use this Sound** button submits that `audio_id` with the uploaded video's `storage_path`, rights declaration and reuse choice to `POST /api/v1/videos`. Optionally send `audio_mode=mix`; default is `replace`. These fields cannot be changed through PATCH after creation. An unavailable sound returns 422.
 5. `GET /api/v1/audios/{audio}/videos` lists visible published shorts using the sound. Video resources add `audio_id`, `audio_mode`, and nested `audio` with the original creator. Feeds eager-load these relations.
 
-Original sounds remain reusable only while their source video is public, published, and has `reuse_content=true`. Private/followers-only/deleted sources, inactive creators, and blocked relationships hide them from library discovery and other viewers' video resources. An owner may still inspect their own sound profile. Deleting the source also deletes its extracted library file/record and clears referencing video IDs; already rendered shorts retain their embedded soundtrack. Independently uploaded library sounds survive deletion of shorts that use them. Legacy `sound_*` fields remain for response compatibility; new integrations should use `audio_id` and the nested `audio` resource.
+Original sounds remain reusable only while their source video is public, published, and has `reuse_content=true`. Private/followers-only/deleted sources, inactive creators, and blocked relationships hide them from library discovery and other viewers' video resources. An owner may still inspect their own sound profile. Deleting the source also deletes its extracted library file/record and clears referencing video IDs; already rendered shorts retain their embedded soundtrack. Independently uploaded library sounds survive deletion of shorts that use them. Use only `audio_id` and the nested `audio` resource; legacy sound fields are removed.
 
 Authenticated clients save with `POST /api/v1/audios/{audio}/save` (201 initially, 200 on repeat), unsave with `DELETE /api/v1/audios/{audio}/save`, and list with `GET /api/v1/me/saved-audios?page=1&limit=20` (maximum limit 100). Audio resources include `viewer.saved` for the signed-in viewer; guests receive false. The saved list returns ordinary audio resources, newest saves first, ready for the studio's `audio_id` selection. Unavailable/private/blocked sounds are hidden without discarding the save; they reappear if available again. Users can unsave hidden sounds by ID. Saves are private to the account and cascade when the audio or account is deleted.
 
-### Jamendo sounds and reuse permission
+### Rights and reuse permission
 
-Configure `JAMENDO_CLIENT_ID` and apply `migration_2026_10_07_120000_video_sound_reuse.php` before deploying. The migration adds `videos.reuse_content` (default true), an index for provider/track lookup, and expands `sound_preview_url` to 2048 characters on MySQL/PostgreSQL. Rollback leaves that increased URL capacity in place to preserve existing values. Restart queue workers after deploying.
+Every video creation requires `rights_confirmed=true`, the current `rights_version` from `GET /api/v1/policies`, and an explicit `reuse_content` boolean. Audio creation requires the same declaration plus `reuse_allowed`. Default the UI choice to off; permission must be deliberate. Rights declarations do not establish copyright clearance.
 
-- `GET /api/v1/sounds/jamendo?q=summer&page=1&limit=20`: search/browse Jamendo. `q` is at most 100 characters, page 1–10000, limit 1–60. Returns `data` and `meta.current_page`, `per_page`, `has_more`. Pagination advances through upstream results; filtering may produce short or empty pages while `has_more=true`.
-- `GET /api/v1/sounds/jamendo/{track}`: sound profile, with Jamendo `id`, `provider`, `external_id`, `name`, `artist_id`, `artist_name`, `audio`, `preview_url`, `image`, `duration`, `license_url`, and `share_url`.
-- `GET /api/v1/sounds/jamendo/{track}/videos`: ordinary paginated video resources for visible, published shorts using this provider ID. No Jamendo call is made when loading this list or feeds.
+Only original and user-uploaded audio remain. Select it using `audio_id`; read creator attribution from nested `audio`. Legacy `sound_*` and `music` response fields are removed. Sending legacy sound fields, including null, returns 422. Release scheduling is not yet implemented: `scheduled_at` returns 422 rather than pretending to schedule publication.
 
-Search/profile data is cached for five minutes. The API filters tracks whose `audiodownload_allowed` is not true and returns 503 on configuration/provider failure, or 404 for unavailable track profiles. The preview and license fields follow the [Jamendo track API](https://developer.jamendo.com/v3.0/tracks); the download flag alone is not a license to synchronize music into a short. The client should retain the supplied artist/track attribution and license link.
-
-The client adds the selected track to its music editor and renders it into the video before uploading. Create the short with:
-
-```json
-{
-  "storage_path": "public:videos/1/upload.mp4",
-  "sound_provider": "jamendo",
-  "sound_external_id": "123",
-  "audio_settings": { "rendered": true },
-  "reuse_content": false
-}
-```
-
-Do not send `audio_id` for Jamendo. The backend verifies the track ID and fills `sound_name`, `sound_artist`, and `sound_preview_url` from Jamendo, ignoring client-provided attribution. Those fields plus `sound_provider` and `sound_external_id` are returned in video resources for profile navigation and future selection. Jamendo attribution cannot be changed through PATCH. Backend processing preserves the rendered mix (even when the original input was muted), transcodes the upload, and never downloads the external track or creates an `audios` row for it. Existing video trims still apply: submit the rendered result's trim range rather than the pre-render source range.
-
-For the checkbox **“Reuse this content — allow others to use your original audio”**, default to checked and submit `reuse_content=true`; unchecked submits false. Extraction requires this permission, no library audio or external provider, and audible original sound. Permission does not grant reuse of a selected Jamendo or library track. PATCH can revoke permission later: the existing original sound disappears from discovery, saved-sound lists, and other users' resources, and cannot be selected for new shorts. Already rendered shorts keep their embedded audio; issued playback URLs may remain usable until they expire. Re-enabling permission restores an existing extracted sound, but does not create one if extraction was skipped initially. Owners can still inspect their own hidden sound profile.
-
-Only backend APIs/docs are changed; the frontend music picker, rendering and checkbox must use this contract.
-
-Audio media uses the same disk:key storage references as videos, with public/signed URLs in resources. A previously issued signed URL remains valid until expiry; source privacy controls new API responses and reuse.
+Owners can PATCH `/audios/{audio}` to change title or reuse permission, and DELETE it to stop new selection and queue cleanup. Original audio permission is synchronized with its source video. Ordinary permission withdrawal/deletion preserves the soundtrack already embedded in rendered videos; moderation restrictions propagate to affected derivatives. Media resources never include URLs for restricted content. Previously issued media URLs remain valid until expiry; production private media must use private storage and signed playback.
 
 ### Upload flow
 
@@ -284,7 +273,7 @@ Audio uploads return `audio_url`; create the library entry separately through `P
 - Managed media fields store `disk:key` references, such as `public:videos/1/clip.mp4`, `s3:avatars/1/avatar.png`, or `local:sounds/1/source.wav`. The disk name is its configured name, including custom disks such as `spaces`.
 - Upload responses return this reference in `storage_path`; pass it back unchanged when creating videos or audio. The `video_url`, `audio_url`, and `avatar_url` response fields remain full public or signed URLs.
 - Resources resolve the referenced disk, independently of the current default disk. S3 uses signed GET URLs when `temporary_urls` is enabled, otherwise the configured public/CDN URL. Local disks use their configured public URL; a private disk without one returns no public URL.
-- Existing unprefixed paths are still read from `public`, and existing configured media URLs remain supported. New bare-key writes use the current upload disk; new managed URL writes normalize to `disk:key`. External URLs, including Google avatars and Jamendo previews, remain unchanged. No database migration is required.
+- Existing unprefixed paths are still read from `public`, and existing configured media URLs remain supported. New bare-key writes use the current upload disk; new managed URL writes normalize to `disk:key`. External profile URLs, including Google avatars, remain unchanged.
 - Cleanup recognizes equivalent legacy and prefixed references, preserving shared files. `videos.storage_path` remains the only stored video source; `video_url` is a resource output, not a duplicate database column.
 
 `public/uploads` links to `storage/uploads`. Deploy that symlink (or configure the equivalent server alias). Nginx/Apache or the object store serves files and handles byte ranges; there is no PHP media controller. If your deployment omits symlinks, create it with `ln -s ../storage/uploads public/uploads`. Changing `APP_URL` automatically changes local media response URLs without rewriting stored paths. Local public files are directly accessible to anyone who knows their URL; API visibility is not filesystem access control. Signed S3 URLs are also usable by anyone holding them until expiry, including after a visibility or block change. Use private S3 storage when file access needs to expire.
@@ -349,9 +338,6 @@ All paths below include the `/api/v1` prefix. Public reads, shares, and views ac
 | GET | `/api/v1/me/saved-audios` |
 | POST | `/api/v1/audios/{audio}/save` |
 | DELETE | `/api/v1/audios/{audio}/save` |
-| GET | `/api/v1/sounds/jamendo` |
-| GET | `/api/v1/sounds/jamendo/{track}` |
-| GET | `/api/v1/sounds/jamendo/{track}/videos` |
 | POST | `/api/v1/audios` |
 | GET | `/api/v1/audios` |
 | GET | `/api/v1/audios/{audio}` |
@@ -368,13 +354,13 @@ Outside the API prefix: `/uploads/*` is static media, `GET /up` checks health, a
 
 `ProcessVideo` uses Spark's durable `default` queue and native process runner. It stages managed sources locally, compresses them to H.264 High/yuv420p MP4 at 30 fps, CRF 23 with a 4 Mbps video ceiling, and AAC stereo at 128 kbps/48 kHz. Frames fit within 720×1280 portrait or 1280×720 landscape without upscaling. MP4 fast-start moves playback metadata ahead of media data ([FFmpeg documentation](https://ffmpeg.org/ffmpeg-formats.html#mov_002c-mp4_002c-ismv)). File size depends on duration and content; already efficient uploads may not become smaller. A valid, positive duration of at most 600 seconds is required. Decoding/transcoding errors fail the job and prevent publication; thumbnail extraction remains optional. The worker replaces `storage_path` only after successful encoding, keeps supplied thumbnails, stores measured duration, and removes unreferenced source uploads. Cleanup storage failures queue a retry through `DeleteUnusedMedia`.
 
-Selected library audio is looped or cut to the short's duration. `audio_mode=replace` is the default; `mix` combines original and library audio with equal normalized weights. `original_audio_muted=true` removes the original input from either mode. Without a library or external sound, and with `reuse_content=true`, audible original sound is extracted into a ready AAC/M4A library record in the same publication transaction. Silent or muted videos do not generate a track. Processing retries skip already published videos and cannot overwrite an owner deletion. Both local and S3 uploads follow this pipeline; the worker downloads S3 sources, uploads processed files to the configured disk, and removes temporary files. FFmpeg commands run with a 20-minute timeout; the processing lock lasts one hour.
+Selected library audio is looped or cut to the short's duration. `audio_mode=replace` is the default; `mix` combines original and library audio with equal normalized weights. `original_audio_muted=true` removes the original input from either mode. Without a selected library sound, and with `reuse_content=true`, audible original sound is extracted into a ready AAC/M4A library record in the same publication transaction. Silent or muted videos do not generate a track. Processing retries skip already published videos and cannot overwrite an owner deletion. Both local and S3 uploads follow this pipeline; the worker downloads S3 sources, uploads processed files to the configured disk, and removes temporary files. FFmpeg commands run with a 20-minute timeout; the processing lock lasts one hour.
 
-Trims, cuts, overlays, filters, effects and `scheduled_at` remain metadata; this pipeline normalizes the submitted visual content rather than applying those editor settings again.
+Creation applies trim, crop, brightness/contrast/saturation and audio settings. Preset labels, warmth, cuts, text overlays and effects remain metadata; clients must render those pixels before upload. Scheduling is unavailable until Step 3 and is explicitly rejected. PATCH does not re-encode existing videos.
 
 Signed PUT URLs do not enforce the 500 MiB limit at the storage edge; the worker rejects oversized objects before downloading or publishing them. Configure retention for abandoned/rejected objects. A signed URL remains usable until expiry, so it is not a one-time upload token. Backend mode validates uploads before storing them in S3.
 
-`DeleteVideo` removes owned source, thumbnail, and uploaded sound files, then deletes the video row; foreign keys cascade comments, reactions, likes, saves, shares, views, and reports. Shared files still referenced by another video or library audio record, and external URLs, are preserved. Extracted original sound records/files are removed when their source video is deleted. It shares the processing lock with `ProcessVideo`. Storage failures preserve the deleted row for retry, with three attempts and 30/120-second backoff. Monitor failed jobs and retry failed deletions after fixing storage access. Files remain until the worker completes; object version history and CDN/browser caches follow the storage provider’s retention policies.
+`DeleteVideo` removes owned source, thumbnail, and extracted original audio files, then deletes the video row; foreign keys cascade comments, reactions, likes, saves, shares, and views. Reports retain an encrypted metadata snapshot and nullable target references for review. Shared files still referenced by another video or library audio record, and external URLs, are preserved. Extracted original sound records/files are removed when their source video is deleted. It shares the processing lock with `ProcessVideo`. Storage failures preserve the deleted row for retry, with three attempts and 30/120-second backoff. Monitor failed jobs and retry failed deletions after fixing storage access. Files remain until the worker completes; object version history and CDN/browser caches follow the storage provider’s retention policies.
 
 `SendAccountEmail` also uses the `default` queue and native PHPMailer integration, with three attempts and 30/120-second backoff. Run the queue worker under your process supervisor and restart it after deployment. The HTTP request should not run FFmpeg or send SMTP synchronously.
 

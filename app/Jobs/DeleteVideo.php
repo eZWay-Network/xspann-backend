@@ -30,7 +30,7 @@ class DeleteVideo implements JobInterface
             PendingUploads::locked($video->user_id, function () use ($video): void {
                 $video = $video->refresh();
 
-                foreach (array_unique(array_filter([$video->storage_path, $video->thumbnail_url, $video->sound_preview_url])) as $value) {
+                foreach (array_unique(array_filter([$video->storage_path, $video->thumbnail_url])) as $value) {
                     $location = StorageService::location($value);
                     if (!$location || !preg_match("~^(videos|thumbnails|sounds)/{$video->user_id}/[^/]+\$~D", $location['key'])) {
                         continue;
@@ -42,7 +42,6 @@ class DeleteVideo implements JobInterface
                             fn($query) => $query
                                 ->whereIn('storage_path', $values)
                                 ->orWhereIn('thumbnail_url', $values)
-                                ->orWhereIn('sound_preview_url', $values)
                         )->exists();
 
                     $shared = $shared || Audio::whereIn('storage_path', $values)->exists();
@@ -59,18 +58,17 @@ class DeleteVideo implements JobInterface
                         || Video::whereNotKey($video->id)
                             ->where(fn($query) => $query
                                 ->whereIn('storage_path', $values)
-                                ->orWhereIn('thumbnail_url', $values)
-                                ->orWhereIn('sound_preview_url', $values))
+                                ->orWhereIn('thumbnail_url', $values))
                             ->exists();
 
                     if ($location && !$shared && !storage($location['disk'])->delete($location['key'])) {
                         throw new \RuntimeException('Could not remove extracted audio.');
                     }
-                    $audio->delete();
+                    $audio->remove();
                 }
 
                 // Foreign keys cascade to comments, reactions and video social records.
-                $video->delete();
+                $video->remove();
             });
         });
     }

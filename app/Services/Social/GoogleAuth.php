@@ -41,7 +41,10 @@ class GoogleAuth
                 }
 
                 if (!$user) {
-                    $base = str($email)->before('@')->slug('_')->toString();
+                    $base = substr(str($email)->before('@')->slug('_')->toString(), 0, 24);
+                    if (strlen($base) < 3) {
+                        $base = "user_$base";
+                    }
                     $username = $base;
                     $attempt = 0;
                     do {
@@ -68,7 +71,7 @@ class GoogleAuth
                     StorageService::validateOwner($user->avatar, $user->id, 'avatar', 'avatars');
                 }
 
-                abort_unless($user->status === 'active', 403, 'This account is not active.');
+                abort_unless($user->status === 'active' || ($user->status === 'suspended' && $user->hasVerifiedEmail()), 403, 'This account is not active.');
 
                 if (!$user->hasVerifiedEmail()) {
                     abort_unless(
@@ -81,11 +84,16 @@ class GoogleAuth
                     $user->update([
                         'email_verified_at' => now(),
                         'password' => null,
+                        'date_of_birth' => null,
+                        'onboarded_at' => null,
                         'remember_token' => null
                     ]);
 
-                    query('jwt_access_tokens')->where('user_id', $user->id)->delete();
-                    query('password_reset_tokens')->where('email', $user->email)->delete();
+                    DB::table('policy_acceptances')->where('user_id', $user->id)->delete();
+                    DB::table('account_action_tokens')->where('user_id', $user->id)->delete();
+                    DB::table('staff_sessions')->where('user_id', $user->id)->delete();
+                    DB::table('jwt_access_tokens')->where('user_id', $user->id)->delete();
+                    DB::table('password_reset_tokens')->where('email', $user->email)->delete();
                 }
 
                 if (!$identity) {
@@ -101,7 +109,7 @@ class GoogleAuth
         );
     }
 
-    private function verify(string $token): array
+    public function verify(string $token): array
     {
         $clientId = config('app.google_client_id');
 

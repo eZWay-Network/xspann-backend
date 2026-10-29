@@ -31,7 +31,7 @@ class UploadApiTest extends TestCase
     private function startServer(): void
     {
         $config = [];
-        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors'] as $key) {
+        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies'] as $key) {
             $config[$key] = config($key);
         }
         $documentRoot = $this->storagePath . '/public';
@@ -120,7 +120,7 @@ class UploadApiTest extends TestCase
         $audio = $this->http('/uploads/sounds/local', ['file' => new \CURLFile($wav, 'audio/wav', '-sound.wav')], 201, true)['data'];
         $this->assertTrue(storage('public')->exists($this->mediaKey($audio['storage_path'])));
         $this->assertSame(0, \App\Models\Audio::count());
-        $track = $this->http('/audios', ['storage_path' => $audio['storage_path'], 'title' => 'My sound'], 201)['data'];
+        $track = $this->http('/audios', [...$this->audioRights(), 'storage_path' => $audio['storage_path'], 'title' => 'My sound'], 201)['data'];
         $this->assertSame('processing', $track['status']);
         $this->assertDatabaseHas('audios', ['id' => $track['id'], 'user_id' => 1, 'storage_path' => $audio['storage_path']]);
         $png = $this->storagePath . '/avatar.png';
@@ -136,7 +136,7 @@ class UploadApiTest extends TestCase
     {
         $this->loginHttp();
         $upload = $this->http('/uploads/videos/local', ['file' => new \CURLFile($this->videoFile(), 'video/mp4', 'clip.mp4')], 201, true)['data'];
-        $video = $this->http('/videos', ['storage_path' => $upload['storage_path'], 'caption' => 'End to end #test'], 201)['data'];
+        $video = $this->http('/videos', [...$this->videoRights(), 'storage_path' => $upload['storage_path'], 'caption' => 'End to end #test'], 201)['data'];
         $this->assertSame('processing', $video['status']);
         $this->assertSame([], $this->http('/feed', [], method: 'GET')['data']);
         $this->assertSame('processing', $this->http('/me/videos', [], method: 'GET')['data'][0]['status']);
@@ -254,7 +254,7 @@ class UploadApiTest extends TestCase
             $this->assertSame(file_get_contents($file), file_get_contents($this->storagePath . '/' . $this->mediaKey($upload['storage_path'])));
             $this->assertFalse(storage('public')->exists($this->mediaKey($upload['storage_path'])));
             $this->assertSame('https://cdn.example.com/' . $this->mediaKey($upload['storage_path']), $upload['video_url']);
-            $video = $this->http('/videos', ['storage_path' => $upload['storage_path']], 201)['data'];
+            $video = $this->http('/videos', [...$this->videoRights(), 'storage_path' => $upload['storage_path']], 201)['data'];
             $this->assertDatabaseHas('videos', ['id' => $video['id'], 'storage_path' => $upload['storage_path']]);
 
             $this->fakeVideoTools();
@@ -275,10 +275,8 @@ class UploadApiTest extends TestCase
             $wav = $this->storagePath . '/audio.wav';
             file_put_contents($wav, 'RIFF' . pack('V', 38) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, 8000, 16000, 2, 16) . 'data' . pack('V', 2) . "\0\0");
             $audio = $this->http('/uploads/sounds/local', ['file' => new \CURLFile($wav, 'audio/wav', 'audio.wav')], 201, true)['data'];
-            $this->http('/videos/' . $video['id'], ['sound_preview_url' => $audio['audio_url']], method: 'PATCH');
-            $this->assertDatabaseHas('videos', ['id' => $video['id'], 'sound_preview_url' => $audio['storage_path']]);
             $this->assertSame(file_get_contents($wav), file_get_contents($this->storagePath . '/' . $this->mediaKey($audio['storage_path'])));
-            $track = $this->http('/audios', ['storage_path' => $audio['storage_path'], 'title' => 'My sound'], 201)['data'];
+            $track = $this->http('/audios', [...$this->audioRights(), 'storage_path' => $audio['storage_path'], 'title' => 'My sound'], 201)['data'];
             $this->assertDatabaseHas('audios', ['id' => $track['id'], 'storage_path' => $audio['storage_path']]);
             app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0);
             $track = $this->http('/audios/' . $track['id'], [], method: 'GET')['data'];
@@ -333,7 +331,7 @@ class UploadApiTest extends TestCase
             $backend = $this->http('/uploads/videos/local', ['file' => new \CURLFile($file, 'video/mp4', 'clip.mp4')], 201, true)['data'];
 
             foreach ([$signed, $backend] as $upload) {
-                $video = $this->http('/videos', ['storage_path' => $upload['storage_path']], 201)['data'];
+                $video = $this->http('/videos', [...$this->videoRights(), 'storage_path' => $upload['storage_path']], 201)['data'];
                 $this->assertDatabaseHas('videos', ['id' => $video['id'], 'storage_path' => $upload['storage_path']]);
                 app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0);
                 $published = $this->http('/videos/' . $video['id'], [], method: 'GET')['data'];

@@ -28,6 +28,8 @@ class SaveController extends Controller
         VideoActions::visible($video);
 
         $created = VideoActions::transaction($video->id, function (Video $video) use ($request): bool {
+            VideoActions::visible($video);
+
             $save = $video->saves()->firstOrCreate(['user_id' => $request->user('id')]);
 
             if ($created = $save->wasCreated()) {

@@ -4,7 +4,7 @@ return [
     'key' => env('APP_KEY'), // Application key for encryption
     'debug' => env('APP_DEBUG', true), // Enable or disable debug mode
 
-    'name' => env('APP_NAME', 'Spark'), // Application name
+    'name' => env('APP_NAME', 'XPN Social'), // Xspann is the owner's brand.
     'timezone' => env('APP_TIMEZONE', 'UTC'), // Application timezone
     'locale' => env('APP_LOCALE', 'en'), // Default language
     'url' => env('APP_URL', 'http://localhost:8080'), // Application URL
@@ -29,8 +29,6 @@ return [
     ),
     // Select cf-connecting-ip only when trusted peers overwrite that header.
     'trusted_proxy_header' => env('TRUSTED_PROXY_HEADER', 'x-forwarded-for'),
-
-    'jamendo_client_id' => env('JAMENDO_CLIENT_ID'),
 
     // Other settings
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:3000')),

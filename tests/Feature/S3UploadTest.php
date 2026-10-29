@@ -62,7 +62,7 @@ class S3UploadTest extends TestCase
             $bytes = pack('N', 24) . 'ftypmp42' . pack('N', 0) . 'mp42isom' . str_repeat("\0", 128);
             $server->request('PUT', substr($upload['upload_url'], strlen($server->url)), $bytes, $upload['headers'])->assertOk();
             $this->assertSame($bytes, file_get_contents($this->storagePath . '/' . $this->mediaKey($upload['storage_path'])));
-            $id = $this->postJson('/api/v1/videos', ['storage_path' => $upload['storage_path']])->assertStatus(201)->json('data.id');
+            $id = $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => $upload['storage_path']])->assertStatus(201)->json('data.id');
             app(Queue::class)->work(once: true, timeout: 5, sleep: 0);
             $video = Video::find($id);
             $this->assertSame('published', $video->status);

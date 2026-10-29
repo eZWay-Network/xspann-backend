@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Controllers\Api\V1\{
+    AccountController,
+    PrivacyController,
+    ModerationController,
     AuthController,
     AudioController,
     AudioSaveController,
-    JamendoSoundController,
     CommentController,
     DiscoverController,
     FeedController,
@@ -24,9 +26,32 @@ use App\Http\Controllers\Api\V1\{
 use Spark\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::get('/sounds/jamendo', [JamendoSoundController::class, 'index'])->middleware('throttle:60');
-    Route::get('/sounds/jamendo/{track}', [JamendoSoundController::class, 'show'])->middleware('throttle:60');
-    Route::get('/sounds/jamendo/{track}/videos', [JamendoSoundController::class, 'videos']);
+    Route::get('/policies', [AccountController::class, 'policies']);
+    Route::post('/auth/onboarding', [AccountController::class, 'onboarding'])->middleware('throttle:5');
+    Route::post('/account/deletion-requests', [PrivacyController::class, 'requestDeletionEmail'])->middleware('throttle:5');
+    Route::post('/account/deletion-confirmations', [PrivacyController::class, 'confirmDeletion'])->middleware('throttle:5');
+
+    Route::middleware('restricted')->group(function (): void {
+        Route::post('/auth/reauthenticate', [AccountController::class, 'reauthenticate'])->middleware('throttle:5');
+        Route::post('/me/policy-acceptances', [AccountController::class, 'acceptPolicies'])->middleware('throttle:10');
+        Route::post('/me/deletion-requests', [PrivacyController::class, 'deleteAccount'])->middleware('throttle:5');
+        Route::post('/me/export-requests', [PrivacyController::class, 'export'])->middleware('throttle:5');
+        Route::get('/me/export-requests/{export}/download', [PrivacyController::class, 'download'])->middleware('throttle:10');
+        Route::get('/me/export-requests/{export}', [PrivacyController::class, 'status']);
+        Route::get('/me/reports/{report}', [ModerationController::class, 'ownReport']);
+        Route::get('/me/moderation-decisions', [ModerationController::class, 'ownDecisions']);
+        Route::get('/me/moderation-appeals', [ModerationController::class, 'ownAppeals']);
+        Route::post('/me/moderation-appeals', [ModerationController::class, 'appeal'])->middleware('throttle:10');
+        Route::post('/auth/logout', [AuthController::class, 'logout']);
+    });
+
+    Route::middleware('staff')->group(function (): void {
+        Route::get('/admin/reports', [ModerationController::class, 'reports']);
+        Route::get('/admin/reports/{report}', [ModerationController::class, 'report']);
+        Route::post('/admin/reports/{report}/decision', [ModerationController::class, 'decide'])->middleware('throttle:30');
+        Route::get('/admin/moderation-appeals', [ModerationController::class, 'appeals']);
+        Route::post('/admin/moderation-appeals/{appeal}/decision', [ModerationController::class, 'decideAppeal'])->middleware('throttle:30');
+    });
 
     Route::get('/audios', [AudioController::class, 'index']);
     Route::get('/audios/{audio}', [AudioController::class, 'show']);
@@ -65,7 +90,6 @@ Route::prefix('v1')->group(function () {
         Route::patch('/notifications/read-all', [NotificationController::class, 'readAll']);
         Route::patch('/notifications/{notification}/read', [NotificationController::class, 'read']);
         Route::delete('/notifications/clear-all', [NotificationController::class, 'clearAll']);
-        Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::put('/auth/profile', [AuthController::class, 'update']);
         Route::put('/auth/password', [AuthController::class, 'changePassword']);
@@ -84,6 +108,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/audios/{audio}/save', [AudioSaveController::class, 'destroy']);
 
         Route::post('/audios', [AudioController::class, 'store']);
+        Route::patch('/audios/{audio}', [AudioController::class, 'update']);
+        Route::delete('/audios/{audio}', [AudioController::class, 'destroy']);
 
         Route::get('/me/videos', [VideoController::class, 'mine']);
         Route::post('/videos', [VideoController::class, 'store']);

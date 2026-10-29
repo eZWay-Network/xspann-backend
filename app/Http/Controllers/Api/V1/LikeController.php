@@ -29,6 +29,8 @@ class LikeController extends Controller
         VideoActions::visible($video);
 
         $created = VideoActions::transaction($video->id, function (Video $video) use ($request, $notifications): bool {
+            VideoActions::visible($video);
+
             $like = $video->likes()->firstOrCreate(['user_id' => $request->user('id')]);
 
             if ($created = $like->wasCreated()) {

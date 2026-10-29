@@ -62,7 +62,8 @@ class GoogleAuthTest extends TestCase
     public function testCreatesVerifiedAccountAndReturnsAUsableLoginToken(): void
     {
         $response = $this->postJson('/api/v1/auth/social/google', ['token' => $this->tokenFor(), 'status' => 'suspended', 'email' => 'forged@example.com'])
-            ->assertOk()->assertJsonPath('data.user.email', 'alice@gmail.com');
+            ->assertOk()->assertJsonPath('data.onboarding_required', true)->assertJsonPath('data.token', null);
+        $response = $this->postJson('/api/v1/auth/onboarding', [...$this->enrollment(), 'onboarding_token' => $response->json('data.onboarding_token')])->assertOk();
         $user = User::find(1);
         $this->assertDatabaseHas('auth_identities', ['user_id' => $user->id, 'provider' => 'google', 'provider_id' => '123456789']);
         $this->assertSame('active', $user->status);
@@ -106,12 +107,13 @@ class GoogleAuthTest extends TestCase
         $this->assertSame(null, $user->password);
         $this->assertDatabaseCount('password_reset_tokens', 0);
         $this->withToken($oldToken)->getJson('/api/v1/auth/me')->assertStatus(401);
-        $this->assertDatabaseCount('jwt_access_tokens', 1);
+        $this->assertDatabaseCount('jwt_access_tokens', 0);
     }
 
     public function testReturningUsersAreIdentifiedByGoogleIdEvenWhenGoogleEmailChanges(): void
     {
-        $this->postJson('/api/v1/auth/social/google', ['token' => $this->tokenFor()])->assertOk();
+        $signup = $this->postJson('/api/v1/auth/social/google', ['token' => $this->tokenFor()])->assertOk();
+        $this->postJson('/api/v1/auth/onboarding', [...$this->enrollment(), 'onboarding_token' => $signup->json('data.onboarding_token')])->assertOk();
         $this->postJson('/api/v1/auth/social/google', ['token' => $this->tokenFor(['email' => 'changed@gmail.com'])])
             ->assertOk()->assertJsonPath('data.user.id', 1)->assertJsonPath('data.user.email', 'alice@gmail.com');
         $this->assertDatabaseCount('users', 1);
@@ -182,6 +184,9 @@ class GoogleAuthTest extends TestCase
                 'token' => $this->tokenFor(['azp' => $presenter]),
             ])->assertOk();
 
+            if ($response->json('data.onboarding_required')) {
+                $response = $this->postJson('/api/v1/auth/onboarding', [...$this->enrollment(), 'onboarding_token' => $response->json('data.onboarding_token')])->assertOk();
+            }
             $this->withToken($response->json('data.token'))
                 ->getJson('/api/v1/auth/me')
                 ->assertOk()
@@ -307,6 +312,7 @@ class GoogleAuthTest extends TestCase
     public function testAccountsWithoutPasswordsMustUsePasswordResetBeforePasswordLogin(): void
     {
         $response = $this->postJson('/api/v1/auth/social/google', ['token' => $this->tokenFor()])->assertOk();
+        $response = $this->postJson('/api/v1/auth/onboarding', [...$this->enrollment(), 'onboarding_token' => $response->json('data.onboarding_token')])->assertOk();
         $this->postJson('/api/v1/auth/login', ['email' => 'alice@gmail.com', 'password' => 'anything'])->assertStatus(422);
         $this->withToken($response->json('data.token'))->putJson('/api/v1/auth/password', [
             'current_password' => 'anything',

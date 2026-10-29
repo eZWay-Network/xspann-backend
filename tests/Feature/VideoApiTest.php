@@ -48,11 +48,9 @@ class VideoApiTest extends TestCase
             'original_audio_muted' => true,
             'filter_settings' => ['brightness' => 110],
             'effect_settings' => ['arFace' => 'Smile'],
-            'sound_provider' => 'local',
-            'sound_name' => 'My audio'
         ];
         storage('public')->put($data['storage_path'], 'uploaded');
-        $response = $this->postJson('/api/v1/videos', $data)->assertStatus(201)->assertJsonPath('data.status', 'processing')
+        $response = $this->postJson('/api/v1/videos', [...$this->videoRights(), ...$data])->assertStatus(201)->assertJsonPath('data.status', 'processing')
             ->assertJsonPath('data.edit.trim_start', 1.5)->assertJsonPath('data.edit.effect_settings.arFace', 'Smile');
         $this->assertDatabaseHas('videos', ['id' => $response->json('data.id'), 'user_id' => $user->id, 'visibility' => 'followers']);
         $jobs = Queue::getJobs(queue: 'default');
@@ -69,7 +67,7 @@ class VideoApiTest extends TestCase
         $this->patchJson('/api/v1/videos/' . $video->id, ['caption' => 'attack'])->assertStatus(403);
         $this->deleteJson('/api/v1/videos/' . $video->id)->assertStatus(403);
         $this->asUser($owner);
-        $this->postJson('/api/v1/videos', ['storage_path' => 'videos/999/file.mp4'])->assertStatus(422);
+        $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'videos/999/file.mp4'])->assertStatus(422);
         $this->patchJson('/api/v1/videos/' . $video->id, ['trim_start' => 4, 'trim_end' => 2, 'cut_points' => [-1], 'filter_settings' => ['brightness' => 999]])
             ->assertStatus(422)->assertJsonValidationErrors(['cut_points.0', 'filter_settings.brightness']);
         $this->patchJson('/api/v1/videos/' . $video->id, ['trim_start' => 4, 'trim_end' => 2])

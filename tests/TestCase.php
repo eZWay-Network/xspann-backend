@@ -45,6 +45,8 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
             'email' => "$username@example.com",
             'password' => 'password123',
             'email_verified_at' => now(),
+            'date_of_birth' => '1990-01-01',
+            'onboarded_at' => now(),
         ])->refresh();
     }
 
@@ -54,9 +56,27 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
             'user_id' => $user->id,
             'storage_path' => "videos/{$user->id}/sample.mp4",
             'caption' => 'Hello #world',
+            'reuse_content' => true,
+            'rights_version' => config('policies.rights_version'),
+            'rights_confirmed_at' => now(),
             'status' => Video::STATUS_PUBLISHED,
             ...$attributes,
         ])->refresh();
+    }
+
+    protected function videoRights(): array
+    {
+        return ['rights_confirmed' => true, 'rights_version' => config('policies.rights_version'), 'reuse_content' => true];
+    }
+
+    protected function audioRights(): array
+    {
+        return ['rights_confirmed' => true, 'rights_version' => config('policies.rights_version'), 'reuse_allowed' => true];
+    }
+
+    protected function enrollment(): array
+    {
+        return ['date_of_birth' => '1990-01-01', 'accepted_policies' => array_map(fn($policy) => $policy['version'], array_filter(config('policies.documents'), fn($policy) => $policy['required']))];
     }
 
     protected function token(User $user): string

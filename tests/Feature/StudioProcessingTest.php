@@ -34,13 +34,13 @@ class StudioProcessingTest extends TestCase
         $user = $this->makeUser();
         storage('public')->put('videos/1/upload.mp4', 'upload');
         $settings = ['start' => 0.5, 'original_volume' => 0.2, 'sound_volume' => 0.8];
-        $id = $this->asUser($user)->postJson('/api/v1/videos', [
+        $id = $this->asUser($user)->postJson('/api/v1/videos', [...$this->videoRights(),
             'storage_path' => 'videos/1/upload.mp4',
             'audio_settings' => $settings,
         ])->assertStatus(201)->assertJsonPath('data.audio_settings', $settings)->json('data.id');
         $this->patchJson("/api/v1/videos/$id", ['audio_settings' => $settings])->assertStatus(422);
         foreach ([['start' => -1], ['start' => 601], ['original_volume' => 1.1], ['sound_volume' => -0.1]] as $invalid) {
-            $this->postJson('/api/v1/videos', [
+            $this->postJson('/api/v1/videos', [...$this->videoRights(),
                 'storage_path' => 'videos/1/upload.mp4',
                 'audio_settings' => $invalid,
             ])->assertStatus(422);
@@ -52,7 +52,7 @@ class StudioProcessingTest extends TestCase
     {
         $user = $this->makeUser();
         storage('public')->put('videos/1/rendered.mp4', 'upload');
-        $id = $this->asUser($user)->postJson('/api/v1/videos', [
+        $id = $this->asUser($user)->postJson('/api/v1/videos', [...$this->videoRights(),
             'storage_path' => 'videos/1/rendered.mp4',
             'audio_settings' => ['rendered' => true],
         ])->assertStatus(201)->assertJsonPath('data.audio_settings.rendered', true)->json('data.id');
@@ -60,11 +60,11 @@ class StudioProcessingTest extends TestCase
         $this->patchJson("/api/v1/videos/$id", [
             'audio_settings' => ['rendered' => false],
         ])->assertStatus(422);
-        $this->postJson('/api/v1/videos', [
+        $this->postJson('/api/v1/videos', [...$this->videoRights(),
             'storage_path' => 'videos/1/rendered.mp4',
             'audio_settings' => ['rendered' => 'invalid'],
         ])->assertStatus(422);
-        $this->postJson('/api/v1/videos', [
+        $this->postJson('/api/v1/videos', [...$this->videoRights(),
             'storage_path' => 'videos/1/rendered.mp4',
             'audio_id' => 999,
             'audio_settings' => ['rendered' => true],
@@ -77,7 +77,7 @@ class StudioProcessingTest extends TestCase
         $tools = $this->tools();
         $user = $this->makeUser();
         // The library file is deliberately absent: a rendered mix must not decode it again.
-        $track = Audio::create([
+        $track = Audio::create(['reuse_allowed' => true, 'rights_version' => config('policies.rights_version'), 'rights_confirmed_at' => now(),
             'user_id' => $user->id,
             'title' => 'Already mixed',
             'storage_path' => 'sounds/1/not-needed.m4a',
@@ -222,7 +222,7 @@ class StudioProcessingTest extends TestCase
     {
         $tools = $this->tools();
         $user = $this->makeUser();
-        $track = Audio::create([
+        $track = Audio::create(['reuse_allowed' => true, 'rights_version' => config('policies.rights_version'), 'rights_confirmed_at' => now(),
             'user_id' => $user->id,
             'title' => 'Offset fixture',
             'storage_path' => 'sounds/1/fixture.wav',

@@ -7,7 +7,25 @@ use Spark\Database\Relation\BelongsTo;
 
 class Report extends Model
 {
-    protected array $fillable = ['user_id', 'video_id', 'reported_user_id', 'reason', 'details', 'status'];
+    protected array $fillable = [
+        'user_id',
+        'subject_user_id',
+        'video_id',
+        'reported_user_id',
+        'audio_id',
+        'comment_id',
+        'target_type',
+        'target_id',
+        'reason',
+        'details',
+        'evidence',
+        'status',
+        'version',
+    ];
+
+    protected array $casts = ['evidence' => 'encrypted', 'version' => 'integer'];
+
+    protected array $hidden = ['evidence'];
 
     public function user(): BelongsTo
     {

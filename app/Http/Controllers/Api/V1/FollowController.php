@@ -25,6 +25,8 @@ class FollowController extends Controller
             // Serialize follow creation on both SQLite and MySQL before checking existence.
             User::increment('id', 0, where: ['id' => $user->id]);
 
+            abort_unless(User::visibleTo($request->user())->whereKey($user->id)->exists(), 404, 'User not found.');
+
             $follow = Follow::firstOrCreate([
                 'follower_id' => $request->user('id'),
                 'following_id' => $user->id,

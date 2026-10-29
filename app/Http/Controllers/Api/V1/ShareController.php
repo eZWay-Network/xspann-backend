@@ -16,6 +16,8 @@ class ShareController extends Controller
         VideoActions::visible($video);
 
         VideoActions::transaction($video->id, function (Video $video) use ($request, $notifications): void {
+            VideoActions::visible($video);
+
             $actor = $request->user();
             $alreadyShared = $actor && $video->shares()->where('user_id', $actor->id)->exists();
 

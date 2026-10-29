@@ -11,7 +11,7 @@ class Comment extends Model
 {
     protected const UPDATED_AT = null;
 
-    protected array $fillable = ['user_id', 'video_id', 'parent_id', 'body'];
+    protected array $fillable = ['user_id', 'video_id', 'parent_id', 'body', 'moderation_status'];
 
     public function reactions(): HasMany
     {
@@ -20,7 +20,8 @@ class Comment extends Model
 
     public function scopeVisibleTo(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
-        return $query->whereIn('user_id', User::select('users.id')->visibleTo($viewer));
+        return $query->where('moderation_status', 'approved')
+            ->whereIn('user_id', User::select('users.id')->visibleTo($viewer));
     }
 
     public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder

@@ -15,6 +15,8 @@ return new class {
             $table->timestamp('created_at')->useCurrent();
 
             $table->index(['video_id', 'created_at']);
+            $table->index(['user_id', 'id', 'video_id'], 'idx_views_user_history');
+            $table->index(['ip_hash', 'user_agent_hash', 'id', 'video_id'], 'idx_views_guest_history');
         });
 
         Schema::create('notifications', function (Blueprint $table) {
@@ -26,20 +28,6 @@ return new class {
             $table->timestamp('created_at')->useCurrent();
 
             $table->index(['user_id', 'read_at']);
-        });
-
-        Schema::create('reports', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->nullable()->constrained()->setNullOnDelete();
-            $table->foreignId('video_id')->nullable()->constrained()->cascadeOnDelete();
-            $table->foreignId('reported_user_id')->nullable()->constrained('users')->cascadeOnDelete();
-            $table->string('reason');
-            $table->text('details')->nullable();
-            $table->string('status')->default('open')->index();
-            $table->timestamps();
-
-            $table->index(['user_id', 'video_id', 'reported_user_id'], 'idx_reports');
-            $table->index(['created_at', 'status'], 'idx_reports_created_at_status');
         });
 
         Schema::create('blocks', function (Blueprint $table) {
@@ -55,7 +43,6 @@ return new class {
     public function down(): void
     {
         Schema::dropIfExists('blocks');
-        Schema::dropIfExists('reports');
         Schema::dropIfExists('notifications');
         Schema::dropIfExists('video_views');
     }

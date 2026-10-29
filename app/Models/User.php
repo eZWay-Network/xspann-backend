@@ -18,14 +18,18 @@ class User extends Model
         'bio',
         'status',
         'email_verified_at',
+        'date_of_birth',
+        'onboarded_at',
     ];
 
     protected array $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'date_of_birth' => 'encrypted',
+        'onboarded_at' => 'datetime',
     ];
 
-    protected array $hidden = ['password', 'remember_token'];
+    protected array $hidden = ['password', 'remember_token', 'date_of_birth'];
 
     public function authIdentities(): HasMany
     {
@@ -40,6 +44,8 @@ class User extends Model
     public function scopeVisibleTo(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
         return $query->where('users.status', 'active')
+            ->whereNotNull('users.email_verified_at')
+            ->whereNotNull('users.onboarded_at')
             ->when(
                 $viewer,
                 fn($query) => $query

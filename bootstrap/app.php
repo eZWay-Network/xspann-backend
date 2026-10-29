@@ -48,4 +48,6 @@ return Application::create(path: dirname(__DIR__))
     ->withQueue([
         job(\App\Jobs\PruneUploads::class)->repeatDaily(),
         job([\App\Services\VideoRetry::class, 'retry'])->repeatHourly(),
-    ]);
+    ], then: static function (\Spark\Queue\Queue $queue): void {
+        $queue->pushOnce(job(\App\Jobs\FoundationMaintenance::class)->repeatEveryMinutes(5), 'privacy');
+    });

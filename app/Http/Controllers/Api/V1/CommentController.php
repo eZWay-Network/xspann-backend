@@ -34,6 +34,8 @@ class CommentController extends Controller
         $video = VideoActions::visible($video);
 
         $comment = VideoActions::transaction($video->id, function (Video $video) use ($data, $notifications) {
+            VideoActions::visible($video);
+
             $parent = isset($data['parent_id'])
                 ? Comment::visibleTo(Auth::user())
                     ->whereKey($data['parent_id'])

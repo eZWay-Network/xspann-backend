@@ -11,7 +11,7 @@ class AuthApiTest extends TestCase
 {
     public function testRegistrationLoginProfileAndLogout(): void
     {
-        $response = $this->postJson('/api/v1/auth/register', ['username' => 'alice', 'email' => 'alice@example.com', 'password' => 'password123', 'password_confirmation' => 'password123']);
+        $response = $this->postJson('/api/v1/auth/register', [...$this->enrollment(), 'username' => 'alice', 'email' => 'alice@example.com', 'password' => 'password123', 'password_confirmation' => 'password123']);
         $response->assertStatus(201)->assertJsonPath('data.user.username', 'alice');
         $this->assertTrue(password_verify('password123', User::find(1)->password));
         $this->assertSame(null, $response->json('data.token'));
@@ -32,8 +32,8 @@ class AuthApiTest extends TestCase
     public function testValidationAndInvalidCredentials(): void
     {
         $this->makeUser();
-        $this->postJson('/api/v1/auth/register', [])->assertStatus(422)->assertJsonValidationErrors(['username', 'email', 'password']);
-        $this->postJson('/api/v1/auth/register', ['username' => 'alice', 'email' => 'alice@example.com', 'password' => 'password123', 'password_confirmation' => 'different'])->assertStatus(422)->assertJsonValidationErrors(['username', 'email', 'password']);
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(), ])->assertStatus(422)->assertJsonValidationErrors(['username', 'email', 'password']);
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(), 'username' => 'alice', 'email' => 'alice@example.com', 'password' => 'password123', 'password_confirmation' => 'different'])->assertStatus(422)->assertJsonValidationErrors(['username', 'email', 'password']);
         $this->postJson('/api/v1/auth/login', ['email' => 'alice@example.com', 'password' => 'wrong'])->assertStatus(422);
         $this->postJson('/api/v1/auth/login', ['email' => 'missing@example.com', 'password' => 'password123'])->assertStatus(422);
         $this->withToken('invalid')->getJson('/api/v1/auth/me')->assertStatus(401);
@@ -43,7 +43,7 @@ class AuthApiTest extends TestCase
     {
         $this->useS3(['temporary_urls' => true]);
         $this->makeUser();
-        $this->postJson('/api/v1/auth/register', [
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(),
             'username' => 'other',
             'email' => 'other@example.com',
             'password' => 'password123',
@@ -59,7 +59,7 @@ class AuthApiTest extends TestCase
         $token = $this->token($user);
         $user->update(['status' => 'suspended']);
         $credentials = ['email' => $user->email, 'password' => 'password123'];
-        $this->postJson('/api/v1/auth/login', $credentials)->assertStatus(403);
+        $this->postJson('/api/v1/auth/login', $credentials)->assertOk()->assertJsonPath('data.restricted_access', true);
         $this->withToken($token)->getJson('/api/v1/auth/me')->assertStatus(403);
         $user->update(['status' => 'active', 'email_verified_at' => null]);
         $this->postJson('/api/v1/auth/login', $credentials)->assertStatus(403);
@@ -115,7 +115,8 @@ class AuthApiTest extends TestCase
         $unknown = $this->postJson('/api/v1/auth/forgot-password', ['email' => 'nobody@example.com'])->assertOk();
         $this->assertSame($known->json(), $unknown->json());
         $this->assertDatabaseCount('password_reset_tokens', 1);
-        $this->postJson('/api/v1/auth/forgot-password', ['email' => $user->email])->assertStatus(422);
+        $repeat = $this->postJson('/api/v1/auth/forgot-password', ['email' => $user->email])->assertOk();
+        $this->assertSame($unknown->json(), $repeat->json());
     }
 
     public function testSignedVerificationAndTampering(): void
@@ -136,7 +137,7 @@ class AuthApiTest extends TestCase
             $this->postJson('/api/v1/auth/login', [])->assertStatus(422);
         }
         $this->postJson('/api/v1/auth/login', [])->assertStatus(429);
-        $this->postJson('/api/v1/auth/register', [])->assertStatus(422);
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(), ])->assertStatus(422);
         $this->options('/api/v1/auth/login', headers: ['Origin' => 'http://localhost:3000', 'Access-Control-Request-Method' => 'POST', 'Access-Control-Request-Headers' => 'authorization,content-type'])
             ->assertStatus(204)->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
         $response = $this->options('/api/v1/auth/login', headers: ['Origin' => 'https://evil.example', 'Access-Control-Request-Method' => 'POST'])->assertStatus(403);

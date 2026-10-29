@@ -13,12 +13,49 @@ use Spark\Http\Resources\JsonResource;
 
 class AudioController extends Controller
 {
+    public function update(Request $request, Audio $audio): JsonResource
+    {
+        authorize('model.update', $audio);
+
+        $input = $request->validate([
+            'title' => ['sometimes', 'required', 'string', 'min:1', 'max:120'],
+            'reuse_allowed' => ['sometimes', 'required', 'boolean'],
+            'storage_path' => ['prohibited'],
+            'user_id' => ['prohibited'],
+            'source_video_id' => ['prohibited'],
+        ]);
+
+        PendingUploads::attach($audio->user_id, function () use ($audio, $input): void {
+            abort_if($audio->refresh()->status === 'deleted', 404, 'Audio not found.');
+            if (!$audio->update($input)) {
+                throw new \RuntimeException('Audio update failed.');
+            }
+            if ($audio->source_video_id && $input->has('reuse_allowed')) {
+                Video::whereKey($audio->source_video_id)->update(['reuse_content' => $input->boolean('reuse_allowed')]);
+            }
+        });
+
+        return AudioResource::make(Audio::withApiData($request->user())->findOrFail($audio->id));
+    }
+
+    public function destroy(Audio $audio): Response
+    {
+        authorize('model.delete', $audio);
+        $audio->update(['status' => 'deleted', 'reuse_allowed' => false]);
+        \App\Jobs\DeleteAudio::dispatch($audio->id);
+
+        return json(['data' => ['message' => 'Audio deleted']], 202);
+    }
+
     public function store(StoreAudioRequest $request): Response
     {
-        $audio = PendingUploads::locked($request->user('id'), function () use ($request): Audio {
+        \App\Services\ContentRights::apply($request->validated());
+
+        $audio = PendingUploads::attach($request->user('id'), function () use ($request): Audio {
             StorageService::validateOwner($request->validated('storage_path'), $request->user('id'), 'storage_path', 'sounds', true);
 
             return Audio::create([
+                ...$request->validated(),
                 'user_id' => $request->user('id'),
                 'title' => $request->validated('title'),
                 'storage_path' => $request->validated('storage_path'),
@@ -58,7 +95,10 @@ class AudioController extends Controller
     {
         $owner = $request->user('id') === $audio->user_id
             && $request->user('status') === 'active'
-            && $request->user()->hasVerifiedEmail();
+            && $request->user()->hasVerifiedEmail()
+            && $request->user('onboarded_at');
+
+        abort_if($audio->status === 'deleted', 404, 'Audio not found.');
 
         abort_unless(
             $owner || Audio::whereKey($audio->id)->availableTo($request->user())->exists(),

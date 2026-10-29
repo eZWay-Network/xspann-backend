@@ -23,7 +23,10 @@ class ProcessAudio implements JobInterface
     {
         Cache::lock("audios.process.$this->audioId", 3600)->block(5, function (): void {
             $audio = Audio::find($this->audioId);
-            if (!$audio || $audio->status !== 'processing') {
+            if (
+                !$audio || $audio->status !== 'processing' || $audio->moderation_status !== 'approved' || !$audio->rights_confirmed_at
+                || !\App\Models\User::visibleTo(null)->whereKey($audio->user_id)->exists()
+            ) {
                 return;
             }
 
@@ -31,6 +34,8 @@ class ProcessAudio implements JobInterface
             try {
                 $updated = Audio::whereKey($audio->id)
                     ->where('status', 'processing')
+                    ->where('moderation_status', 'approved')
+                    ->whereIn('user_id', \App\Models\User::select('users.id')->visibleTo(null))
                     ->update([...$media, 'status' => 'ready', 'updated_at' => now()]);
             } catch (Throwable $exception) {
                 MediaProcessor::cleanup($audio->user_id, [$media['storage_path']]);

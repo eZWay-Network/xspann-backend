@@ -21,11 +21,9 @@ class AccountNotifications
                 ->where('email', $user->email)
                 ->first();
 
-            abort_if(
-                $existing && Carbon::parse((string) $existing->created_at)->gt(now()->subSeconds(60)),
-                422,
-                'Please wait before retrying.'
-            );
+            if ($existing && Carbon::parse((string) $existing->created_at)->gt(now()->subSeconds(60))) {
+                return;
+            }
 
             $token = Hash::random(64);
 

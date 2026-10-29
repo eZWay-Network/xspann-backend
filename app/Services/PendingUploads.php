@@ -10,12 +10,12 @@ class PendingUploads
     public static function track(int $userId, string $path): void
     {
         try {
-            DB::table('pending_uploads')->insert([
+            DB::table('pending_uploads')->upsert([
                 'user_id' => $userId,
                 'disk' => StorageService::diskName(),
                 'path' => $path,
                 'created_at' => now(),
-            ]);
+            ], ['disk', 'path'], ['created_at']);
         } catch (\Throwable $exception) {
             // Do not leave an untracked completed upload if persistence fails.
             StorageService::disk()->delete($path);
@@ -26,6 +26,22 @@ class PendingUploads
     public static function locked(int $userId, callable $callback): mixed
     {
         return Cache::lock("media.attach.$userId", 1800)->block(10, $callback);
+    }
+
+    public static function attach(int $userId, callable $callback): mixed
+    {
+        return self::locked($userId, fn() => DB::transaction(function () use ($userId, $callback): mixed {
+            // Serialize attachment with deletion's account-state transition.
+            User::increment('id', 0, where: ['id' => $userId]);
+
+            abort_unless(
+                User::visibleTo(null)->whereKey($userId)->exists(),
+                403,
+                'This account cannot attach media.'
+            );
+
+            return $callback();
+        }));
     }
 
     public static function prune(int $cutoff): void
@@ -54,7 +70,6 @@ class PendingUploads
                         || Audio::whereIn('storage_path', $values)->exists()
                         || Video::whereIn('storage_path', $values)
                             ->orWhereIn('thumbnail_url', $values)
-                            ->orWhereIn('sound_preview_url', $values)
                             ->exists();
 
                     if (!$referenced && !$disk->delete($path)) {

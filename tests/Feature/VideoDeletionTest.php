@@ -14,8 +14,8 @@ class VideoDeletionTest extends TestCase
     {
         $owner = $this->makeUser();
         $other = $this->makeUser('other');
-        $video = $this->makeVideo($owner, ['thumbnail_url' => 'thumbnails/1/cover.jpg', 'sound_preview_url' => 'sounds/1/audio.mp3']);
-        foreach ([$video->storage_path, $video->thumbnail_url, $video->sound_preview_url] as $path) {
+        $video = $this->makeVideo($owner, ['thumbnail_url' => 'thumbnails/1/cover.jpg',]);
+        foreach ([$video->storage_path, $video->thumbnail_url] as $path) {
             storage('public')->put($this->mediaKey($path), 'file');
         }
         $comment = Comment::create(['user_id' => $other->id, 'video_id' => $video->id, 'body' => 'Hi']);
@@ -23,26 +23,28 @@ class VideoDeletionTest extends TestCase
         foreach ([Like::class, Save::class, Share::class, VideoView::class] as $model) {
             $model::create(['user_id' => $other->id, 'video_id' => $video->id]);
         }
-        Report::create(['user_id' => $other->id, 'video_id' => $video->id, 'reason' => 'Test']);
+        \App\Services\Moderation::report($other, ['video_id' => $video->id, 'reason' => 'Test']);
         $this->asUser($other)->deleteJson('/api/v1/videos/' . $video->id)->assertStatus(403);
         $this->asUser($owner)->deleteJson('/api/v1/videos/' . $video->id)->assertOk();
         $this->patchJson('/api/v1/videos/' . $video->id, ['thumbnail_url' => null])->assertStatus(404);
         $this->getJson('/api/v1/videos/' . $video->id)->assertStatus(404);
         $this->getJson('/api/v1/feed')->assertOk()->assertJsonCount(0, 'data');
         app(Queue::class)->work(once: true, timeout: 5, sleep: 0);
-        foreach (['videos', 'comments', 'comments_reacts', 'likes', 'saves', 'shares', 'video_views', 'reports'] as $table) {
+        foreach (['videos', 'comments', 'comments_reacts', 'likes', 'saves', 'shares', 'video_views'] as $table) {
             $this->assertDatabaseCount($table, 0);
         }
-        foreach ([$video->storage_path, $video->thumbnail_url, $video->sound_preview_url] as $path) {
+        foreach ([$video->storage_path, $video->thumbnail_url] as $path) {
             $this->assertFalse(storage('public')->exists($this->mediaKey($path)));
         }
+        $this->assertDatabaseCount('reports', 1);
+        $this->assertDatabaseHas('reports', ['video_id' => null]);
         (new DeleteVideo((int) $video->id))->handle();
     }
 
     public function testCleanupPreservesSharedExternalAndOtherOwnersFiles(): void
     {
         $owner = $this->makeUser();
-        $video = $this->makeVideo($owner, ['thumbnail_url' => 'thumbnails/2/other.jpg', 'sound_preview_url' => 'https://music.example.com/audio.mp3', 'status' => 'deleted']);
+        $video = $this->makeVideo($owner, ['thumbnail_url' => 'thumbnails/2/other.jpg', 'status' => 'deleted']);
         $this->makeVideo($owner); // Same video key is still referenced.
         storage('public')->put($this->mediaKey($video->storage_path), 'shared');
         storage('public')->put('thumbnails/2/other.jpg', 'other');

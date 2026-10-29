@@ -10,7 +10,7 @@ class ValidationApiTest extends TestCase
     {
         $owner = $this->makeUser();
         $this->makeUser('taken');
-        $this->postJson('/api/v1/auth/register', [
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(),
             'username' => 'taken',
             'email' => 'taken@example.com',
             'password' => 'short',
@@ -28,7 +28,7 @@ class ValidationApiTest extends TestCase
     public function testVideoValidationMatchesLaravelEditorContract(): void
     {
         $this->asUser($this->makeUser());
-        $this->postJson('/api/v1/videos', [
+        $this->postJson('/api/v1/videos', [...$this->videoRights(),
             'thumbnail_url' => 'not-a-url',
             'caption' => str_repeat('x', 2201),
             'sound_name' => str_repeat('x', 121),
@@ -60,7 +60,7 @@ class ValidationApiTest extends TestCase
     public function testOptionalRegistrationMediaIsPersistedAndReturned(): void
     {
         $this->useS3();
-        $response = $this->postJson('/api/v1/auth/register', [
+        $response = $this->postJson('/api/v1/auth/register', [...$this->enrollment(),
             'username' => 'alice',
             'email' => 'alice@example.com',
             'password' => 'password123',

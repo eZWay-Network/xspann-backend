@@ -9,14 +9,16 @@ return new class {
         Schema::create('videos', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('storage_path');
-            $table->string('thumbnail_url')->nullable();
+            $table->string('storage_path', 2048);
+            $table->string('thumbnail_url', 2048)->nullable();
             $table->text('caption')->nullable();
-            $table->string('sound_name')->nullable();
-            $table->string('sound_artist')->nullable();
 
             $table->string('location_name')->nullable();
             $table->string('visibility')->default('public');
+            $table->boolean('reuse_content')->default(false);
+            $table->string('rights_version', 40)->nullable();
+            $table->timestamp('rights_confirmed_at')->nullable();
+            $table->string('moderation_status', 20)->default('approved')->index();
             $table->boolean('high_quality_upload')->default(true);
             $table->decimal('trim_start', 8, 2)->nullable();
             $table->decimal('trim_end', 8, 2)->nullable();
@@ -24,9 +26,6 @@ return new class {
             $table->string('crop_mode')->default('fit');
             $table->string('text_overlay')->nullable();
             $table->boolean('original_audio_muted')->default(false);
-            $table->string('sound_provider')->nullable();
-            $table->string('sound_external_id')->nullable();
-            $table->string('sound_preview_url', 2048)->nullable();
 
             $table->json('cut_points')->nullable();
             $table->json('filter_settings')->nullable();
@@ -40,11 +39,11 @@ return new class {
             $table->unsignedBigInteger('saves_count')->default(0);
             $table->unsignedBigInteger('shares_count')->default(0);
 
-            $table->timestamp('scheduled_at')->nullable();
             $table->timestamp('pinned_at')->nullable()->index();
             $table->timestamps();
 
             $table->index(['status', 'created_at']);
+            $table->index(['status', 'id'], 'idx_videos_feed');
             $table->index(['user_id', 'status']);
             $table->index(['user_id', 'pinned_at']);
         });
@@ -64,6 +63,7 @@ return new class {
             $table->foreignId('video_id')->constrained()->cascadeOnDelete();
             $table->foreignId('parent_id')->nullable()->constrained('comments')->cascadeOnDelete();
             $table->text('body');
+            $table->string('moderation_status', 20)->default('approved')->index();
             $table->timestamp('created_at')->useCurrent();
 
             $table->index(['video_id', 'created_at']);

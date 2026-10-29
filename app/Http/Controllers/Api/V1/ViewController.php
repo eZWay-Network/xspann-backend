@@ -14,6 +14,8 @@ class ViewController extends Controller
         VideoActions::visible($video);
 
         $created = VideoActions::transaction($video->id, function (Video $video) use ($request): bool {
+            VideoActions::visible($video);
+
             $user = $request->user();
             $ipHash = hash('sha256', (string) $request->ip());
             $userAgentHash = hash('sha256', (string) $request->useragent());

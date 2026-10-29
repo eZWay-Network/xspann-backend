@@ -14,6 +14,10 @@ return new class {
             $table->string('storage_path', 2048);
             $table->string('origin', 20)->default('upload');
             $table->string('status', 20)->default('processing');
+            $table->boolean('reuse_allowed')->default(false);
+            $table->string('rights_version', 40)->nullable();
+            $table->timestamp('rights_confirmed_at')->nullable();
+            $table->string('moderation_status', 20)->default('approved')->index();
             $table->unsignedInteger('duration')->nullable();
             $table->timestamps();
             $table->unique('source_video_id');
@@ -46,10 +50,12 @@ return new class {
 
         Schema::create('pending_uploads', function (Blueprint $table): void {
             $table->id();
-            $table->unsignedBigInteger('user_id');
+            // Cleanup ledger survives owner removal until abandoned objects are pruned.
+            $table->unsignedBigInteger('user_id')->index();
             $table->string('disk', 80);
             $table->string('path', 255);
             $table->timestamp('created_at')->index();
+            $table->unique(['disk', 'path']);
         });
     }
 
