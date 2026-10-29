@@ -5,6 +5,7 @@
 .idea
 .DS_Store
 vendor
+docs
 node_modules
 composer.lock
 package-lock.json

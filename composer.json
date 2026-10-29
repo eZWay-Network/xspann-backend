@@ -8,7 +8,8 @@
         "php": ">=8.2",
         "tinymvc/tinycore": "^4.0",
         "phpmailer/phpmailer": "^6.9",
-        "voku/portable-ascii": "^2.0"
+        "voku/portable-ascii": "^2.0",
+        "tinymvc/relay": "^1.0"
     },
     "authors": [
         {
