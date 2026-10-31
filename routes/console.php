@@ -124,3 +124,14 @@ command('billing:allocate', function (Prompt $prompt, array $args): void {
     \App\Services\Billing\Adjustments::allocate($id, $args['allocation'] ?? '', $args['reason'] ?? '');
     $prompt->message('Adjustment allocation recorded and audited.');
 })->description('Record an explicit refund allocation or release a reviewed dispute hold');
+
+
+command('communications:deliver', function (Prompt $prompt): void {
+    (new \App\Jobs\DeliverAnnouncements())->handle();
+    $prompt->message('Pending announcement recipients checked.');
+})->description('Recover durable announcement deliveries');
+
+command('realtime:publish', function (Prompt $prompt): void {
+    (new \App\Jobs\PublishRealtime())->handle();
+    $prompt->message('Pending realtime hints checked.');
+})->description('Publish committed outbox hints, retaining failures for retry');

@@ -23,6 +23,18 @@ class Notification extends Model
         'read_at' => 'datetime'
     ];
 
+    public function save(bool $forceCreate = false): bool
+    {
+        return \Spark\Facades\DB::transaction(function () use ($forceCreate): bool {
+            $saved = parent::save($forceCreate);
+            if ($saved && $this->wasCreated()) {
+                \App\Services\Realtime::record((int) $this->user_id, 'notification.created', (int) $this->id, 1);
+            }
+
+            return $saved;
+        });
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

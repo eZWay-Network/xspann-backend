@@ -8,6 +8,29 @@ use Tests\TestCase;
 class ApiContractTest extends TestCase
 {
     private const ROUTES = [
+        'GET /api/v1/me/communication-preferences',
+        'PATCH /api/v1/me/communication-preferences',
+        'GET /api/v1/conversations',
+        'POST /api/v1/conversations',
+        'GET /api/v1/conversations/{conversation}',
+        'GET /api/v1/conversations/{conversation}/messages',
+        'POST /api/v1/conversations/{conversation}/messages',
+        'PATCH /api/v1/conversations/{conversation}/read',
+        'PATCH /api/v1/conversations/{conversation}/preferences',
+        'GET /api/v1/artists/{artist}/update-subscription',
+        'PUT /api/v1/artists/{artist}/update-subscription',
+        'GET /api/v1/me/artist/announcements',
+        'POST /api/v1/me/artist/announcements',
+        'GET /api/v1/me/artist/announcements/{announcement}',
+        'PATCH /api/v1/me/artist/announcements/{announcement}',
+        'DELETE /api/v1/me/artist/announcements/{announcement}',
+        'POST /api/v1/me/artist/announcements/{announcement}/send',
+        'GET /api/v1/me/announcements',
+        'GET /api/v1/me/announcements/{announcement}',
+        'PATCH /api/v1/me/announcements/{announcement}/read',
+        'GET /api/v1/notifications/unread-count',
+        'POST /api/v1/realtime/session',
+        'POST /api/v1/broadcasting/auth',
         'GET /api/v1/plans',
         'POST /api/v1/webhooks/stripe',
         'GET /api/v1/media/{token}',
@@ -182,7 +205,7 @@ class ApiContractTest extends TestCase
                 if ($entry['status'] === '204' || ($entry['responseType'] ?? null) === 'binary') {
                     $this->assertSame(null, $entry['response']);
                 } else {
-                    $this->assertTrue(array_key_exists(match ($entry['id']) { 'privacycontroller-download' => 'account', 'billingcontroller-webhook' => 'received', default => 'data' }, $entry['response']));
+                    $this->assertTrue(array_key_exists(match ($entry['id']) { 'privacycontroller-download' => 'account', 'billingcontroller-webhook' => 'received', 'realtimecontroller-authorize' => 'auth', default => 'data' }, $entry['response']));
                 }
                 foreach ($entry['parameters'] as $parameter) {
                     $this->assertTrue(in_array($parameter['in'], ['path', 'query', 'body', 'header'], true));
@@ -193,7 +216,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(125, count($entries));
+        $this->assertSame(148, count($entries));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
         $this->assertSame('binary', $entries['releasecontroller-preview']['responseType']);
         foreach ([

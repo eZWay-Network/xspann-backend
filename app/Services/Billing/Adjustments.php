@@ -132,6 +132,10 @@ class Adjustments
         }
 
         DB::table('billing_paid_periods')->where('invoice_id', $invoice->id)->update($updates);
+        $owner = DB::table('billing_subscriptions')->where('id', $invoice->subscription_id)->value('user_id');
+        if ($owner) {
+            \App\Services\Realtime::record((int) $owner, 'entitlements.updated', (int) $owner, 0);
+        }
     }
 
     public static function allocate(int $id, string $allocation, string $reason): void

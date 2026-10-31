@@ -4,5 +4,8 @@ namespace App\Http\Controllers;
 
 abstract class Controller
 {
-    // This is an abstract class
+    protected function privateJson(array $data, int $status = 200): \Spark\Http\Response
+    {
+        return json($data, $status)->setHeader('Cache-Control', 'no-store');
+    }
 }

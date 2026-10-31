@@ -9,9 +9,15 @@ use function in_array;
 
 class Moderation
 {
-    public const TARGETS = ['reported_user_id' => 'user', 'video_id' => 'video', 'audio_id' => 'audio', 'comment_id' => 'comment', 'playlist_id' => 'playlist'];
+    public const TARGETS = ['reported_user_id' => 'user', 'video_id' => 'video', 'audio_id' => 'audio', 'comment_id' => 'comment', 'playlist_id' => 'playlist', 'message_id' => 'message', 'announcement_id' => 'announcement'];
 
     public static function report(User $reporter, array $input): Report
+    {
+        // Evidence authorization, capture and persistence must precede a competing privacy/retention deletion.
+        return Communications::transaction(fn() => self::captureReport($reporter, $input));
+    }
+
+    private static function captureReport(User $reporter, array $input): Report
     {
         $targets = array_filter(array_intersect_key($input, self::TARGETS), fn($id) => $id !== null);
 
@@ -27,6 +33,8 @@ class Moderation
             'audio' => Audio::availableTo($reporter)->findOrFail($id),
             'comment' => Comment::visibleTo($reporter)->findOrFail($id),
             'playlist' => ArtistPlaylist::visibleTo($reporter)->findOrFail($id),
+            'message' => Conversations::reportedMessage($id, $reporter->id),
+            'announcement' => Announcements::delivered($id, $reporter->id, true),
         };
 
         if ($type === 'comment') {
@@ -47,8 +55,11 @@ class Moderation
             'audio' => ['title', 'storage_path', 'source_video_id', 'rights_version', 'rights_confirmed_at'],
             'comment' => ['body', 'video_id', 'parent_id'],
             'playlist' => ['artist_id', 'title', 'description', 'genre_id', 'category', 'visibility'],
+            'message' => ['conversation_id', 'body', 'created_at'],
+            'announcement' => ['artist_id', 'title', 'body', 'video_id'],
         } as $key) {
-            $snapshot[$key] = $target->$key;
+            $snapshot[$key] = $type === 'announcement' && in_array($key, ['title', 'body'], true)
+                ? \Spark\Facades\Hash::decrypt($target->$key) : $target->$key;
         }
 
         return Report::create([
@@ -67,7 +78,7 @@ class Moderation
 
     public static function decide(int $reportId, User $staff, array $input): array
     {
-        return Cache::lock('moderation.decisions', 30)->block(5, fn() => DB::transaction(function () use ($reportId, $staff, $input): array {
+        return Cache::lock('moderation.decisions', 30)->block(5, fn() => Communications::transaction(function () use ($reportId, $staff, $input): array {
             $report = Report::whereKey($reportId)->lockForUpdate()->firstOrFail();
             $restoring = $input['action'] === 'restore';
 
@@ -179,6 +190,32 @@ class Moderation
         if ($type === 'user') {
             User::whereKey($id)->whereIn('status', ['active', 'suspended'])->update(['status' => $restricted ? 'suspended' : 'active']);
             DB::table('staff_sessions')->where('user_id', $id)->delete();
+            if ($restricted) {
+                Realtime::retire($id);
+            }
+            return;
+        }
+
+        if (in_array($type, ['message', 'announcement'], true)) {
+            $table = $type === 'message' ? 'messages' : 'announcements';
+            $row = DB::table($table)->where('id', $id)->first();
+            $status = $restricted ? 'restricted' : 'approved';
+            if (!$row || $row->moderation_status === $status) {
+                return;
+            }
+            DB::table($table)->where('id', $id)->update(['moderation_status' => $status]);
+            if ($type === 'message') {
+                DB::table('conversations')->where('id', $row->conversation_id)->update(['version' => DB::raw('version + 1')]);
+                $version = (int) DB::table('conversations')->where('id', $row->conversation_id)->value('version');
+                foreach (DB::table('conversation_participants')->where('conversation_id', $row->conversation_id)->pluck('user_id') as $recipient) {
+                    Realtime::record((int) $recipient, 'conversation.updated', $row->conversation_id, $version);
+                }
+            } else {
+                DB::table('announcements')->where('id', $id)->update(['version' => DB::raw('version + 1')]);
+                foreach (DB::table('announcement_deliveries')->where('announcement_id', $id)->where('status', 'delivered')->pluck('user_id') as $recipient) {
+                    Realtime::record((int) $recipient, 'notifications.updated', (int) $recipient, 0);
+                }
+            }
             return;
         }
 
@@ -198,7 +235,7 @@ class Moderation
 
     public static function appeal(User $user, int $decisionId, string $explanation): array
     {
-        return Cache::lock('moderation.decisions', 30)->block(5, fn() => DB::transaction(function () use ($user, $decisionId, $explanation): array {
+        return Cache::lock('moderation.decisions', 30)->block(5, fn() => Communications::transaction(function () use ($user, $decisionId, $explanation): array {
             $decision = DB::table('moderation_decisions')->where('id', $decisionId)->where('subject_user_id', $user->id)->first();
 
             abort_unless(
@@ -236,7 +273,7 @@ class Moderation
 
     public static function decideAppeal(int $appealId, User $staff, array $input): array
     {
-        return Cache::lock('moderation.decisions', 30)->block(5, fn() => DB::transaction(function () use ($appealId, $staff, $input): array {
+        return Cache::lock('moderation.decisions', 30)->block(5, fn() => Communications::transaction(function () use ($appealId, $staff, $input): array {
             $appeal = DB::table('moderation_appeals')->where('id', $appealId)->lockForUpdate()->first();
 
             abort_unless(

@@ -300,6 +300,9 @@ class Reconciliation
                     'created_at' => Billing::timestamp(),
                     'updated_at' => Billing::timestamp(),
                 ], ['invoice_id'], ['invoice_id']);
+                if ($subscription->user_id && !$existing) {
+                    \App\Services\Realtime::record($subscription->user_id, 'entitlements.updated', $subscription->user_id, 0);
+                }
                 foreach ($adjustments as $kind => $objects) {
                     foreach ($objects as $object) {
                         app(Adjustments::class)->apply($record, $kind, $object, $charge);

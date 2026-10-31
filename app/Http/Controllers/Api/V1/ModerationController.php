@@ -34,9 +34,11 @@ class ModerationController extends Controller
 
     public function report(Request $request, Report $report): Response
     {
+        abort_if(in_array($request->user('id'), [$report->user_id, $report->subject_user_id], true), 403, 'An independent staff member must review this evidence.');
+
         AuditTrail::record('moderation.evidence_viewed', ['report_id' => $report->id], $request->user('id'), 'staff');
 
-        return json([
+        return $this->privateJson([
             'data' => [
                 'id' => $report->id,
                 'target_type' => $report->target_type,

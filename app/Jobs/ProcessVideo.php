@@ -86,6 +86,8 @@ class ProcessVideo implements JobInterface
                             Video::whereKey($video->id)->update(['audio_id' => $audio->id]);
                         }
 
+                        \App\Services\Realtime::record($video->user_id, 'release.updated', $video->id, $current->version + 1);
+
                         return true;
                     });
                 });
@@ -100,8 +102,6 @@ class ProcessVideo implements JobInterface
 
     public function failed(Throwable $exception): void
     {
-        Video::whereKey($this->videoId)
-            ->where('status', Video::STATUS_PROCESSING)
-            ->update(['status' => Video::STATUS_FAILED, 'processing_state' => 'failed', 'release_error' => 'encoding_failed', 'updated_at' => now()]);
+        Releases::processingState($this->videoId, [Video::STATUS_PROCESSING], Video::STATUS_FAILED, 'encoding_failed');
     }
 }

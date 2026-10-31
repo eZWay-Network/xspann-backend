@@ -36,6 +36,8 @@ class PrivacyRequests
 
     private static function create(User $user, string $kind): object
     {
+        Communications::lock();
+
         // A real row write also serializes this path on SQLite.
         DB::table('users')->where('id', $user->id)->update(['updated_at' => now()->toDateTimeString()]);
         $user->refresh();
@@ -68,6 +70,7 @@ class PrivacyRequests
 
         if ($kind === 'deletion') {
             $user->update(['status' => 'deleting']);
+            Realtime::retire($user->id);
             DB::table('billing_subscriptions')->where('user_id', $user->id)->update(['deletion_requested_at' => \App\Services\Billing\Billing::timestamp()]);
             foreach (['jwt_access_tokens', 'staff_sessions', 'account_action_tokens'] as $table) {
                 DB::table($table)->where('user_id', $user->id)->delete();
@@ -160,6 +163,9 @@ class PrivacyRequests
         }
 
         DB::transaction(function () use ($user, $record): void {
+            Communications::lock();
+            CommunicationPrivacy::deleting($user->id);
+
             // Remove personal activity snapshots retained in other users' notification lists.
             $lastId = 0;
             do {
@@ -267,6 +273,8 @@ class PrivacyRequests
                 ->select(['date', ...ArtistStatistics::METRICS, 'collected_at'])
                 ->where('artist_id', $artist->id)->orderBy('date')->get()->toArray();
         }
+
+        $data['communications'] = CommunicationPrivacy::export($user->id);
 
         $data['subscription'] = \App\Services\Billing\Billing::subscriptionData($user->id);
         $data['billing_invoices'] = DB::table('billing_invoices')->select(['invoice_id', 'status', 'amount_paid', 'amount_due', 'currency', 'issued_at'])

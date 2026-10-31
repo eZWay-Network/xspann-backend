@@ -1,6 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\V1\{
+    CommunicationController,
+    ConversationController,
+    AnnouncementController,
+    RealtimeController,
     BillingController,
     ReleaseController,
     MediaController,
@@ -101,6 +105,30 @@ Route::prefix('v1')->group(function () {
     Route::post('/videos/{video}/view', [ViewController::class, 'store'])->middleware('throttle:120');
 
     Route::middleware('auth')->group(function (): void {
+        Route::get('/me/communication-preferences', [CommunicationController::class, 'preferences']);
+        Route::patch('/me/communication-preferences', [CommunicationController::class, 'updatePreferences']);
+        Route::get('/conversations', [ConversationController::class, 'index']);
+        Route::post('/conversations', [ConversationController::class, 'store']);
+        Route::get('/conversations/{conversation}', [ConversationController::class, 'show']);
+        Route::get('/conversations/{conversation}/messages', [ConversationController::class, 'messages']);
+        Route::post('/conversations/{conversation}/messages', [ConversationController::class, 'send']);
+        Route::patch('/conversations/{conversation}/read', [ConversationController::class, 'read']);
+        Route::patch('/conversations/{conversation}/preferences', [ConversationController::class, 'preferences']);
+        Route::get('/artists/{artist}/update-subscription', [CommunicationController::class, 'subscription']);
+        Route::put('/artists/{artist}/update-subscription', [CommunicationController::class, 'subscribe']);
+        Route::get('/me/artist/announcements', [AnnouncementController::class, 'index']);
+        Route::post('/me/artist/announcements', [AnnouncementController::class, 'store']);
+        Route::get('/me/artist/announcements/{announcement}', [AnnouncementController::class, 'show']);
+        Route::patch('/me/artist/announcements/{announcement}', [AnnouncementController::class, 'update']);
+        Route::delete('/me/artist/announcements/{announcement}', [AnnouncementController::class, 'destroy']);
+        Route::post('/me/artist/announcements/{announcement}/send', [AnnouncementController::class, 'send']);
+        Route::get('/me/announcements', [AnnouncementController::class, 'inbox']);
+        Route::get('/me/announcements/{announcement}', [AnnouncementController::class, 'received']);
+        Route::patch('/me/announcements/{announcement}/read', [AnnouncementController::class, 'read']);
+        Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::post('/realtime/session', [RealtimeController::class, 'session'])->middleware('throttle:60');
+        Route::post('/broadcasting/auth', [RealtimeController::class, 'authorize'])->middleware('throttle:120');
+
         Route::post('/billing/portal', [BillingController::class, 'portal'])->middleware('throttle:10');
         Route::get('/me/entitlements', [BillingController::class, 'entitlements']);
         Route::post('/billing/checkout', [BillingController::class, 'checkout'])->middleware('throttle:10');

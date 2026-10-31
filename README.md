@@ -21,9 +21,29 @@ php spark queue:work --sleep=1
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
 
+## Step 4 messaging and artist updates
+
+Step 4 adds free one-to-one text conversations for eligible mutual followers, independent in-app artist consent, Pro announcements, message/announcement reporting, privacy cleanup, and Relay update hints with durable REST recovery. The generated reference at `/` covers **148 versioned operations**. Native application code is unchanged; live sales stay disabled pending Step 5 and the sales-readiness review.
+
+Apply the new communications migration with `php spark migrate`, keeping the current database and APP_KEY. **The working database was not migrated or reset.** Conversation/message uniqueness, monotonic read cursors and per-user limits are enforced in the database. Announcements atomically reserve four accepted broadcasts per verified Pro paid period and reject audiences above 1,000 before quota use. Recipient snapshots record consent revisions; opting back in never revives old campaigns. Retries cannot duplicate messages, quota reservations, or announcement deliveries.
+
+Alongside existing workers, supervise:
+
+```sh
+php spark queue:work --queue=notifications --sleep=1
+php spark queue:work --queue=realtime --sleep=1
+php spark relay:start
+```
+
+Configure the Relay variables in `.env.example`. Backend publishing stays private; production clients use HTTPS/WSS. `POST /realtime/session` registers an opaque channel for the current JWT. `/broadcasting/auth` authorizes only that exact login/channel and returns raw Pusher authorization JSON. Logout/refresh retires the channel. Events contain IDs/types/times/versions only; clients reload REST inbox/unread state and fetch messages using `after_id` after reconnect. The outbox retries Relay failures independently of accepted sends. `communications:deliver`, `realtime:publish` and `relay:restart` provide operator recovery.
+
+Messages and announcement bodies are encrypted in the database, not end-to-end encrypted. Shared conversation content is removed when either participant is deleted; encrypted report evidence retains the existing restricted/audited lifecycle. Default communication retention is 365 days, outbox hints seven days. Current consent remains separate from follows. No fan email/contact export, email broadcasts, push, attachments, group chat or typing/presence was added. New private response endpoints send `Cache-Control: no-store`.
+
+See [Step 4 review](docs/STEP_4_REVIEW.md) for exact contracts, retention and worker/deployment details, and [manual HTTP collection](docs/STEP_4_REVIEW.http) for the three-user chat and independent consent walkthrough. Final regression run: **331 tests passed, 5,275 assertions, no failures or skips**. Tests include concurrent HTTP contenders, the actual 1,000/1,001 audience boundary, partial fan-out recovery and a real local Relay subscription/restart/REST catch-up. Production TLS/proxy, chosen database/shared-lock topology and traffic capacity still require deployment verification.
+
 ## Step 3 billing and releases
 
-Step 3 adds Stripe Checkout, invoice-based entitlements, subscription cancellation/resume, a restricted billing portal, invoice history, signed webhook processing, and recovery commands. Starter is $4.99/month and Pro is $19.99/month in USD. Test mode is available after configuration; live sales remain disabled until the later paid benefits and sales review are complete. Native application code is unchanged. The generated reference at `/` now covers **125 versioned API operations**.
+Step 3 adds Stripe Checkout, invoice-based entitlements, subscription cancellation/resume, a restricted billing portal, invoice history, signed webhook processing, and recovery commands. Starter is $4.99/month and Pro is $19.99/month in USD. Test mode is available after configuration; live sales remain disabled until the later paid benefits and sales review are complete. Native application code is unchanged. The Step 3 checkpoint documented 125 versioned operations.
 
 Draft uploads use `publication_intent=draft` on both upload and post creation. Source video, render, cover and extracted sound stay on `RELEASE_FILESYSTEM_DISK` (private `local` by default), with authenticated owner previews. Artist release endpoints provide versioned edits, immediate publication and Pro scheduling with explicit offsets/IANA timezones. A minute worker catches up after downtime, rechecks current eligibility and pauses schedules when paid access ends.
 
@@ -305,7 +325,7 @@ Point `public/uploads` (or the server alias) only at the configured public disk 
 
 ## Endpoints
 
-The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 125 versioned operations, including account lifecycle, moderation, artists, playlists, billing and releases. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
+The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 148 versioned operations, including account lifecycle, moderation, artists, playlists, billing, releases, messaging, announcements and realtime. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
 
 | Method | Path |
 | --- | --- |
@@ -405,7 +425,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 125 versioned API operations and middleware assignments. |
+| `routes/api.php` | The 148 versioned API operations and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -429,7 +449,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover the 125-operation route/reference contract, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Artist coverage includes enrollment, capability limits, concurrent playlist edits, statistics, moderation and privacy integration. Billing/release coverage includes raw signatures, replay/reordering, lost-response recovery, refund/dispute allocation, renewal/account deletion, concurrent purchases/publication, private local/S3 draft transport, UTC/DST scheduling, downgrade, rights changes and queue failures. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover the 148-operation route/reference contract, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Artist coverage includes enrollment, capability limits, concurrent playlist edits, statistics, moderation and privacy integration. Billing/release coverage includes raw signatures, replay/reordering, lost-response recovery, refund/dispute allocation, renewal/account deletion, concurrent purchases/publication, private local/S3 draft transport, UTC/DST scheduling, downgrade, rights changes and queue failures. Communication coverage includes concurrent mutual-follow chat, consent revisions, atomic announcement quotas, retry-safe fan-out, token-bound Relay sessions, real reconnect recovery, named recurring workers and report/privacy lifecycle. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 

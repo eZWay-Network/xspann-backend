@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\{Block, Follow, User};
-use Spark\Facades\DB;
 use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class BlockController extends Controller
@@ -27,7 +26,7 @@ class BlockController extends Controller
     {
         abort_if($user->is($request->user()), 422, 'Users cannot block themselves.');
 
-        DB::transaction(function () use ($request, $user) {
+        \App\Services\Communications::transaction(function () use ($request, $user) {
             Block::query()
                 ->insertOrIgnore([
                     'blocker_id' => $request->user('id'),
@@ -45,9 +44,9 @@ class BlockController extends Controller
 
     public function destroy(Request $request, User $user): Response
     {
-        Block::where('blocker_id', $request->user('id'))
+        \App\Services\Communications::transaction(fn() => Block::where('blocker_id', $request->user('id'))
             ->where('blocked_id', $user->id)
-            ->delete();
+            ->delete());
 
         return json(['data' => ['blocked' => false]]);
     }

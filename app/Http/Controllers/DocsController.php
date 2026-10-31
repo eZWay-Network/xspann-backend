@@ -40,6 +40,7 @@ class DocsController extends Controller
             $entry['parameters'] = [];
             $entry['headers'] = match ($key) {
                 'BillingController@checkout' => ['Idempotency-Key' => '<unique-purchase-key>'],
+                'AnnouncementController@send' => ['Idempotency-Key' => '<unique-broadcast-key>'],
                 'BillingController@webhook' => ['Stripe-Signature' => '<signature-over-exact-raw-body>'],
                 default => [],
             };
@@ -167,6 +168,18 @@ class DocsController extends Controller
             if ($entry['status'] === '204') {
                 $entry['response'] = null;
             }
+            if ($entry['cursor'] ?? false) {
+                $entry['response'] = ['data' => [$response], 'meta' => ['limit' => 20, 'next_cursor' => null]];
+                if ($key === 'ConversationController@index') {
+                    $entry['response']['meta']['unread_count'] = 1;
+                }
+            }
+            if ($key === 'ConversationController@messages') {
+                $entry['response'] = ['data' => [$response], 'meta' => ['limit' => 20, 'has_more' => false, 'next_before_id' => null, 'next_after_id' => null]];
+            }
+            if ($key === 'RealtimeController@authorize') {
+                $entry['response'] = $response;
+            }
             if ($key === 'BillingController@webhook') {
                 $entry['response'] = $response;
                 $entry['contentType'] = 'application/json';
@@ -181,7 +194,7 @@ class DocsController extends Controller
             }
             if ($key === 'ModerationController@reports') {
                 $entry['parameters'][] = ['name' => 'status', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'open or resolved'];
-                $entry['parameters'][] = ['name' => 'type', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'user, video, audio, comment or playlist'];
+                $entry['parameters'][] = ['name' => 'type', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'user, video, audio, comment, playlist, message or announcement'];
             }
             if ($key === 'ModerationController@appeals') {
                 $entry['parameters'][] = ['name' => 'status', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'open (default), upheld or overturned'];
@@ -276,7 +289,7 @@ class DocsController extends Controller
             $add('BlockController@' . $action, 'Safety', $state ? 'Block an account' : 'Unblock an account', $state ? 'Cannot block yourself (422). Removes follow relationships in both directions. Blocked relationships are hidden from visibility-filtered profiles, videos and comments.' : 'Removes your block. Previously removed follows are not restored.', ['blocked' => $state], $state ? '201' : '200');
         }
         $add('BlockController@index', 'Safety', 'List blocked accounts', 'Accounts you have blocked, newest accounts first.', '$User', '200', [], [], 20);
-        $add('ReportController@store', 'Safety', 'Report content or an account', 'Provide exactly one of video_id, reported_user_id, audio_id, comment_id or playlist_id. The target must be visible to you; playlists must be public and belong to an eligible artist. You cannot report yourself or your own content. Evidence is encrypted and retained for authorized review.', ['id' => 1, 'status' => 'open'], '201', ['playlist_id' => ['nullable', 'integer', 'min:1'], 'audio_id' => ['nullable', 'integer', 'min:1'], 'comment_id' => ['nullable', 'integer', 'min:1'], 'video_id' => ['nullable', 'integer', 'min:1'], 'reported_user_id' => ['nullable', 'integer', 'min:1'], 'reason' => ['required', 'string', 'max:255'], 'details' => ['nullable', 'string', 'max:2000']], ['video_id' => 1, 'reason' => 'Spam', 'details' => 'Repeated promotional content.']);
+        $add('ReportController@store', 'Safety', 'Report content or an account', 'Provide exactly one of video_id, reported_user_id, audio_id, comment_id, playlist_id, message_id or announcement_id. Only participants may report messages; only delivered recipients may report announcements, including after a block. Other targets must be visible to you; playlists must be public and belong to an eligible artist. You cannot report yourself or your own content. Evidence is encrypted and retained for authorized review.', ['id' => 1, 'status' => 'open'], '201', ['message_id' => ['nullable', 'integer', 'min:1'], 'announcement_id' => ['nullable', 'integer', 'min:1'], 'playlist_id' => ['nullable', 'integer', 'min:1'], 'audio_id' => ['nullable', 'integer', 'min:1'], 'comment_id' => ['nullable', 'integer', 'min:1'], 'video_id' => ['nullable', 'integer', 'min:1'], 'reported_user_id' => ['nullable', 'integer', 'min:1'], 'reason' => ['required', 'string', 'max:255'], 'details' => ['nullable', 'string', 'max:2000']], ['video_id' => 1, 'reason' => 'Spam', 'details' => 'Repeated promotional content.']);
         $add('AudioSaveController@index', 'Audio library', 'List your saved sounds', 'Available saved sounds for the signed-in account, newest saves first. Hidden or unavailable sounds are omitted; saving does not bypass source privacy.', '$Audio', '200', [], [], 20);
         $add('AudioSaveController@store', 'Audio library', 'Save a sound', 'Saves an available sound to your library. First save returns 201; repeated saves return 200 without duplicates.', ['saved' => true, 'created' => true], '201 / 200');
         $add('AudioSaveController@destroy', 'Audio library', 'Unsave a sound', 'Removes only your saved reference, even when the sound is no longer available. Repeated removals return the same response.', ['saved' => false]);
@@ -301,7 +314,7 @@ class DocsController extends Controller
         $chunkExample = ['upload_id' => '123e4567-e89b-42d3-a456-426614174000', 'total_chunks' => 1, 'filename' => 'example.mp4', 'content_type' => 'video/mp4', 'total_size' => 1024];
         $add('UploadController@videoChunk', 'Uploads', 'Upload a video chunk', 'Send multipart/form-data. Generate one UUID per upload. Chunk index is zero-based and less than total_chunks. Chunks are at most 2 MiB; total video size is at most 524288000 bytes. Reusing an index replaces that chunk. Keep all session metadata identical.', ['upload_method' => 'chunked', 'upload_id' => $chunkExample['upload_id'], 'chunk_index' => 0, 'total_chunks' => 1], '201', ChunkUploads::rules(true), $chunkExample + ['chunk_index' => 0, 'chunk' => '@/path/to/chunk']);
         $add('UploadController@completeVideoChunks', 'Uploads', 'Complete a chunked upload', 'Assembles the signed-in user’s upload. All chunks must exist; total_size and metadata must match exactly and assembled media must have a supported MIME type. Completion removes the session; it is not repeatable. Then submit storage_path to POST /videos.', ['upload_method' => 'chunked', 'storage_path' => 'public:videos/1/example.mp4', 'video_url' => 'https://media.example.com/videos/1/example.mp4'], '201', ChunkUploads::rules(), $chunkExample);
-        return $result + \App\Http\FoundationApiReference::catalog() + \App\Http\ArtistApiReference::catalog() + \App\Http\BillingReleaseApiReference::catalog();
+        return $result + \App\Http\FoundationApiReference::catalog() + \App\Http\ArtistApiReference::catalog() + \App\Http\BillingReleaseApiReference::catalog() + \App\Http\CommunicationApiReference::catalog();
     }
 
     public static function schemas(): array

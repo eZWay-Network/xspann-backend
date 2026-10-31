@@ -88,8 +88,8 @@ class ArtistApiReference
             'period' => ['from' => '2026-10-02', 'to' => '2026-10-31'], 'daily' => [],
             'metric_definitions' => ['followers' => 'Current account follow relationships, not consent.', 'videos' => 'Currently published approved owned videos.', 'views' => 'Six-hour deduplicated records.', 'engagement' => 'Current stored engagement totals.', 'daily' => 'Last collected cumulative snapshot per UTC day, not daily events.'],
         ], errors: $errors);
-        $add('ArtistController@fans', 'Your fan summary', 'Existing follow total and separate consent total. Consent count is zero and unavailable until Step 4; follows never create consent. Paid observed_follower_change compares first and last observed snapshots in the 30-day window and returns their timestamps; null when unavailable or insufficient observations. No private contact list.', [
-            'followers_count' => 0, 'announcement_subscribers_count' => 0, 'announcement_subscriptions_available' => false,
+        $add('ArtistController@fans', 'Your fan summary', 'Existing follow total and separate consent total. Consent count is the currently eligible in-app audience; follows never create consent. Paid observed_follower_change compares first and last observed snapshots in the 30-day window and returns their timestamps; null when unavailable or insufficient observations. No private contact list.', [
+            'followers_count' => 0, 'announcement_subscribers_count' => 0, 'announcement_subscriptions_available' => true,
             'data_since' => $date, 'trends_available' => false, 'period' => ['from' => '2026-10-02', 'to' => '2026-10-31'],
             'observed_follower_change' => null, 'change_from' => null, 'change_to' => null,
         ], errors: $errors);

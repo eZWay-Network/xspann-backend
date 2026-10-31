@@ -116,8 +116,8 @@ class ArtistStatistics
 
         return [
             'followers_count' => $overview['totals']['followers'],
-            'announcement_subscribers_count' => 0,
-            'announcement_subscriptions_available' => false,
+            'announcement_subscribers_count' => Announcements::audience($artist->id)->count(),
+            'announcement_subscriptions_available' => true,
             'data_since' => $overview['data_since'],
             'trends_available' => $overview['trends_available'],
             'period' => $overview['period'],

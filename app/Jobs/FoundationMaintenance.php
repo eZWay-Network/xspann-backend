@@ -14,6 +14,8 @@ class FoundationMaintenance implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\CommunicationPrivacy::maintain();
+
         foreach (['account_action_tokens', 'staff_sessions'] as $table) {
             DB::table($table)->where('expires_at', '<=', now()->toDateTimeString())->delete();
         }

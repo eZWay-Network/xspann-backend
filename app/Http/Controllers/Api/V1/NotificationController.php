@@ -37,9 +37,8 @@ class NotificationController extends Controller
     {
         abort_unless($notification->user_id === $request->user('id'), 404, 'Notification not found.');
 
-        if (!$notification->read_at) {
-            $notification->update(['read_at' => now()]);
-        }
+        \App\Services\NotificationReads::read($request->user('id'), $notification->id);
+        $notification->refresh();
 
         SocialNotifications::redact([$notification], $request->user());
 
@@ -48,18 +47,24 @@ class NotificationController extends Controller
 
     public function readAll(Request $request): Response
     {
-        Notification::where('user_id', $request->user('id'))
-            ->whereNull('read_at')
-            ->update(['read_at' => now()]);
+        \App\Services\NotificationReads::read($request->user('id'));
 
         return json(['data' => ['message' => 'Notifications marked as read.']]);
     }
 
+    public function unreadCount(Request $request): Response
+    {
+        return json(['data' => ['unread_count' => Notification::where('user_id', $request->user('id'))->whereNull('read_at')->count()]]);
+    }
+
     public function clearAll(Request $request): Response
     {
-        Notification::where('user_id', $request->user('id'))
-            ->whereNotNull('read_at')
-            ->delete();
+        \App\Services\Communications::transaction(function () use ($request): void {
+            $deleted = Notification::where('user_id', $request->user('id'))->whereNotNull('read_at')->delete();
+            if ($deleted) {
+                \App\Services\Realtime::record($request->user('id'), 'notifications.updated', $request->user('id'), 0);
+            }
+        });
 
         return json(['data' => ['message' => 'Read notifications cleared.']]);
     }

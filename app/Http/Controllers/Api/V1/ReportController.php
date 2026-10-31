@@ -11,8 +11,8 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'playlist_id' => ['nullable', 'integer', 'min:1'],
-            'message_id' => ['prohibited'],
-            'announcement_id' => ['prohibited'],
+            'message_id' => ['nullable', 'integer', 'min:1'],
+            'announcement_id' => ['nullable', 'integer', 'min:1'],
             'boost_id' => ['prohibited'],
             'audio_id' => ['nullable', 'integer', 'min:1'],
             'comment_id' => ['nullable', 'integer', 'min:1'],

@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Follow;
 use App\Models\User;
 use App\Services\SocialNotifications;
-use Spark\Facades\DB;
 use Spark\Http\{Request, Response};
 
 class FollowController extends Controller
@@ -21,7 +20,7 @@ class FollowController extends Controller
 
         abort_if($request->user()->is($user), 422, 'Users cannot follow themselves.');
 
-        DB::transaction(function () use ($request, $user, $notifications): void {
+        \App\Services\Communications::transaction(function () use ($request, $user, $notifications): void {
             // Serialize follow creation on both SQLite and MySQL before checking existence.
             User::increment('id', 0, where: ['id' => $user->id]);
 
@@ -48,7 +47,7 @@ class FollowController extends Controller
 
     public function destroy(Request $request, User $user): Response
     {
-        DB::transaction(function () use ($request, $user): void {
+        \App\Services\Communications::transaction(function () use ($request, $user): void {
             User::increment('id', 0, where: ['id' => $user->id]);
             $request->user()->following()->detach($user->id);
         });

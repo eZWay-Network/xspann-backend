@@ -14,9 +14,15 @@ class SocialNotifications
     /** Redact historical snapshots in memory using bounded queries for the whole page. */
     public static function redact(array $notifications, User $viewer): void
     {
-        $actors = $videos = $comments = [];
+        $actors = $videos = $comments = $messages = $announcements = [];
         foreach ($notifications as $notification) {
             $data = $notification->data;
+            if ($notification->type === 'direct_message') {
+                $messages[] = $data['message_id'] ?? 0;
+            }
+            if ($notification->type === 'artist_announcement') {
+                $announcements[] = $data['announcement_id'] ?? 0;
+            }
             if (isset($data['actor']['id'])) {
                 $actors[] = $data['actor']['id'];
             }
@@ -30,13 +36,17 @@ class SocialNotifications
             }
         }
 
+        $messages = $messages ? array_flip(Conversations::alertMessageIds($viewer->id, $messages)) : [];
+        $announcements = $announcements ? array_flip(Announcements::inboxQuery($viewer)->whereIn('id', $announcements)->pluck('id')) : [];
         $actors = $actors ? array_flip(User::visibleTo($viewer)->whereIn('users.id', array_unique($actors))->pluck('id')) : [];
         $videos = $videos ? array_flip(Video::published()->visibleTo($viewer)->whereIn('videos.id', array_unique($videos))->pluck('id')) : [];
         $comments = $comments ? array_flip(Comment::visibleTo($viewer)->whereIn('id', array_unique($comments))->pluck('id')) : [];
 
         foreach ($notifications as $notification) {
             $data = $notification->data;
-            $unavailable = (isset($data['actor']['id']) && !isset($actors[$data['actor']['id']]))
+            $unavailable = ($notification->type === 'direct_message' && !isset($messages[$data['message_id'] ?? 0]))
+                || ($notification->type === 'artist_announcement' && !isset($announcements[$data['announcement_id'] ?? 0]))
+                || (isset($data['actor']['id']) && !isset($actors[$data['actor']['id']]))
                 || (isset($data['video_id']) && !isset($videos[$data['video_id']]))
                 || (isset($data['comment_id']) && !isset($comments[$data['comment_id']]))
                 || (isset($data['parent_id']) && !isset($comments[$data['parent_id']]));

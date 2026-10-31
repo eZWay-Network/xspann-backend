@@ -15,6 +15,8 @@ class Report extends Model
         'audio_id',
         'comment_id',
         'playlist_id',
+        'message_id',
+        'announcement_id',
         'target_type',
         'target_id',
         'reason',

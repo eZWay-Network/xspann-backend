@@ -220,8 +220,39 @@ class Releases
 
     public static function save(Video $video, array $attributes): void
     {
-        if (!$video->update($attributes)) {
-            throw new \RuntimeException('Release could not be saved.');
+        DB::transaction(function () use ($video, $attributes): void {
+            if (!$video->update($attributes)) {
+                throw new \RuntimeException('Release could not be saved.');
+            }
+            Realtime::record($video->user_id, 'release.updated', $video->id, $video->version);
+        });
+    }
+
+    /** Retry/failure transitions keep owner versions and their committed hints in sync. */
+    public static function processingState(int $id, array $from, string $state, ?string $error = null): bool
+    {
+        $selected = Video::find($id);
+        if (!$selected) {
+            return false;
         }
+
+        return DB::transaction(function () use ($id, $selected, $from, $state, $error): bool {
+            User::increment('id', 0, where: ['id' => $selected->user_id]);
+            Video::increment('version', 0, where: ['id' => $id]);
+            $video = Video::whereKey($id)->whereIn('status', $from)->first();
+            if (!$video) {
+                return false;
+            }
+            if ($video->status !== $state || $video->processing_state !== $state || $video->release_error !== $error) {
+                self::save($video, [
+                    'status' => $state,
+                    'processing_state' => $state,
+                    'release_error' => $error,
+                    'version' => $video->version + 1,
+                ]);
+            }
+
+            return true;
+        });
     }
 }

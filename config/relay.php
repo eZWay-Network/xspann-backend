@@ -21,6 +21,11 @@ return [
             'max_cache_size' => 10485760,
         ]
     ],
+    'public' => [
+        'host' => env('RELAY_PUBLIC_HOST', 'localhost'),
+        'port' => (int) env('RELAY_PUBLIC_PORT', 443),
+        'tls' => (bool) env('RELAY_PUBLIC_TLS', true),
+    ],
     'client' => [
         'host' => env('RELAY_HOST', '127.0.0.1'),
         'port' => (int) env('RELAY_PORT', 8080),
