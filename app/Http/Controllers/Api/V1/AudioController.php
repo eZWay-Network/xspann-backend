@@ -10,6 +10,7 @@ use App\Http\Resources\{AudioResource, VideoResource};
 use App\Models\{Audio, Video};
 use Spark\Http\{Request, Response};
 use Spark\Http\Resources\JsonResource;
+use function array_key_exists;
 
 class AudioController extends Controller
 {
@@ -24,6 +25,14 @@ class AudioController extends Controller
             'user_id' => ['prohibited'],
             'source_video_id' => ['prohibited'],
         ]);
+
+        foreach (['storage_path', 'user_id', 'source_video_id'] as $field) {
+            if (array_key_exists($field, $request->all())) {
+                throw \Spark\Foundation\Exceptions\ValidationException::withMessages([
+                    $field => ['Audio source and attribution cannot be changed.'],
+                ]);
+            }
+        }
 
         PendingUploads::attach($audio->user_id, function () use ($audio, $input): void {
             abort_if($audio->refresh()->status === 'deleted', 404, 'Audio not found.');

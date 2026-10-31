@@ -11,6 +11,50 @@ use Spark\Support\Str;
 /** Persist activity inside the transaction that creates the social action. */
 class SocialNotifications
 {
+    /** Redact historical snapshots in memory using bounded queries for the whole page. */
+    public static function redact(array $notifications, User $viewer): void
+    {
+        $actors = $videos = $comments = [];
+        foreach ($notifications as $notification) {
+            $data = $notification->data;
+            if (isset($data['actor']['id'])) {
+                $actors[] = $data['actor']['id'];
+            }
+            if (isset($data['video_id'])) {
+                $videos[] = $data['video_id'];
+            }
+            foreach (['comment_id', 'parent_id'] as $field) {
+                if (isset($data[$field])) {
+                    $comments[] = $data[$field];
+                }
+            }
+        }
+
+        $actors = $actors ? array_flip(User::visibleTo($viewer)->whereIn('users.id', array_unique($actors))->pluck('id')) : [];
+        $videos = $videos ? array_flip(Video::published()->visibleTo($viewer)->whereIn('videos.id', array_unique($videos))->pluck('id')) : [];
+        $comments = $comments ? array_flip(Comment::visibleTo($viewer)->whereIn('id', array_unique($comments))->pluck('id')) : [];
+
+        foreach ($notifications as $notification) {
+            $data = $notification->data;
+            $unavailable = (isset($data['actor']['id']) && !isset($actors[$data['actor']['id']]))
+                || (isset($data['video_id']) && !isset($videos[$data['video_id']]))
+                || (isset($data['comment_id']) && !isset($comments[$data['comment_id']]))
+                || (isset($data['parent_id']) && !isset($comments[$data['parent_id']]));
+
+            if ($unavailable) {
+                $notification->data = [
+                    'actor' => null,
+                    'message' => 'This activity is no longer available.',
+                    'video_id' => null,
+                    'comment_id' => null,
+                    'parent_id' => null,
+                    'excerpt' => null,
+                    'reaction_type' => null,
+                ];
+            }
+        }
+    }
+
     public function liked(User $actor, Video $video): void
     {
         $this->send($actor, (int) $video->user_id, Notification::VIDEO_LIKED, $video);

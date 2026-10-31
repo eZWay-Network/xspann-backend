@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\NotificationResource;
 use App\Models\Notification;
+use App\Services\SocialNotifications;
 use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class NotificationController extends Controller
@@ -26,6 +27,8 @@ class NotificationController extends Controller
             ->orderBy('id', 'DESC')
             ->paginate(max(1, min(100, $request->integer('limit', 20))));
 
+        SocialNotifications::redact($notifications->items(), $request->user());
+
         return NotificationResource::collection($notifications)
             ->additional(['meta' => ['unread_count' => $unreadCount]]);
     }
@@ -37,6 +40,8 @@ class NotificationController extends Controller
         if (!$notification->read_at) {
             $notification->update(['read_at' => now()]);
         }
+
+        SocialNotifications::redact([$notification], $request->user());
 
         return NotificationResource::make($notification);
     }

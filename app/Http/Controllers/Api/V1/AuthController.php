@@ -154,6 +154,7 @@ class AuthController extends Controller
 
         DB::transaction(function () use ($request) {
             $request->user()->update(['password' => $request->validated('password'), 'remember_token' => null]);
+            query('password_reset_tokens')->where('email', $request->user('email'))->delete();
             query('account_action_tokens')->where('user_id', $request->user('id'))->delete();
             query('staff_sessions')->where('user_id', $request->user('id'))->delete();
 

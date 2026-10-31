@@ -14,6 +14,7 @@ class Video extends Model
     public const STATUS_PROCESSING = "processing";
     public const STATUS_PUBLISHED = "published";
     public const STATUS_FAILED = "failed";
+    public const STATUS_SOURCE_UNAVAILABLE = "source_unavailable";
     public const STATUS_DELETED = "deleted";
 
     protected array $fillable = [

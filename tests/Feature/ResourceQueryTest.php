@@ -18,15 +18,24 @@ class ResourceQueryTest extends TestCase
             Like::create(['user_id' => $viewer->id, 'video_id' => $video->id]);
             Save::create(['user_id' => $viewer->id, 'video_id' => $video->id]);
             Comment::create(['user_id' => $author->id, 'video_id' => 1, 'body' => 'Comment']);
+            \App\Models\Notification::create([
+                'user_id' => $viewer->id,
+                'type' => 'video_liked',
+                'data' => [
+                    'actor' => ['id' => $author->id, 'name' => $author->name],
+                    'video_id' => $video->id,
+                ]
+            ]);
         }
         $this->asUser($viewer);
         $this->getJson('/api/v1/feed?limit=1')->assertOk();
         $this->app->mergeConfig(['app' => ['debug' => true]]);
         $queries = 0;
         event()->addListener('app:db.queryExecuted', function () use (&$queries) {
-            $queries++; });
+            $queries++;
+        });
 
-        foreach (['/feed', '/feed/following', '/videos', '/me/liked-videos', '/me/saved-videos', '/users/viewer/following', '/videos/1/comments'] as $path) {
+        foreach (['/feed', '/feed/following', '/videos', '/me/liked-videos', '/me/saved-videos', '/users/viewer/following', '/videos/1/comments', '/notifications'] as $path) {
             $queries = 0;
             $this->getJson('/api/v1' . $path . '?limit=1')->assertOk()->assertJsonCount(1, 'data');
             $small = $queries;
@@ -66,7 +75,8 @@ class ResourceQueryTest extends TestCase
         $this->app->mergeConfig(['app' => ['debug' => true]]);
         $queries = 0;
         event()->addListener('app:db.queryExecuted', function () use (&$queries) {
-            $queries++; });
+            $queries++;
+        });
 
         foreach (['/me/videos', '/users/alice/videos', '/users/alice/followers', '/comments/' . $parent->id . '/replies'] as $path) {
             $queries = 0;

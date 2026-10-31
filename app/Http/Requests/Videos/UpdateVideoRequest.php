@@ -3,37 +3,38 @@
 namespace App\Http\Requests\Videos;
 
 use Spark\Foundation\Http\FormRequest;
+use Spark\Foundation\Exceptions\ValidationException;
+use function array_key_exists;
 
 class UpdateVideoRequest extends FormRequest
 {
+    private const CREATION_FIELDS = [
+        'audio_id',
+        'audio_mode',
+        'audio_settings',
+        'trim_start',
+        'trim_end',
+        'cut_points',
+        'cover_time',
+        'crop_mode',
+        'text_overlay',
+        'original_audio_muted',
+        'filter_settings',
+        'effect_settings',
+    ];
+
     public function rules(): array
     {
         return [
-            'reuse_content' => ['sometimes', 'boolean'],
-            'audio_id' => ['prohibited'],
-            'audio_mode' => ['prohibited'],
-            'audio_settings' => ['prohibited'],
+            ...array_fill_keys(self::CREATION_FIELDS, ['prohibited']),
+            'reuse_content' => ['sometimes', 'required', 'boolean'],
             'caption' => ['nullable', 'string', 'max:2200'],
             'thumbnail_url' => ['nullable', 'url', 'max:2048'],
             'location_name' => ['nullable', 'string', 'max:180'],
-            'visibility' => ['nullable', 'string', ['in' => ['public', 'followers', 'private']]],
-            'high_quality_upload' => ['nullable', 'boolean'],
+            'visibility' => ['sometimes', 'required', 'string', ['in' => ['public', 'followers', 'private']]],
+            'high_quality_upload' => ['sometimes', 'required', 'boolean'],
             'scheduled_at' => ['prohibited'],
-            'pinned' => ['nullable', 'boolean'],
-            'trim_start' => ['nullable', 'numeric', 'min:0'],
-            'trim_end' => ['nullable', 'numeric', 'gt:trim_start'],
-            'cut_points' => ['nullable', 'array', 'max:20'],
-            'cut_points.*' => ['numeric', 'min:0'],
-            'cover_time' => ['nullable', 'numeric', 'min:0'],
-            'crop_mode' => ['nullable', 'string', ['in' => ['fit', 'fill']]],
-            'text_overlay' => ['nullable', 'string', 'max:120'],
-            'original_audio_muted' => ['nullable', 'boolean'],
-            'filter_settings' => ['nullable', 'array'],
-            'filter_settings.brightness' => ['nullable', 'numeric', 'min:0', 'max:200'],
-            'filter_settings.contrast' => ['nullable', 'numeric', 'min:0', 'max:250'],
-            'filter_settings.saturation' => ['nullable', 'numeric', 'min:0', 'max:250'],
-            'filter_settings.warmth' => ['nullable', 'numeric', 'min:-100', 'max:100'],
-            'filter_settings.preset' => ['nullable', 'string', 'max:60'],
+            'pinned' => ['sometimes', 'required', 'boolean'],
             'sound_name' => ['prohibited'],
             'sound_artist' => ['prohibited'],
             'sound_provider' => ['prohibited'],
@@ -45,6 +46,17 @@ class UpdateVideoRequest extends FormRequest
     public function passedValidation(): void
     {
         \App\Services\ContentRights::rejectRemoved($this->all());
-    }
 
+        // Spark's prohibited rule permits null/empty values; field presence is forbidden here.
+        $input = $this->all();
+        $errors = [];
+        foreach (self::CREATION_FIELDS as $field) {
+            if (array_key_exists($field, $input)) {
+                $errors[$field] = ['Media settings cannot be changed after creation. Upload a new video for a different edit.'];
+            }
+        }
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
 }

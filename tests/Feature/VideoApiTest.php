@@ -69,7 +69,7 @@ class VideoApiTest extends TestCase
         $this->asUser($owner);
         $this->postJson('/api/v1/videos', [...$this->videoRights(), 'storage_path' => 'videos/999/file.mp4'])->assertStatus(422);
         $this->patchJson('/api/v1/videos/' . $video->id, ['trim_start' => 4, 'trim_end' => 2, 'cut_points' => [-1], 'filter_settings' => ['brightness' => 999]])
-            ->assertStatus(422)->assertJsonValidationErrors(['cut_points.0', 'filter_settings.brightness']);
+            ->assertStatus(422)->assertJsonValidationErrors(['cut_points', 'filter_settings']);
         $this->patchJson('/api/v1/videos/' . $video->id, ['trim_start' => 4, 'trim_end' => 2])
             ->assertStatus(422)->assertJsonValidationErrors(['trim_end']);
         $this->patchJson('/api/v1/videos/' . $video->id, ['pinned' => true, 'caption' => 'Updated', 'status' => 'deleted'])->assertOk()->assertJsonPath('data.caption', 'Updated')->assertJsonPath('data.status', 'published');

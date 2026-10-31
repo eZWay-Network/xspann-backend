@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\{Audio, Report, Video};
 use App\Services\PrivacyRequests;
-use Spark\Facades\DB;
+use Spark\Facades\{DB, Log};
 use Spark\Queue\Contracts\JobInterface;
 use Spark\Queue\Dispatchable;
 
@@ -25,16 +25,16 @@ class FoundationMaintenance implements JobInterface
             PrivacyRequests::dispatch($record->id);
         }
 
-        foreach (DB::table('privacy_requests')->where('kind', 'export')->where('status', '!=', 'expired')->where('expires_at', '<=', now()->toDateTimeString())->limit(100)->get() as $record) {
-            PrivacyRequests::removeExport($record->id);
+        foreach (DB::table('privacy_requests')->where('kind', 'export')->where('status', '!=', 'expired')->where('expires_at', '<=', now()->toDateTimeString())->orderByRaw('updated_at ASC, id ASC')->limit(100)->get() as $record) {
+            $this->cleanup('export', $record->id, fn() => PrivacyRequests::removeExport($record->id));
         }
 
-        foreach (Video::where('status', Video::STATUS_DELETED)->limit(100)->get() as $video) {
-            (new DeleteVideo($video->id))->handle();
+        foreach (Video::where('status', Video::STATUS_DELETED)->orderByRaw('updated_at ASC, id ASC')->limit(100)->get() as $video) {
+            $this->cleanup('video', $video->id, fn() => (new DeleteVideo($video->id))->handle());
         }
 
-        foreach (Audio::where('status', 'deleted')->limit(100)->get() as $audio) {
-            (new DeleteAudio($audio->id))->handle();
+        foreach (Audio::where('status', 'deleted')->orderByRaw('updated_at ASC, id ASC')->limit(100)->get() as $audio) {
+            $this->cleanup('audio', $audio->id, fn() => (new DeleteAudio($audio->id))->handle());
         }
 
         DB::transaction(function (): void {
@@ -49,5 +49,25 @@ class FoundationMaintenance implements JobInterface
                 ->whereNotIn('id', DB::table('moderation_decisions')->select('report_id')->whereIn('id', DB::table('moderation_appeals')->select('decision_id')->where('status', 'open')))
                 ->delete();
         });
+    }
+
+    private function cleanup(string $type, int $id, callable $callback): void
+    {
+        try {
+            $callback();
+        } catch (\Throwable $exception) {
+            // Preserve the row for the next pass and continue unrelated expiry/retention work.
+            DB::table(match ($type) {
+                'export' => 'privacy_requests',
+                'video' => 'videos',
+                'audio' => 'audios',
+            })->where('id', $id)->update(['updated_at' => now()->toDateTimeString()]);
+
+            Log::error('Foundation cleanup failed for {type} {id}.', [
+                'type' => $type,
+                'id' => $id,
+                'exception' => $exception::class,
+            ]);
+        }
     }
 }

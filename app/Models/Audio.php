@@ -7,6 +7,7 @@ use Spark\Database\Model;
 use Spark\Database\QueryBuilder;
 use Spark\Database\Relation\BelongsTo;
 use Spark\Database\Relation\HasMany;
+use Spark\Facades\DB;
 
 class Audio extends Model
 {
@@ -27,6 +28,23 @@ class Audio extends Model
     ];
 
     protected array $casts = ['duration' => 'integer', 'reuse_allowed' => 'boolean', 'rights_confirmed_at' => 'datetime'];
+
+    public function remove(): bool
+    {
+        if (!$this->id) {
+            return false;
+        }
+
+        return DB::transaction(function (): bool {
+            // Preserve the failed selection before ON DELETE SET NULL erases it.
+            // Already published clips retain their embedded soundtrack.
+            Video::where('audio_id', $this->id)
+                ->whereIn('status', [Video::STATUS_PROCESSING, Video::STATUS_FAILED])
+                ->update(['status' => Video::STATUS_SOURCE_UNAVAILABLE, 'updated_at' => now()]);
+
+            return parent::remove();
+        });
+    }
 
     public function user(): BelongsTo
     {

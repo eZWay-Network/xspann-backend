@@ -9,6 +9,18 @@ use function is_int;
 
 class VideoActions
 {
+    public static function authorizeOptionalActor(): void
+    {
+        $actor = Auth::user();
+        if ($actor) {
+            abort_unless(
+                \App\Models\User::visibleTo(null)->whereKey($actor->id)->exists(),
+                403,
+                'This account cannot record activity.'
+            );
+        }
+    }
+
     public static function visible(Video|int $video): Video
     {
         if (is_int($video)) {

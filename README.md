@@ -198,7 +198,7 @@ Create a video with the `storage_path` returned by an upload. Optional fields ar
 | `filter_settings` | `brightness` 0–200, `contrast`/`saturation` 0–250, `warmth` -100–100, `preset` up to 60 characters. |
 | `effect_settings` | `arFace`, `background`, `sticker`, `visual`, each up to 60 characters. Create only. |
 
-PATCH supports the editable metadata and `pinned`; it does not replace `storage_path` or `video_url`. Responses contain nested `edit`, `stats`, and `viewer` objects, author summary, canonical nested audio, dates, moderation status, and processing status. Creation returns 201 with `status=processing`; the worker publishes it. Deletion sets `status=deleted` immediately and queues physical media and database cleanup.
+PATCH accepts `caption`, `thumbnail_url`, `location_name`, `visibility`, `high_quality_upload`, `reuse_content` and `pinned`. Audio selection and all edit settings are creation-only; sending them through PATCH, even as `null`, returns 422. Non-nullable visibility/boolean/crop fields reject explicit `null` instead of reaching database constraints. Responses contain nested `edit`, `stats`, and `viewer` objects, author summary, canonical nested audio, dates, moderation status, and processing status. Creation returns 201 with `status=processing`; the worker publishes it. Deletion sets `status=deleted` immediately and queues physical media and database cleanup.
 
 Only published, visible videos enter feeds. Owners can see their unpublished/private videos through the single-video and own-posts endpoints. Followers-only videos require following the author. Likes and saves are idempotent: their first POST returns 201 with `created=true`; repeats return 200 with `created=false`. Following returns 201 even if already followed. Self-following returns 422.
 
@@ -247,7 +247,7 @@ Every video creation requires `rights_confirmed=true`, the current `rights_versi
 
 Only original and user-uploaded audio remain. Select it using `audio_id`; read creator attribution from nested `audio`. Legacy `sound_*` and `music` response fields are removed. Sending legacy sound fields, including null, returns 422. Release scheduling is not yet implemented: `scheduled_at` returns 422 rather than pretending to schedule publication.
 
-Owners can PATCH `/audios/{audio}` to change title or reuse permission, and DELETE it to stop new selection and queue cleanup. Original audio permission is synchronized with its source video. Ordinary permission withdrawal/deletion preserves the soundtrack already embedded in rendered videos; moderation restrictions propagate to affected derivatives. Media resources never include URLs for restricted content. Previously issued media URLs remain valid until expiry; production private media must use private storage and signed playback.
+Owners can PATCH `/audios/{audio}` to change title or reuse permission, and DELETE it to stop new selection and queue cleanup. Original audio permission is synchronized with its source video. Ordinary permission withdrawal/deletion preserves the soundtrack already embedded in published videos; moderation restrictions propagate to affected derivatives. If audio is deleted before a dependent video publishes, that video becomes `source_unavailable` and is excluded from retries. The creator must delete that unfinished post and submit a new selection. This also applies when the original source video or its account is deleted. Media resources never include URLs for restricted content. Previously issued media URLs remain valid until expiry; production private media must use private storage and signed playback.
 
 ### Upload flow
 
@@ -356,7 +356,7 @@ Outside the API prefix: `/uploads/*` is static media, `GET /up` checks health, a
 
 Selected library audio is looped or cut to the short's duration. `audio_mode=replace` is the default; `mix` combines original and library audio with equal normalized weights. `original_audio_muted=true` removes the original input from either mode. Without a selected library sound, and with `reuse_content=true`, audible original sound is extracted into a ready AAC/M4A library record in the same publication transaction. Silent or muted videos do not generate a track. Processing retries skip already published videos and cannot overwrite an owner deletion. Both local and S3 uploads follow this pipeline; the worker downloads S3 sources, uploads processed files to the configured disk, and removes temporary files. FFmpeg commands run with a 20-minute timeout; the processing lock lasts one hour.
 
-Creation applies trim, crop, brightness/contrast/saturation and audio settings. Preset labels, warmth, cuts, text overlays and effects remain metadata; clients must render those pixels before upload. Scheduling is unavailable until Step 3 and is explicitly rejected. PATCH does not re-encode existing videos.
+Creation applies trim, crop, brightness/contrast/saturation and audio settings. Preset labels, warmth, cuts, text overlays and effects remain metadata; clients must render those pixels before upload. Scheduling is unavailable until Step 3 and is explicitly rejected. PATCH rejects creation-only media/edit settings; it does not re-encode existing videos.
 
 Signed PUT URLs do not enforce the 500 MiB limit at the storage edge; the worker rejects oversized objects before downloading or publishing them. Configure retention for abandoned/rejected objects. A signed URL remains usable until expiry, so it is not a one-time upload token. Backend mode validates uploads before storing them in S3.
 
@@ -367,9 +367,10 @@ Signed PUT URLs do not enforce the 500 MiB limit at the storage edge; the worker
 ```sh
 php spark queue:failed
 php spark videos:retry --id=123
+php spark audios:retry --id=456
 ```
 
-The video retry command changes a failed/processing video to `processing` and dispatches it again. Use `--id=123` to retry only that video; omit `--id` to retry all failed or processing videos. Invalid IDs are rejected, and published/deleted videos are skipped. Do not use a generic failed-job retry for a video still marked `failed`, since the job intentionally skips videos outside `processing`.
+The video retry command changes a failed/processing video to `processing` and dispatches it again. Use `--id=123` to retry only that video; omit `--id` to retry all failed or processing videos. Invalid IDs are rejected, and published/deleted/source_unavailable videos are skipped. Do not use a generic failed-job retry for a video still marked `failed`, since the job intentionally skips videos outside `processing`.
 
 Deploy with `public/` as the web root. Keep `storage/`, cache/lock directories, and the application database writable by the appropriate workers. The default database queue uses the `jobs` and `failed_jobs` tables; database cache/locks use `caches` and `locks`. SQLite and file drivers require a shared local filesystem; use Redis or a shared server database for coordination across hosts. Local uploads and chunk staging also require shared storage or consistent routing. Completed chunk sessions and processing temporary files are cleaned up; configure retention for abandoned upload sessions in `storage/temp/upload-chunks`.
 
@@ -412,3 +413,11 @@ Google tests generate local RSA-signed tokens and replace only the HTTP key resp
 The two PHP files in `tests/Fixtures` are server entry points: `http-router.php` boots the API against temporary storage, and `s3-router.php` receives local S3 requests. Both are needed by the upload tests; the endpoint contract lives directly in `ApiContractTest`.
 
 Before deployment, verify real signed GET and PUT requests, bucket permissions/CORS, SMTP, FFmpeg/FFprobe, queue supervision, and the configured production database. The web server/CDN must serve media with byte-range support; PHP does not proxy video playback. The local S3 fixture verifies application transfers, not AWS permissions or signature acceptance. The Laravel comparison is based on its routes, controllers, resources, requests, and test cases; its dependency directory is not present here.
+
+### Step 1 audit follow-up
+
+Audio uploads now have an hourly recovery task and `audios:retry` operator command, equivalent to video recovery. Only eligible processing/failed uploads are retried; ready, deleted and restricted audio is excluded. Restart existing workers to load the new recurring registration.
+
+Notification lists, individual read responses and exports redact activity snapshots whose actor or content is now blocked, restricted, deleted or inaccessible. Visibility queries are batched per page. Password changes invalidate previously issued password-reset links. Guest-capable share/view endpoints reject activity attributed to suspended, unverified or incomplete accounts.
+
+Foundation maintenance logs individual export/media cleanup failures, retains their rows for retry, and continues other cleanup and retention work. Monitor `Foundation cleanup failed` log entries and failed jobs; fix storage access before retrying. This audit changes no migration files and requires no additional database reset. See `docs/STEP_1_AUDIT.md` for verification and readiness.

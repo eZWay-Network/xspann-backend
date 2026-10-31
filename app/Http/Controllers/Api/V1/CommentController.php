@@ -76,7 +76,7 @@ class CommentController extends Controller
 
         VideoActions::transaction((int) $comment->video_id, function () use ($comment) {
             $video = $comment->video()->lockForUpdate()->first();
-            $comment->delete();
+            $comment->remove();
 
             if ($video) {
                 $video->update(['comments_count' => $video->comments()->count()]);

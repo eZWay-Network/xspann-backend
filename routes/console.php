@@ -32,6 +32,22 @@ command('uploads:prune', function (Prompt $prompt) {
     $prompt->message('Abandoned upload cleanup queued.');
 })->description('Queue cleanup of expired, unreferenced uploads and chunk sessions');
 
+command('audios:retry', function (Prompt $prompt, array $args): void {
+    $id = null;
+    if (array_key_exists('id', $args)) {
+        $id = is_string($args['id'])
+            ? filter_var($args['id'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+            : false;
+        if ($id === false) {
+            throw new InvalidArgumentException('The --id option must be a positive audio ID.');
+        }
+    }
+
+    $prompt->message(\App\Services\AudioRetry::retry($id)
+        ? 'Failed or interrupted audio uploads queued.'
+        : 'No eligible audio uploads found.');
+})->description('Retry eligible failed or interrupted audio uploads, optionally using --id');
+
 command('staff:enroll', function (Prompt $prompt, array $args): void {
     $id = filter_var($args['user'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     $role = $args['role'] ?? 'moderator';

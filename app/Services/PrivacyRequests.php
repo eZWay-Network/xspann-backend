@@ -111,7 +111,8 @@ class PrivacyRequests
                     self::exportAccount($record);
                 }
             } catch (\Throwable $exception) {
-                DB::table('privacy_requests')->where('id', $id)->update(['status' => 'failed', 'error_code' => 'processing_failed', 'updated_at' => now()->toDateTimeString()]);
+                DB::table('privacy_requests')->where('id', $id)->where('status', 'processing')
+                    ->update(['status' => 'failed', 'error_code' => 'processing_failed', 'updated_at' => now()->toDateTimeString()]);
                 throw new \RuntimeException('Privacy request processing failed; use the request reference for investigation.', 0, $exception);
             }
         });
@@ -209,7 +210,6 @@ class PrivacyRequests
         foreach ([
             'auth_identities' => ['user_id', ['provider', 'provider_id', 'created_at']],
             'comments_reacts' => ['user_id', ['comment_id', 'reaction_type', 'created_at']],
-            'notifications' => ['user_id', ['id', 'type', 'data', 'read_at', 'created_at']],
             'moderation_decisions' => ['subject_user_id', ['id', 'action', 'reason', 'active', 'created_at']],
             'policy_acceptances' => ['user_id', ['policy', 'version', 'source', 'accepted_at']],
             'videos' => ['user_id', ['id', 'caption', 'audio_id', 'visibility', 'status', 'moderation_status', 'rights_version', 'reuse_content', 'created_at']],
@@ -227,6 +227,10 @@ class PrivacyRequests
         ] as $table => [$owner, $columns]) {
             $data[$table] = DB::table($table)->select($columns)->where($owner, $user->id)->get()->toArray();
         }
+
+        $notifications = Notification::select(['id', 'type', 'data', 'read_at', 'created_at'])->where('user_id', $user->id)->get();
+        SocialNotifications::redact($notifications->all(), $user);
+        $data['notifications'] = $notifications->toArray();
 
         $contents = json_encode($data, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
         if (!storage('local')->put(self::exportPath($record->id), Hash::encrypt($contents))) {

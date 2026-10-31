@@ -14,6 +14,7 @@ class ViewController extends Controller
         VideoActions::visible($video);
 
         $created = VideoActions::transaction($video->id, function (Video $video) use ($request): bool {
+            VideoActions::authorizeOptionalActor();
             VideoActions::visible($video);
 
             $user = $request->user();

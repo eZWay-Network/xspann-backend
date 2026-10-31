@@ -16,6 +16,7 @@ class ShareController extends Controller
         VideoActions::visible($video);
 
         VideoActions::transaction($video->id, function (Video $video) use ($request, $notifications): void {
+            VideoActions::authorizeOptionalActor();
             VideoActions::visible($video);
 
             $actor = $request->user();
