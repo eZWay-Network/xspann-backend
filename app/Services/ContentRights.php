@@ -18,7 +18,7 @@ class ContentRights
             if (array_key_exists($field, $input)) {
                 $errors[$field] = [
                     $field === 'scheduled_at'
-                    ? 'Release scheduling is not available yet.'
+                    ? 'Use the versioned release schedule endpoint with publish_at and timezone.'
                     : 'This field is no longer supported. Use audio_id.'
                 ];
             }

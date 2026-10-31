@@ -21,6 +21,9 @@ if ($mediaRoot && $file && str_starts_with($file, $mediaRoot . DIRECTORY_SEPARAT
 $app = \Spark\Foundation\Application::create(dirname($configuration), config: $config, providers: require "$root/bootstrap/providers.php")
     ->withMiddleware(load: "$root/bootstrap/middlewares.php", queue: ['cors'])
     ->withRouting(api: "$root/routes/api.php", web: "$root/routes/web.php");
+if (!empty($config['testing']['fake_stripe'])) {
+    $app->instance(\App\Services\Billing\PaymentProvider::class, new \Tests\Support\FakeStripe());
+}
 try {
     $app->run();
 } catch (Throwable $e) {

@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'release_disk' => env('RELEASE_FILESYSTEM_DISK', 'local'),
+
     'pending_upload_hours' => 48,
 
     'default' => env('FILESYSTEM_DISK', env('FILESYSTEM_DRIVER', 'local')),

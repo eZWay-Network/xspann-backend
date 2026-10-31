@@ -21,15 +21,30 @@ php spark queue:work --sleep=1
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
 
+## Step 3 billing and releases
+
+Step 3 adds Stripe Checkout, invoice-based entitlements, subscription cancellation/resume, a restricted billing portal, invoice history, signed webhook processing, and recovery commands. Starter is $4.99/month and Pro is $19.99/month in USD. Test mode is available after configuration; live sales remain disabled until the later paid benefits and sales review are complete. Native application code is unchanged. The generated reference at `/` now covers **125 versioned API operations**.
+
+Draft uploads use `publication_intent=draft` on both upload and post creation. Source video, render, cover and extracted sound stay on `RELEASE_FILESYSTEM_DISK` (private `local` by default), with authenticated owner previews. Artist release endpoints provide versioned edits, immediate publication and Pro scheduling with explicit offsets/IANA timezones. A minute worker catches up after downtime, rechecks current eligibility and pauses schedules when paid access ends.
+
+Keep the current database and `APP_KEY`. Deploy the forward migration with `php spark migrate`, then restart HTTP and queue workers together. **The working database has not been migrated or reset by this implementation.** Alongside default/privacy workers, supervise:
+
+```sh
+php spark queue:work --queue=billing --sleep=1
+php spark queue:work --queue=releases --sleep=1
+```
+
+Configure the Stripe test account, matching monthly prices, fixed return URLs, pinned Snapshot webhook endpoint and restricted portal configuration using `.env.example`. See [Step 3 review](docs/STEP_3_REVIEW.md) for configuration, migration, retention, recovery and deployment limits, and [manual HTTP collection](docs/STEP_3_REVIEW.http) for the practical checkout/preview/scheduling flow. Local tests use disposable databases and fake provider responses; a credentialed Stripe test-account rehearsal and production storage-policy checks remain deployment work. Follow-up Step 3 audit: **287 tests passed, 4,667 assertions, no failures or skips**, including 21 new regression tests. See the local [audit report](docs/STEP_3_AUDIT.md) for refund/settlement, deletion recovery, audio privacy and release-version corrections.
+
 ## Step 2 artists and playlists
 
-Step 2 implements the artist directory/profile, genres/HTTPS links, managed artist images, owned versioned playlists, account-follow aliases, and current statistics. It also extends playlist reporting, private exports and account/image deletion. All 22 Step 2 operations are documented at `/` (106 versioned operations total).
+Step 2 implements the artist directory/profile, genres/HTTPS links, managed artist images, owned versioned playlists, account-follow aliases, and current statistics. It also extends playlist reporting, private exports and account/image deletion. All 22 Step 2 operations are documented at `/` (106 versioned operations at the Step 2 checkpoint).
 
 Apply the new migration with `php spark migrate` after establishing the frozen Step 1 baseline. **Do not reset the database for Step 2.** No working database migration or reset was performed during implementation. Restart existing workers after deployment; hourly statistics collection runs on the default queue. `php spark artists:statistics` collects current UTC snapshots manually.
 
-Production capabilities resolve free access; Starter/Pro branches are tested with isolated fixtures until Step 3 supplies billing. The single resolver and catalog enforce 1/10/50 playlists and 1/5/5 links. Paid daily statistics are collected snapshots, not historical daily event estimates. See [Step 2 review](docs/STEP_2_REVIEW.md) and [manual HTTP collection](docs/STEP_2_REVIEW.http) for the full contract, downgrade/visibility rules, migration checks and practical review.
+Capabilities now resolve from Step 3 provider-verified paid periods, with free access when no current unrevoked period exists. The single resolver and catalog enforce 1/10/50 playlists and 1/5/5 links. Paid daily statistics are collected snapshots, not historical daily event estimates. See [Step 2 review](docs/STEP_2_REVIEW.md) and [manual HTTP collection](docs/STEP_2_REVIEW.http) for the full contract, downgrade/visibility rules, migration checks and practical review.
 
-The final Step 1–2 backend audit passed on 2026-10-31: **234 tests, 4,013 assertions, no skips**. It corrected stale-state reads, empty genre validation and API export field requirements, and added a combined processing/moderation/privacy/deletion workflow test. Steps 1–2 are ready for Step 3; details are in the local [audit report](docs/STEP_2_AUDIT.md). The repository's existing ignore rules exclude `docs/` from ordinary staging.
+The final Step 1–2 backend audit passed on 2026-10-31: **234 tests, 4,013 assertions, no skips**. It corrected stale-state reads, empty genre validation and API export field requirements, and added a combined processing/moderation/privacy/deletion workflow test. This historical audit preceded Step 3; details are in the local [audit report](docs/STEP_2_AUDIT.md). The repository's existing ignore rules exclude `docs/` from ordinary staging.
 
 ## Step 1 reset and account operations
 
@@ -37,7 +52,7 @@ Historical Step 1 setup only: its review called for `php spark migrate:fresh` **
 
 `GET /api/v1/policies` supplies policy versions/URLs and the content-rights declaration. New Google signups receive `onboarding_required=true`, an opaque ten-minute `onboarding_token`, and no access token. POST that token with adult birth date and policy versions to `/auth/onboarding`. Birth dates are encrypted and appear only in the owner's private data export.
 
-Staff is separate from account ownership and future artist billing. After registering and verifying an adult account, enroll it on a trusted terminal with `php spark staff:enroll --user=<id> --role=moderator` (or `admin`). Configure the authenticator and confirm its code; the command also handles trusted-operator MFA recovery. `php spark staff:revoke --user=<id>` revokes access. No public API grants staff roles. Staff call `/auth/reauthenticate` with `purpose=staff`, their credential and a fresh TOTP before using `/admin/*`. The resulting staff access lasts 15 minutes and is bound to that JWT. Keep at least two reviewers for independent appeals.
+Staff is separate from account ownership and artist billing. After registering and verifying an adult account, enroll it on a trusted terminal with `php spark staff:enroll --user=<id> --role=moderator` (or `admin`). Configure the authenticator and confirm its code; the command also handles trusted-operator MFA recovery. `php spark staff:revoke --user=<id>` revokes access. No public API grants staff roles. Staff call `/auth/reauthenticate` with `purpose=staff`, their credential and a fresh TOTP before using `/admin/*`. The resulting staff access lasts 15 minutes and is bound to that JWT. Keep at least two reviewers for independent appeals.
 
 Sensitive privacy actions consume a five-minute single-use proof from `/auth/reauthenticate` (`purpose=export_data` or `delete_account`). Exports stay encrypted on the private `local` disk for 24 hours; their five-minute download links also require owner authentication. Account deletion immediately disables activity/revokes sessions, then removes personal records and managed media through a retryable job. `/account/deletion-requests` and `/account/deletion-confirmations` provide email recovery when ordinary access is unavailable. Public requests return generic responses and never delete from an email address alone.
 
@@ -255,7 +270,7 @@ Authenticated clients save with `POST /api/v1/audios/{audio}/save` (201 initiall
 
 Every video creation requires `rights_confirmed=true`, the current `rights_version` from `GET /api/v1/policies`, and an explicit `reuse_content` boolean. Audio creation requires the same declaration plus `reuse_allowed`. Default the UI choice to off; permission must be deliberate. Rights declarations do not establish copyright clearance.
 
-Only original and user-uploaded audio remain. Select it using `audio_id`; read creator attribution from nested `audio`. Legacy `sound_*` and `music` response fields are removed. Sending legacy sound fields, including null, returns 422. Release scheduling is not yet implemented: `scheduled_at` returns 422 rather than pretending to schedule publication.
+Only original and user-uploaded audio remain. Select it using `audio_id`; read creator attribution from nested `audio`. Legacy `sound_*` and `music` response fields are removed. Sending legacy sound fields, including null, returns 422. The legacy `scheduled_at` field returns 422; use the versioned Step 3 release actions for scheduling.
 
 Owners can PATCH `/audios/{audio}` to change title or reuse permission, and DELETE it to stop new selection and queue cleanup. Original audio permission is synchronized with its source video. Ordinary permission withdrawal/deletion preserves the soundtrack already embedded in published videos; moderation restrictions propagate to affected derivatives. If audio is deleted before a dependent video publishes, that video becomes `source_unavailable` and is excluded from retries. The creator must delete that unfinished post and submit a new selection. This also applies when the original source video or its account is deleted. Media resources never include URLs for restricted content. Previously issued media URLs remain valid until expiry; production private media must use private storage and signed playback.
 
@@ -281,16 +296,16 @@ Audio uploads return `audio_url`; create the library entry separately through `P
 ### Media storage
 
 - Managed media fields store `disk:key` references, such as `public:videos/1/clip.mp4`, `s3:avatars/1/avatar.png`, or `local:sounds/1/source.wav`. The disk name is its configured name, including custom disks such as `spaces`.
-- Upload responses return this reference in `storage_path`; pass it back unchanged when creating videos or audio. The `video_url`, `audio_url`, and `avatar_url` response fields remain full public or signed URLs.
-- Resources resolve the referenced disk, independently of the current default disk. S3 uses signed GET URLs when `temporary_urls` is enabled, otherwise the configured public/CDN URL. Local disks use their configured public URL; a private disk without one returns no public URL.
+- Upload responses return this reference in `storage_path`; pass it back unchanged when creating videos or audio. Immediate upload URL fields remain public or signed URLs. Draft uploads return `video_url=null`; their media is available through owner preview after creating the draft.
+- Resources resolve the referenced disk, independently of the current default disk. S3 uses signed GET URLs when `temporary_urls` is enabled, otherwise the configured public/CDN URL. Public local disks use their configured URL. Private local media uses short-lived application delivery URLs, which recheck published visibility; unpublished drafts require authenticated owner preview.
 - Existing unprefixed paths are still read from `public`, and existing configured media URLs remain supported. New bare-key writes use the current upload disk; new managed URL writes normalize to `disk:key`. External profile URLs, including Google avatars, remain unchanged.
 - Cleanup recognizes equivalent legacy and prefixed references, preserving shared files. `videos.storage_path` remains the only stored video source; `video_url` is a resource output, not a duplicate database column.
 
-`public/uploads` links to `storage/uploads`. Deploy that symlink (or configure the equivalent server alias). Nginx/Apache or the object store serves files and handles byte ranges; there is no PHP media controller. If your deployment omits symlinks, create it with `ln -s ../storage/uploads public/uploads`. Changing `APP_URL` automatically changes local media response URLs without rewriting stored paths. Local public files are directly accessible to anyone who knows their URL; API visibility is not filesystem access control. Signed S3 URLs are also usable by anyone holding them until expiry, including after a visibility or block change. Use private S3 storage when file access needs to expire.
+Point `public/uploads` (or the server alias) only at the configured public disk root, `storage/app/public` by default. Keep `storage/app/private` outside that mapping. Static public files are directly accessible to anyone who knows their URL. Private local files use the PHP media controller with authorization and bounded Range streaming; private S3 previews use 60-second signed URLs. Signed S3 URLs remain usable by their holder until expiry, including after a later visibility or block change. Configure bucket policies and CORS accordingly. Changing `APP_URL` updates local API/media URLs without rewriting stored references.
 
 ## Endpoints
 
-The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 106 versioned operations, including account lifecycle, moderation, artists and playlists. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
+The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 125 versioned operations, including account lifecycle, moderation, artists, playlists, billing and releases. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
 
 | Method | Path |
 | --- | --- |
@@ -366,7 +381,7 @@ Outside the API prefix: `/uploads/*` is static media, `GET /up` checks health, a
 
 Selected library audio is looped or cut to the short's duration. `audio_mode=replace` is the default; `mix` combines original and library audio with equal normalized weights. `original_audio_muted=true` removes the original input from either mode. Without a selected library sound, and with `reuse_content=true`, audible original sound is extracted into a ready AAC/M4A library record in the same publication transaction. Silent or muted videos do not generate a track. Processing retries skip already published videos and cannot overwrite an owner deletion. Both local and S3 uploads follow this pipeline; the worker downloads S3 sources, uploads processed files to the configured disk, and removes temporary files. FFmpeg commands run with a 20-minute timeout; the processing lock lasts one hour.
 
-Creation applies trim, crop, brightness/contrast/saturation and audio settings. Preset labels, warmth, cuts, text overlays and effects remain metadata; clients must render those pixels before upload. Scheduling is unavailable until Step 3 and is explicitly rejected. PATCH rejects creation-only media/edit settings; it does not re-encode existing videos.
+Creation applies trim, crop, brightness/contrast/saturation and audio settings. Preset labels, warmth, cuts, text overlays and effects remain metadata; clients must render those pixels before upload. Legacy scheduled_at writes are rejected; use the versioned artist release scheduling endpoint after private encoding is ready. PATCH rejects creation-only media/edit settings; it does not re-encode existing videos.
 
 Signed PUT URLs do not enforce the 500 MiB limit at the storage edge; the worker rejects oversized objects before downloading or publishing them. Configure retention for abandoned/rejected objects. A signed URL remains usable until expiry, so it is not a one-time upload token. Backend mode validates uploads before storing them in S3.
 
@@ -390,7 +405,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 106 versioned API operations and middleware assignments. |
+| `routes/api.php` | The 125 versioned API operations and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -414,7 +429,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover the 106-operation route/reference contract, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Artist coverage includes enrollment, capability limits, concurrent playlist edits, statistics, moderation and privacy integration. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover the 125-operation route/reference contract, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Artist coverage includes enrollment, capability limits, concurrent playlist edits, statistics, moderation and privacy integration. Billing/release coverage includes raw signatures, replay/reordering, lost-response recovery, refund/dispute allocation, renewal/account deletion, concurrent purchases/publication, private local/S3 draft transport, UTC/DST scheduling, downgrade, rights changes and queue failures. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 
@@ -422,7 +437,7 @@ Google tests generate local RSA-signed tokens and replace only the HTTP key resp
 
 The two PHP files in `tests/Fixtures` are server entry points: `http-router.php` boots the API against temporary storage, and `s3-router.php` receives local S3 requests. Both are needed by the upload tests; the endpoint contract lives directly in `ApiContractTest`.
 
-Before deployment, verify real signed GET and PUT requests, bucket permissions/CORS, SMTP, FFmpeg/FFprobe, queue supervision, and the configured production database. The web server/CDN must serve media with byte-range support; PHP does not proxy video playback. The local S3 fixture verifies application transfers, not AWS permissions or signature acceptance. The Laravel comparison is based on its routes, controllers, resources, requests, and test cases; its dependency directory is not present here.
+Before deployment, verify real signed GET and PUT requests, bucket permissions/CORS, SMTP, FFmpeg/FFprobe, queue supervision, and the configured production database. The web server/CDN must serve media with byte-range support; Private local playback is streamed by PHP; public disk and S3 playback use their storage server. The local S3 fixture verifies application transfers, not AWS permissions or signature acceptance. The Laravel comparison is based on its routes, controllers, resources, requests, and test cases; its dependency directory is not present here.
 
 ### Step 1 audit follow-up
 

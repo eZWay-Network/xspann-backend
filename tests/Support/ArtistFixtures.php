@@ -29,6 +29,11 @@ trait ArtistFixtures
             {
                 return $userId === $this->ownerId ? $this->plan : 'free';
             }
+
+            public function forArtist(Artist $artist): array
+            {
+                return $this->forUser($artist->user_id);
+            }
         });
     }
 }

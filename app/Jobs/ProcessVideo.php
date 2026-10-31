@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\{Audio, Video};
-use App\Services\{MediaProcessor, PendingUploads};
+use App\Services\{MediaProcessor, PendingUploads, Releases};
 use Spark\Facades\{DB, Cache};
 use Spark\Queue\Contracts\JobInterface;
 use Spark\Queue\Dispatchable;
@@ -23,7 +23,7 @@ class ProcessVideo implements JobInterface
     {
         Cache::lock("videos.process.$this->videoId", 3600)->block(5, function (): void {
             $video = Video::find($this->videoId);
-            if (!$video || $video->status !== Video::STATUS_PROCESSING || !self::eligible($video)) {
+            if (!$video || $video->status !== Video::STATUS_PROCESSING || !Releases::eligible($video)) {
                 return;
             }
 
@@ -33,9 +33,17 @@ class ProcessVideo implements JobInterface
             try {
                 PendingUploads::locked($video->user_id, function () use ($video, $media): bool {
                     return DB::transaction(function () use ($video, $media): bool {
+                        \App\Models\User::increment('id', 0, where: ['id' => $video->user_id]);
+                        Video::increment('version', 0, where: ['id' => $video->id]);
                         $current = Video::find($video->id);
-                        if (!$current || $current->status !== Video::STATUS_PROCESSING || !self::eligible($current)) {
+                        if (!$current || $current->status !== Video::STATUS_PROCESSING || !Releases::eligible($current)) {
                             return false;
+                        }
+
+                        if ($current->publication_intent === 'draft') {
+                            foreach (['storage_path', 'thumbnail_url', 'audio_path'] as $field) {
+                                \App\Services\ReleaseMedia::validate($media[$field] ?? null, $field, $field === 'storage_path');
+                            }
                         }
 
                         $updated = Video::whereKey($video->id)
@@ -45,7 +53,12 @@ class ProcessVideo implements JobInterface
                                 'storage_path' => $media['storage_path'],
                                 'thumbnail_url' => $current->thumbnail_url ?: ($media['thumbnail_url'] ?? null),
                                 'duration' => $media['duration'],
-                                'status' => Video::STATUS_PUBLISHED,
+                                'processing_state' => 'ready',
+                                'publication_state' => $current->publication_intent === 'immediate' ? 'published' : 'draft',
+                                'status' => $current->publication_intent === 'immediate' ? Video::STATUS_PUBLISHED : 'draft',
+                                'published_at' => $current->publication_intent === 'immediate' ? \App\Services\Billing\Billing::timestamp() : null,
+                                'release_error' => null,
+                                'version' => $current->version + 1,
                                 'updated_at' => now(),
                             ]);
 
@@ -85,23 +98,10 @@ class ProcessVideo implements JobInterface
         });
     }
 
-    private static function eligible(Video $video): bool
-    {
-        $user = $video->user()->first();
-        if (
-            !$user || $user->status !== 'active' || !$user->hasVerifiedEmail() || !$user->onboarded_at
-            || !$video->rights_confirmed_at || $video->moderation_status !== 'approved'
-        ) {
-            return false;
-        }
-
-        return !$video->audio_id || Audio::whereKey($video->audio_id)->availableTo($user)->exists();
-    }
-
     public function failed(Throwable $exception): void
     {
         Video::whereKey($this->videoId)
             ->where('status', Video::STATUS_PROCESSING)
-            ->update(['status' => Video::STATUS_FAILED, 'updated_at' => now()]);
+            ->update(['status' => Video::STATUS_FAILED, 'processing_state' => 'failed', 'release_error' => 'encoding_failed', 'updated_at' => now()]);
     }
 }

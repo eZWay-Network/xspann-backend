@@ -68,6 +68,7 @@ class PrivacyRequests
 
         if ($kind === 'deletion') {
             $user->update(['status' => 'deleting']);
+            DB::table('billing_subscriptions')->where('user_id', $user->id)->update(['deletion_requested_at' => \App\Services\Billing\Billing::timestamp()]);
             foreach (['jwt_access_tokens', 'staff_sessions', 'account_action_tokens'] as $table) {
                 DB::table($table)->where('user_id', $user->id)->delete();
             }
@@ -131,6 +132,8 @@ class PrivacyRequests
         if ($user->status !== 'deleting') {
             throw new \RuntimeException('Account is not pending deletion.');
         }
+
+        app(\App\Services\Billing\SubscriptionActions::class)->deleteAccount($user->id);
 
         // Keep rows and their paths until file cleanup succeeds, so retries can resume safely.
         foreach (Video::where('user_id', $user->id)->get() as $video) {
@@ -216,7 +219,7 @@ class PrivacyRequests
             'comments_reacts' => ['user_id', ['comment_id', 'reaction_type', 'created_at']],
             'moderation_decisions' => ['subject_user_id', ['id', 'action', 'reason', 'active', 'created_at']],
             'policy_acceptances' => ['user_id', ['policy', 'version', 'source', 'accepted_at']],
-            'videos' => ['user_id', ['id', 'caption', 'audio_id', 'visibility', 'status', 'moderation_status', 'rights_version', 'reuse_content', 'created_at']],
+            'videos' => ['user_id', ['id', 'caption', 'audio_id', 'visibility', 'status', 'processing_state', 'publication_state', 'publish_at', 'published_at', 'moderation_status', 'rights_version', 'reuse_content', 'created_at']],
             'audios' => ['user_id', ['id', 'title', 'origin', 'status', 'reuse_allowed', 'rights_version', 'created_at']],
             'comments' => ['user_id', ['id', 'video_id', 'parent_id', 'body', 'created_at']],
             'likes' => ['user_id', ['video_id', 'created_at']],
@@ -253,6 +256,10 @@ class PrivacyRequests
                 ->select(['date', ...ArtistStatistics::METRICS, 'collected_at'])
                 ->where('artist_id', $artist->id)->orderBy('date')->get()->toArray();
         }
+
+        $data['subscription'] = \App\Services\Billing\Billing::subscriptionData($user->id);
+        $data['billing_invoices'] = DB::table('billing_invoices')->select(['invoice_id', 'status', 'amount_paid', 'amount_due', 'currency', 'issued_at'])
+            ->whereIn('subscription_id', DB::table('billing_subscriptions')->select('id')->where('user_id', $user->id))->get()->toArray();
 
         $notifications = Notification::select(['id', 'type', 'data', 'read_at', 'created_at'])->where('user_id', $user->id)->get();
         SocialNotifications::redact($notifications->all(), $user);

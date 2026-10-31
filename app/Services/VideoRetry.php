@@ -19,14 +19,22 @@ class VideoRetry
             // A worker may have published or deleted the video since it was selected.
             $updated = Video::whereKey($id)
                 ->whereIn('status', [Video::STATUS_FAILED, Video::STATUS_PROCESSING])
-                ->update(['status' => Video::STATUS_PROCESSING, 'updated_at' => now()]);
+                ->update(['status' => Video::STATUS_PROCESSING, 'processing_state' => 'processing', 'release_error' => null, 'updated_at' => now()]);
 
             // MySQL can report zero changed rows for an already-processing video.
             if ($updated === 0 && !Video::whereKey($id)->where('status', Video::STATUS_PROCESSING)->exists()) {
                 continue;
             }
 
-            ProcessVideo::dispatch((int) $id);
+            try {
+                ProcessVideo::dispatch((int) $id)->send();
+            } catch (\Throwable $exception) {
+                Video::whereKey($id)->where('status', Video::STATUS_PROCESSING)->update([
+                    'status' => Video::STATUS_FAILED, 'processing_state' => 'failed',
+                    'release_error' => 'encoding_dispatch_failed', 'updated_at' => now(),
+                ]);
+                throw $exception;
+            }
             $queued = true;
         }
 

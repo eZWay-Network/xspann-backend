@@ -15,6 +15,7 @@ class ChunkUploads
     public static function rules(bool $chunk = false): array
     {
         $rules = [
+            'publication_intent' => ['sometimes', 'required', 'string', ['in' => ['immediate', 'draft']]],
             'upload_id' => ['required', 'uuid'],
             'total_chunks' => ['required', 'integer', 'regex:/^[0-9]+$/', 'min:1', 'max:10000'],
             'filename' => ['required', 'string', 'max:255'],
@@ -123,13 +124,14 @@ class ChunkUploads
                 }
 
                 $path = StorageService::pathFor($userId, $data['filename']);
-                $path = StorageService::disk()->putFileAs(dirname($path), $assembledPath, basename($path));
+                $diskName = ($data['publication_intent'] ?? 'immediate') === 'draft' ? ReleaseMedia::diskName() : StorageService::diskName();
+                $path = storage($diskName)->putFileAs(dirname($path), $assembledPath, basename($path));
 
-                PendingUploads::track($userId, $path);
+                PendingUploads::track($userId, $path, $diskName, ($data['publication_intent'] ?? 'immediate') === 'draft');
 
                 File::deleteDirectory($directory);
 
-                return $path;
+                return $diskName . ':' . $path;
             } finally {
                 File::delete($assembledPath);
             }
@@ -173,7 +175,7 @@ class ChunkUploads
 
     private function manifest(string $directory, array $data, bool $create): void
     {
-        $manifest = array_intersect_key($data, array_flip(['filename', 'content_type', 'total_size', 'total_chunks']));
+        $manifest = array_intersect_key($data, array_flip(['filename', 'content_type', 'total_size', 'total_chunks', 'publication_intent']));
         $path = "$directory/manifest.json";
 
         $manifest['total_size'] = (int) $manifest['total_size'];

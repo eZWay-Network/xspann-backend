@@ -28,7 +28,7 @@ class VideoActions
         }
 
         if (
-            $video->status !== Video::STATUS_PUBLISHED ||
+            $video->status !== Video::STATUS_PUBLISHED || $video->publication_state !== 'published' || $video->processing_state !== 'ready' ||
             Video::query()->whereKey($video->id)->visibleTo(Auth::user())->doesntExist()
         ) {
             abort(404, 'Video not found.');

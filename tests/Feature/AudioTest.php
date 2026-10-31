@@ -41,7 +41,7 @@ class AudioTest extends TestCase
             ->assertJsonPath('data.audio_mode', 'replace')
             ->assertJsonPath('data.audio.title', $track->title)->json('data.id');
         $this->patchJson('/api/v1/videos/' . $id, ['audio_id' => $track->id])->assertStatus(422);
-        Video::whereKey($id)->update(['status' => 'published']);
+        Video::whereKey($id)->update(['status' => 'published', 'processing_state' => 'ready', 'publication_state' => 'published']);
         $this->getJson('/api/v1/audios/' . $track->id . '/videos')->assertOk()->assertJsonPath('data.0.id', $id);
         $this->getJson('/api/v1/audios/' . $track->id)->assertJsonPath('data.videos_count', 1);
     }

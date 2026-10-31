@@ -33,16 +33,18 @@ class UploadController extends Controller
 
     public function video(SignedVideoUploadRequest $request): Response
     {
-        if (StorageService::supportsSignedUploads()) {
+        $draft = $request->input('publication_intent', 'immediate') === 'draft';
+        $diskName = $draft ? \App\Services\ReleaseMedia::diskName() : StorageService::diskName();
+        if (config('storage.video_upload_mode') === 'signed' && config('storage.disks.' . $diskName . '.driver') === 's3') {
             try {
                 $path = StorageService::pathFor($request->user('id'), $request->validated('filename'));
                 $contentType = $request->validated('content_type');
-                $acl = config('storage.disks.' . StorageService::diskName() . '.acl');
-                $disk = StorageService::disk();
+                $acl = $draft ? null : config('storage.disks.' . $diskName . '.acl');
+                $disk = storage($diskName);
                 $uploadUrl = $disk->temporaryUploadUrl($path, 900, $contentType, $acl);
 
-                PendingUploads::track($request->user('id'), $path);
-                $reference = StorageService::storedValue($path);
+                PendingUploads::track($request->user('id'), $path, $diskName, $draft);
+                $reference = $diskName . ':' . $path;
 
                 $headers = ['Content-Type' => $contentType];
 
@@ -54,7 +56,7 @@ class UploadController extends Controller
                     'data' => [
                         'upload_method' => 'signed_url',
                         'storage_path' => $reference,
-                        'video_url' => StorageService::publicUrl($reference),
+                        'video_url' => $request->input('publication_intent', 'immediate') === 'draft' ? null : StorageService::publicUrl($reference),
                         'upload_url' => $uploadUrl,
                         'headers' => $headers,
                     ],
@@ -103,21 +105,22 @@ class UploadController extends Controller
             'data' => [
                 'upload_method' => 'chunked',
                 'storage_path' => $reference,
-                'video_url' => StorageService::publicUrl($reference),
+                'video_url' => $request->input('publication_intent', 'immediate') === 'draft' ? null : StorageService::publicUrl($reference),
             ],
         ], 201);
     }
 
     private function upload(Request $request, string $kind, string $urlKey): Response
     {
-        $path = StorageService::storeFile($request->user('id'), $request->file('file'), $kind);
+        $draft = $kind === 'videos' && $request->input('publication_intent', 'immediate') === 'draft';
+        $path = StorageService::storeFile($request->user('id'), $request->file('file'), $kind, $draft ? \App\Services\ReleaseMedia::diskName() : null, $draft);
         $reference = StorageService::storedValue($path);
 
         return json([
             'data' => [
                 'upload_method' => 'multipart',
                 'storage_path' => $reference,
-                $urlKey => StorageService::publicUrl($reference),
+                $urlKey => $draft ? null : StorageService::publicUrl($reference),
             ],
         ], 201);
     }

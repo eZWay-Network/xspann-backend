@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\V1\{
+    BillingController,
+    ReleaseController,
+    MediaController,
     AccountController,
     PrivacyController,
     ModerationController,
@@ -28,6 +31,9 @@ use App\Http\Controllers\Api\V1\{
 use Spark\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    Route::get('/plans', [BillingController::class, 'plans']);
+    Route::post('/webhooks/stripe', [BillingController::class, 'webhook']);
+    Route::get('/media/{token}', [MediaController::class, 'show']);
     Route::get('/artist-taxonomy', [ArtistController::class, 'taxonomy']);
     Route::get('/artists', [ArtistController::class, 'index']);
     Route::get('/artists/by-slug/{slug}', [ArtistController::class, 'bySlug']);
@@ -43,6 +49,10 @@ Route::prefix('v1')->group(function () {
     Route::post('/account/deletion-confirmations', [PrivacyController::class, 'confirmDeletion'])->middleware('throttle:5');
 
     Route::middleware('restricted')->group(function (): void {
+        Route::get('/me/subscription', [BillingController::class, 'subscription']);
+        Route::get('/me/billing/invoices', [BillingController::class, 'invoices']);
+        Route::get('/billing/checkouts/{reference}', [BillingController::class, 'checkoutStatus'])->middleware('throttle:60');
+        Route::post('/billing/subscription/cancel', [BillingController::class, 'cancel'])->middleware('throttle:10');
         Route::post('/auth/reauthenticate', [AccountController::class, 'reauthenticate'])->middleware('throttle:5');
         Route::post('/me/policy-acceptances', [AccountController::class, 'acceptPolicies'])->middleware('throttle:10');
         Route::post('/me/deletion-requests', [PrivacyController::class, 'deleteAccount'])->middleware('throttle:5');
@@ -91,6 +101,19 @@ Route::prefix('v1')->group(function () {
     Route::post('/videos/{video}/view', [ViewController::class, 'store'])->middleware('throttle:120');
 
     Route::middleware('auth')->group(function (): void {
+        Route::post('/billing/portal', [BillingController::class, 'portal'])->middleware('throttle:10');
+        Route::get('/me/entitlements', [BillingController::class, 'entitlements']);
+        Route::post('/billing/checkout', [BillingController::class, 'checkout'])->middleware('throttle:10');
+        Route::post('/billing/subscription/resume', [BillingController::class, 'resume'])->middleware('throttle:10');
+        Route::get('/me/artist/releases', [ReleaseController::class, 'index']);
+        Route::get('/me/artist/releases/{video}', [ReleaseController::class, 'show']);
+        Route::patch('/me/artist/releases/{video}', [ReleaseController::class, 'update'])->middleware('throttle:30');
+        Route::post('/me/artist/releases/{video}/schedule', [ReleaseController::class, 'schedule'])->middleware('throttle:30');
+        Route::post('/me/artist/releases/{video}/cancel-schedule', [ReleaseController::class, 'cancel'])->middleware('throttle:30');
+        Route::post('/me/artist/releases/{video}/publish', [ReleaseController::class, 'publish'])->middleware('throttle:30');
+        Route::post('/me/videos/{video}/retry', [ReleaseController::class, 'retry'])->middleware('throttle:5');
+        Route::get('/me/videos/{video}/preview/{asset}', [ReleaseController::class, 'preview']);
+
         Route::get('/me/artist', [ArtistController::class, 'mine']);
         Route::put('/me/artist', [ArtistController::class, 'save'])->middleware('throttle:30');
         Route::put('/me/artist/links', [ArtistController::class, 'links'])->middleware('throttle:30');

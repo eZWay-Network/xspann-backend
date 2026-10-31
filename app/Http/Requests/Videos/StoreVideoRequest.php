@@ -28,6 +28,7 @@ class StoreVideoRequest extends FormRequest
             'visibility' => ['sometimes', 'required', 'string', ['in' => ['public', 'followers', 'private']]],
             'high_quality_upload' => ['sometimes', 'required', 'boolean'],
             'scheduled_at' => ['prohibited'],
+            'publication_intent' => ['sometimes', 'required', 'string', ['in' => ['immediate', 'draft']]],
             'trim_start' => ['nullable', 'numeric', 'min:0'],
             'trim_end' => ['nullable', 'numeric', 'gt:trim_start'],
             'cut_points' => ['nullable', 'array', 'max:20'],

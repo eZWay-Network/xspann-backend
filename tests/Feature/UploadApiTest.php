@@ -31,7 +31,7 @@ class UploadApiTest extends TestCase
     private function startServer(): void
     {
         $config = [];
-        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists'] as $key) {
+        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists', 'billing'] as $key) {
             $config[$key] = config($key);
         }
         $documentRoot = $this->storagePath . '/public';
@@ -368,6 +368,69 @@ class UploadApiTest extends TestCase
                 app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0);
                 $this->assertFalse(storage('s3')->exists($this->mediaKey($upload['storage_path'])));
             }
+        } finally {
+            $cloud->stop();
+        }
+    }
+
+
+    public function testPrivateDraftMultipartStaysOffPublicStorageAndRequiresOwnerPreview(): void
+    {
+        $this->loginHttp();
+        $file = $this->videoFile();
+        $upload = $this->http('/uploads/videos/local', [
+            'publication_intent' => 'draft', 'file' => new \CURLFile($file, 'video/mp4', 'draft.mp4'),
+        ], 201, true)['data'];
+        $this->assertTrue(str_starts_with($upload['storage_path'], 'local:videos/1/'));
+        $this->assertSame(null, $upload['video_url']);
+        $key = $this->mediaKey($upload['storage_path']);
+        $this->assertFalse(storage('public')->exists($key));
+        $this->assertSame(file_get_contents($file), storage('local')->get($key));
+        $this->server->request('GET', '/uploads/' . $key)->assertStatus(404);
+        $video = $this->http('/videos', [...$this->videoRights(), 'publication_intent' => 'draft', 'storage_path' => $upload['storage_path']], 201)['data'];
+        $this->fakeVideoTools('8.5');
+        (new \App\Jobs\ProcessVideo($video['id']))->handle();
+        $release = \App\Models\Video::findOrFail($video['id']);
+        $this->assertSame('draft', $release->status);
+        $this->assertSame('ready', $release->processing_state);
+        foreach ([$release->storage_path, $release->thumbnail_url, \App\Models\Audio::where('source_video_id', $release->id)->first()->storage_path] as $reference) {
+            $this->assertTrue(str_starts_with($reference, 'local:'));
+            $this->server->request('GET', '/uploads/' . $this->mediaKey($reference))->assertStatus(404);
+        }
+        $path = '/api/v1/me/videos/' . $release->id . '/preview/video';
+        $this->server->request('GET', $path)->assertStatus(401);
+        $this->server->request('GET', $path, headers: ['Authorization' => 'Bearer ' . $this->bearer, 'Range' => 'bytes=0-4'])
+            ->assertStatus(206)->assertHeader('Content-Range', 'bytes 0-4/17')->assertSee('fixtu');
+        $this->server->request('GET', '/api/v1/videos/' . $release->id)->assertStatus(404);
+    }
+
+    public function testPrivateDraftS3SignedUploadDoesNotIssuePlaybackUrlBeforeOwnerAuthorization(): void
+    {
+        $cloud = new HttpServer(dirname(__DIR__) . '/Fixtures/s3-router.php', $this->storagePath, ['XSPANN_S3_TEST_ROOT' => $this->storagePath]);
+        try {
+            $this->useS3(['endpoint' => $cloud->url, 'use_path_style_endpoint' => true, 'temporary_urls' => true]);
+            $this->app->mergeConfig(['storage' => ['video_upload_mode' => 'signed', 'release_disk' => 's3']]);
+            $this->loginHttp();
+            $file = $this->videoFile();
+            $signed = $this->http('/uploads/videos/signed-url', [
+                'filename' => 'draft.mp4', 'content_type' => 'video/mp4', 'publication_intent' => 'draft',
+            ])['data'];
+            $this->assertSame('signed_url', $signed['upload_method']);
+            $this->assertSame(null, $signed['video_url']);
+            $this->assertFalse(isset($signed['headers']['x-amz-acl']));
+            $cloud->request('PUT', substr($signed['upload_url'], strlen($cloud->url)), file_get_contents($file), $signed['headers'])->assertOk();
+            $video = $this->http('/videos', [...$this->videoRights(), 'storage_path' => $signed['storage_path'], 'publication_intent' => 'draft'], 201)['data'];
+            $this->fakeVideoTools();
+            (new \App\Jobs\ProcessVideo($video['id']))->handle();
+            $release = \App\Models\Video::findOrFail($video['id']);
+            $this->assertSame('draft', $release->status);
+            $this->assertTrue(str_starts_with($release->storage_path, 's3:'));
+            $this->assertTrue(str_starts_with($release->thumbnail_url, 's3:'));
+            $this->assertTrue(str_starts_with(\App\Models\Audio::where('source_video_id', $release->id)->first()->storage_path, 's3:'));
+            $path = '/api/v1/me/videos/' . $release->id . '/preview/video';
+            $this->server->request('GET', $path)->assertStatus(401);
+            $response = $this->server->request('GET', $path, headers: ['Authorization' => 'Bearer ' . $this->bearer])->assertStatus(302);
+            $this->assertTrue(str_contains(array_change_key_case($response->response->getHeaders())['location'], 'X-Amz-Expires=60'));
         } finally {
             $cloud->stop();
         }

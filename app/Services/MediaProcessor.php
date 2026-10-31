@@ -26,6 +26,7 @@ class MediaProcessor
     {
         $temporary = [];
         $stored = [];
+        $releaseDisk = $video->publication_intent === 'draft' ? ReleaseMedia::diskName() : null;
 
         try {
             $source = $this->source($video->storage_path, $temporary, ChunkUploads::MAX_BYTES);
@@ -130,7 +131,7 @@ class MediaProcessor
             }
 
             $result = [
-                'storage_path' => $this->store($video->user_id, $output, 'video.mp4', 'videos', $stored),
+                'storage_path' => $this->store($video->user_id, $output, 'video.mp4', 'videos', $stored, $releaseDisk),
                 'duration' => (int) ceil($processed['duration']),
             ];
             if (!$video->thumbnail_url) {
@@ -147,7 +148,7 @@ class MediaProcessor
             ) {
                 $sound = $this->temporary($temporary);
                 $this->encodeAudio($output, $sound, copy: true);
-                $result['audio_path'] = $this->store($video->user_id, $sound, 'original.m4a', 'sounds', $stored);
+                $result['audio_path'] = $this->store($video->user_id, $sound, 'original.m4a', 'sounds', $stored, $releaseDisk);
             }
 
             return $result;
@@ -311,12 +312,13 @@ class MediaProcessor
         return $path;
     }
 
-    private function store(int $userId, string $source, string $filename, string $kind, array &$stored): string
+    private function store(int $userId, string $source, string $filename, string $kind, array &$stored, ?string $diskName = null): string
     {
         $path = StorageService::pathFor($userId, $filename, $kind);
-        $value = StorageService::storedValue($path);
+        $diskName ??= StorageService::diskName();
+        $value = $diskName . ':' . $path;
         $stored[] = $value;
-        StorageService::disk()->putFileAs(dirname($path), $source, basename($path));
+        storage($diskName)->putFileAs(dirname($path), $source, basename($path));
 
         return $value;
     }

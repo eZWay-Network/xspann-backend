@@ -55,7 +55,15 @@ class VideoController extends Controller
                 }
             }
 
+            $draft = $input->get('publication_intent', 'immediate') === 'draft';
+            \App\Services\ReleaseMedia::attach($input->storage_path, $request->user('id'), $draft);
+            if ($draft && $input->thumbnail_url) {
+                throw ValidationException::withMessages(['thumbnail_url' => ['Draft covers are generated privately during encoding.']]);
+            }
+
             $input->set('status', Video::STATUS_PROCESSING);
+            $input->set('processing_state', 'processing');
+            $input->set('publication_state', 'draft');
 
             return $request->user()->videos()->create($input);
         });
@@ -63,7 +71,7 @@ class VideoController extends Controller
         try {
             ProcessVideo::dispatch($video->id);
         } catch (\Throwable $exception) {
-            $video->update(['status' => Video::STATUS_FAILED]);
+            $video->update(['status' => Video::STATUS_FAILED, 'processing_state' => 'failed', 'release_error' => 'queue_unavailable']);
             throw $exception;
         }
 
@@ -90,6 +98,8 @@ class VideoController extends Controller
         PendingUploads::attach($request->user('id'), function () use ($request, $video): void {
             abort_if($video->refresh()->status === Video::STATUS_DELETED, 404, 'Video not found.');
 
+            abort_unless($video->publication_intent === 'immediate' && $video->publication_state !== 'scheduled' || $video->publication_state === 'published', 409, 'Use the versioned release endpoint to edit a draft.');
+
             $data = $request->validated();
             StorageService::validateOwner($data->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
 
@@ -99,6 +109,7 @@ class VideoController extends Controller
                 unset($data['pinned']);
             }
 
+            $data->set('version', $video->version + 1);
             if (!$video->update($data)) {
                 throw new \RuntimeException('Video update failed.');
             }
@@ -114,7 +125,9 @@ class VideoController extends Controller
     {
         authorize('model.delete', $video);
 
-        $video->update(['status' => Video::STATUS_DELETED]);
+        \App\Services\Releases::transaction($video->id, function (Video $current): void {
+            \App\Services\Releases::save($current, ['status' => Video::STATUS_DELETED, 'version' => $current->version + 1, 'publish_at' => null]);
+        });
 
         DeleteVideo::dispatch((int) $video->id);
 

@@ -26,13 +26,16 @@
       slug: "alex-band",
       provider: "google",
       hash: "<email-hash>",
+      reference: "<checkout-reference>",
+      token: "<media-token>",
+      asset: "video",
     };
     let path = endpoint.uri
       .replace("/api/v1", "")
       .replace(/\{([^}]+)\}/g, (_, key) => values[key] || "1");
     let query = "";
     if (endpoint.limit) query = "?page=1&limit=" + endpoint.limit;
-    if (endpoint.id === "authcontroller-verifyemail")
+    if (["authcontroller-verifyemail", "mediacontroller-show"].includes(endpoint.id))
       query = "?expires=<expires>&signature=<signature>";
     return reference.baseUrl.replace(/\/$/, "") + path + query;
   };
@@ -40,7 +43,7 @@
     const url = requestUrl(endpoint);
     const body = endpoint.example;
     const multipart = endpoint.contentType === "multipart/form-data";
-    const headers = { Accept: "application/json" };
+    const headers = { Accept: endpoint.responseType === "binary" ? "*/*" : "application/json", ...(endpoint.headers || {}) };
     if (endpoint.auth) headers.Authorization = "Bearer <access-token>";
     if (endpoint.contentType === "application/json")
       headers["Content-Type"] = "application/json";
@@ -68,6 +71,9 @@
         options.push(
           `  body: JSON.stringify(${JSON.stringify(body, null, 2).replace(/\n/g, "\n  ")})`,
         );
+      if (endpoint.responseType === "binary") {
+        return setup + `const response = await fetch(${JSON.stringify(url)}, {\n${options.join(",\n")}\n});\nif (!response.ok) throw new Error(\`HTTP \${response.status}\`);\nconst media = await response.blob();`;
+      }
       return (
         setup +
         `const response = await fetch(${JSON.stringify(url)}, {\n${options.join(",\n")}\n});\nconst payload = response.status === 204 ? null : await response.json();\nif (!response.ok) {\n  // payload.errors may contain field-level validation errors.\n  throw new Error(payload.message || \`HTTP \${response.status}\`);\n}\nconsole.log(payload?.data);`

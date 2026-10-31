@@ -40,7 +40,7 @@ class StorageService
         return "$kind/$userId/" . Hash::random(16) . ".$extension";
     }
 
-    public static function storeFile(int $userId, array $file, string $kind): string
+    public static function storeFile(int $userId, array $file, string $kind, ?string $diskName = null, bool $privateRelease = false): string
     {
         // Spark's uploader verifies genuine HTTP uploads and streams local copies.
         $max = match ($kind) {
@@ -65,20 +65,24 @@ class StorageService
             $compress = 90;
         }
 
-        $path = self::disk()
+        $diskName ??= self::diskName();
+        $path = storage($diskName)
             ->uploader("$kind/$userId", extensions: $extensions, maxSize: $max, resize: $resize, compress: $compress)
             ->upload($file);
 
-        PendingUploads::track($userId, $path);
+        PendingUploads::track($userId, $path, $diskName, $privateRelease);
 
-        return $path;
+        return "$diskName:$path";
     }
 
-    public static function storeThumbnail(int $userId, string $localPath): string
+    public static function storeThumbnail(int $userId, string $localPath, ?string $diskName = null): string
     {
         $path = self::pathFor($userId, 'cover.jpg', 'thumbnails');
 
-        return self::disk()->putFileAs(dirname($path), $localPath, basename($path));
+        $diskName ??= self::diskName();
+        storage($diskName)->putFileAs(dirname($path), $localPath, basename($path));
+
+        return "$diskName:$path";
     }
 
     /** Normalize a new write; bare upload keys belong to the current upload disk. */
@@ -122,9 +126,9 @@ class StorageService
             return $disk->temporaryUrl($location['key'], max(60, min(604800, (int) config('storage.media_url_ttl', 3600))));
         }
 
-        // A private local disk has no public route; never invent an uploads URL for it.
+        // Delivery rechecks published visibility or audio availability on every request.
         if (($config['driver'] ?? null) === 'local' && empty($config['url'])) {
-            return null;
+            return ReleaseMedia::url($location['disk'] . ':' . $location['key']);
         }
 
         return $disk->url($location['key']);

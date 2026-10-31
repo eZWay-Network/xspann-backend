@@ -1,7 +1,7 @@
 <?php
 
 return [
-    // Step 3 will resolve a paid plan from billing; HTTP input never selects a plan.
+    // HTTP input never selects access; verified paid periods select these limits.
     'plans' => [
         'free' => [
             'links' => 1,
@@ -10,6 +10,10 @@ return [
             'enhanced_profile' => false,
             'enhanced_directory_card' => false,
             'analytics_30_days' => false,
+            'release_scheduling' => false,
+            'fan_announcements' => 0,
+            'announcement_recipients' => 0,
+            'monthly_boost_credit_cents' => 0,
         ],
         'artist_starter' => [
             'links' => 5,
@@ -18,6 +22,10 @@ return [
             'enhanced_profile' => true,
             'enhanced_directory_card' => false,
             'analytics_30_days' => true,
+            'release_scheduling' => false,
+            'fan_announcements' => 0,
+            'announcement_recipients' => 0,
+            'monthly_boost_credit_cents' => 0,
         ],
         'artist_pro' => [
             'links' => 5,
@@ -26,6 +34,10 @@ return [
             'enhanced_profile' => true,
             'enhanced_directory_card' => true,
             'analytics_30_days' => true,
+            'release_scheduling' => true,
+            'fan_announcements' => 4,
+            'announcement_recipients' => 1000,
+            'monthly_boost_credit_cents' => 500,
         ],
     ],
     'genres_per_artist' => 5,

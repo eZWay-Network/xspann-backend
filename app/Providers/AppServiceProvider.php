@@ -9,7 +9,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Register any application services here
+        $this->app->bind(\App\Services\Billing\PaymentProvider::class, \App\Services\Billing\StripeProvider::class);
     }
 
     public function boot(): void

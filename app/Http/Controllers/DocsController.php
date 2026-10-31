@@ -38,16 +38,32 @@ class DocsController extends Controller
                 }
             }
             $entry['parameters'] = [];
+            $entry['headers'] = match ($key) {
+                'BillingController@checkout' => ['Idempotency-Key' => '<unique-purchase-key>'],
+                'BillingController@webhook' => ['Stripe-Signature' => '<signature-over-exact-raw-body>'],
+                default => [],
+            };
+            foreach ($entry['headers'] as $name => $example) {
+                $entry['parameters'][] = ['name' => $name, 'in' => 'header', 'type' => 'string', 'required' => true, 'description' => $example];
+            }
+            if ($key === 'MediaController@show') {
+                foreach (['expires' => 'Unix expiry from the returned URL.', 'signature' => 'HMAC from the returned URL.'] as $name => $description) {
+                    $entry['parameters'][] = ['name' => $name, 'in' => 'query', 'type' => 'string', 'required' => true, 'description' => $description];
+                }
+            }
             preg_match_all('/\{([^}]+)\}/', $entry['uri'], $matches);
             foreach ($matches[1] as $name) {
                 $description = match ($name) {
                     'username' => 'Account username (not its numeric ID).',
                     'slug' => 'Unique lowercase artist slug.',
+                    'reference' => 'Opaque local checkout reference.',
+                    'token' => 'Opaque signed media token.',
+                    'asset' => 'video, thumbnail or original_audio.',
                     'provider' => 'Only google is supported.',
                     'hash' => 'Email SHA-1 hash from the verification link.',
                     default => 'Numeric ' . $name . ' ID.',
                 };
-                $entry['parameters'][] = ['name' => $name, 'in' => 'path', 'type' => in_array($name, ['username', 'provider', 'hash', 'slug']) ? 'string' : 'integer', 'required' => true, 'description' => $description];
+                $entry['parameters'][] = ['name' => $name, 'in' => 'path', 'type' => in_array($name, ['username', 'provider', 'hash', 'slug', 'reference', 'token', 'asset']) ? 'string' : 'integer', 'required' => true, 'description' => $description];
             }
             if ($entry['limit'] !== null) {
                 $entry['parameters'][] = ['name' => 'page', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Page number; default 1.'];
@@ -101,7 +117,7 @@ class DocsController extends Controller
                     $entry['parameters'][] = ['name' => $name, 'in' => 'query', 'type' => $name === 'expires' ? 'integer' : 'string', 'required' => true, 'description' => $description];
                 }
             }
-            if ($entry['limit'] !== null && in_array($entry['group'], ['Artists', 'Artist playlists'], true)) {
+            if ($entry['limit'] !== null && in_array($entry['group'], ['Artists', 'Artist playlists', 'Releases', 'Billing'], true)) {
                 foreach ($entry['parameters'] as &$parameter) {
                     if ($parameter['name'] === 'limit') {
                         $parameter['description'] = 'Items per page, 1–50; default 20. Invalid values return 422.';
@@ -150,6 +166,15 @@ class DocsController extends Controller
             }
             if ($entry['status'] === '204') {
                 $entry['response'] = null;
+            }
+            if ($key === 'BillingController@webhook') {
+                $entry['response'] = $response;
+                $entry['contentType'] = 'application/json';
+            }
+            if (in_array($key, ['ReleaseController@preview', 'MediaController@show'], true)) {
+                $entry['responseType'] = 'binary';
+                $entry['response'] = null;
+                $entry['errors']['416'] = 'Requested byte range is invalid or unavailable.';
             }
             if ($key === 'PrivacyController@download') {
                 $entry['response'] = $response;
@@ -227,8 +252,8 @@ class DocsController extends Controller
             18,
         );
         $add('VideoController@show', 'Videos', 'Get a video', 'Returns one visible video. Only its owner can retrieve unpublished videos, including processing, failed and source_unavailable uploads. Deleted or inaccessible videos return 404.', '$Video');
-        $add('VideoController@store', 'Videos', 'Create a video post', 'First upload the media, then submit its storage_path. The file must exist and belong to you. Creates a processing video and queues H.264/AAC compression. Optional audio_id selects a ready library sound; audio_mode is replace (default) or mix. Muting removes the original audio. Without a library selection, audible original sound becomes a reusable track following source privacy. Poll GET /videos/{video} until published, failed or source_unavailable. source_unavailable means selected audio was deleted before publication; delete the unfinished post and submit a new selection. Managed thumbnail URLs must also belong to you. Editing times are in seconds. Creation applies trim_start/trim_end, a centered portrait 9:16 crop (fill) or letterbox (fit), brightness/contrast/saturation, original muting and audio_settings (start in sound seconds, original_volume and sound_volume from 0 to 1). Library audio loops to cover the trimmed clip. Native clients that already rendered the final audio mix must set audio_settings.rendered=true; the worker preserves uploaded audio at unity gain while retaining and validating audio_id attribution. Omit trim, crop, filters and text settings for pre-rendered pixels, and keep cover_time relative to the uploaded result. cover_time is relative to the edited output. Cropping and filters are encoded by the worker; preset labels, warmth, cut_points, text_overlay and effect_settings remain metadata only. Invalid media ranges fail processing. Editing existing posts does not re-encode media. Uploads require rights_confirmed=true, current rights_version and an explicit reuse_content boolean. Original extraction requires reuse_content=true. Legacy sound fields and scheduled_at are rejected; real scheduling arrives in Step 3.', '$ProcessingVideo', '201', StoreVideoRequest::class, ['rights_confirmed' => true, 'rights_version' => config('policies.rights_version'), 'reuse_content' => false, 'storage_path' => 'public:videos/1/example.mp4', 'caption' => 'Hello #world', 'visibility' => 'public']);
-        $add('VideoController@update', 'Videos', 'Update your video', 'Owner only (403 otherwise). Updates caption, thumbnail_url, location_name, visibility, high_quality_upload, reuse_content and pinned only. Media/edit settings are creation-only and rejected here, including explicit null. pinned=true sets pinned_at; false clears it. reuse_content=false hides existing original sounds from reuse; re-enabling restores existing sounds but does not trigger extraction.', '$Video', '200', UpdateVideoRequest::class, ['caption' => 'An updated caption', 'pinned' => true]);
+        $add('VideoController@store', 'Videos', 'Create a video post', 'First upload the media, then submit its storage_path. The file must exist and belong to you. Creates a processing video and queues H.264/AAC compression. Optional audio_id selects a ready library sound; audio_mode is replace (default) or mix. Muting removes the original audio. Without a library selection, audible original sound becomes a reusable track following source privacy. Poll GET /videos/{video} until published, failed or source_unavailable. source_unavailable means selected audio was deleted before publication; delete the unfinished post and submit a new selection. Managed thumbnail URLs must also belong to you. Editing times are in seconds. Creation applies trim_start/trim_end, a centered portrait 9:16 crop (fill) or letterbox (fit), brightness/contrast/saturation, original muting and audio_settings (start in sound seconds, original_volume and sound_volume from 0 to 1). Library audio loops to cover the trimmed clip. Native clients that already rendered the final audio mix must set audio_settings.rendered=true; the worker preserves uploaded audio at unity gain while retaining and validating audio_id attribution. Omit trim, crop, filters and text settings for pre-rendered pixels, and keep cover_time relative to the uploaded result. cover_time is relative to the edited output. Cropping and filters are encoded by the worker; preset labels, warmth, cut_points, text_overlay and effect_settings remain metadata only. Invalid media ranges fail processing. Editing existing posts does not re-encode media. Uploads require rights_confirmed=true, current rights_version and an explicit reuse_content boolean. Original extraction requires reuse_content=true. Legacy sound fields and scheduled_at are rejected. publication_intent defaults to immediate. For drafts, use a fresh upload created with publication_intent=draft and pass that intent here too; no custom thumbnail is accepted. Encoding retains private draft state. Poll owner release detail and use its versioned publish/schedule actions after processing_state=ready.', '$ProcessingVideo', '201', StoreVideoRequest::class, ['rights_confirmed' => true, 'rights_version' => config('policies.rights_version'), 'reuse_content' => false, 'storage_path' => 'public:videos/1/example.mp4', 'caption' => 'Hello #world', 'visibility' => 'public']);
+        $add('VideoController@update', 'Videos', 'Update your video', 'Owner only (403 otherwise). Unpublished private releases use PATCH /me/artist/releases/{video} with version instead. Updates caption, thumbnail_url, location_name, visibility, high_quality_upload, reuse_content and pinned only. Media/edit settings are creation-only and rejected here, including explicit null. pinned=true sets pinned_at; false clears it. reuse_content=false hides existing original sounds from reuse; re-enabling restores existing sounds but does not trigger extraction.', '$Video', '200', UpdateVideoRequest::class, ['caption' => 'An updated caption', 'pinned' => true]);
         $add('VideoController@destroy', 'Videos', 'Delete your video', 'Owner only (403 otherwise). Immediately marks the video deleted and queues storage cleanup.', $message('Video deleted'));
         foreach (['suggestions' => ['Suggested accounts', 'Accounts ranked by follower count, then recency. For signed-in viewers, excludes self, followed accounts and blocked relationships.', 18], 'followers' => ['List followers', 'Visible accounts following this username.', 20], 'following' => ['List followed accounts', 'Visible accounts this username follows.', 20]] as $action => [$title, $description, $limit]) {
             $add('UserController@' . $action, 'Users', $title, $description, '$User', '200', [], [], $limit);
@@ -257,7 +282,7 @@ class DocsController extends Controller
         $add('AudioSaveController@destroy', 'Audio library', 'Unsave a sound', 'Removes only your saved reference, even when the sound is no longer available. Repeated removals return the same response.', ['saved' => false]);
         $add('AudioController@store', 'Audio library', 'Create a sound', 'Submit the storage_path from the sound upload endpoint, title, rights_confirmed=true, current rights_version and an explicit reuse_allowed boolean. Creates a processing library entry and queues AAC conversion. Poll the sound profile until ready.', '$ProcessingAudio', '201', \App\Http\Requests\Audios\StoreAudioRequest::class, ['storage_path' => 'public:sounds/1/example.mp3', 'title' => 'My sound', 'rights_confirmed' => true, 'rights_version' => config('policies.rights_version'), 'reuse_allowed' => false]);
         $add('AudioController@index', 'Audio library', 'Browse reusable sounds', 'Ready sounds from active, unblocked creators. Original sounds require a public, published source short. Search with q; results are newest first.', '$Audio', '200', [], [], 20);
-        $add('AudioController@show', 'Audio library', 'Sound profile', 'Returns the sound and its original creator. Owners can poll processing or failed uploads; others receive 404 until a sound is available.', '$Audio');
+        $add('AudioController@show', 'Audio library', 'Sound profile', 'Returns the sound and its original creator. Owners can poll processing or failed uploads; others receive 404 until a sound is available. An unpublished original uses a bearer-authorized owner preview URL, with local Range delivery or a 60-second S3 redirect. A restricted or deleted source has no audio_url.', '$Audio');
         $add('AudioController@videos', 'Audio library', 'Shorts using a sound', 'Published shorts using this sound, filtered by viewer visibility. The sound must still be available for reuse.', '$Video', '200', [], [], 20);
         $add('NotificationController@index', 'Notifications', 'List your notifications', 'Stored in-app activity for the signed-in account, newest first. Supports unread filtering and includes meta.unread_count for the badge. See the Notification schema for event types, recipients and payload fields.', '$Notification', '200', [], [], 20);
         $add('NotificationController@read', 'Notifications', 'Mark a notification read', 'Only your own notifications can be read; another account’s notification returns 404. Repeated requests preserve the original read_at.', '$ReadNotification');
@@ -276,7 +301,7 @@ class DocsController extends Controller
         $chunkExample = ['upload_id' => '123e4567-e89b-42d3-a456-426614174000', 'total_chunks' => 1, 'filename' => 'example.mp4', 'content_type' => 'video/mp4', 'total_size' => 1024];
         $add('UploadController@videoChunk', 'Uploads', 'Upload a video chunk', 'Send multipart/form-data. Generate one UUID per upload. Chunk index is zero-based and less than total_chunks. Chunks are at most 2 MiB; total video size is at most 524288000 bytes. Reusing an index replaces that chunk. Keep all session metadata identical.', ['upload_method' => 'chunked', 'upload_id' => $chunkExample['upload_id'], 'chunk_index' => 0, 'total_chunks' => 1], '201', ChunkUploads::rules(true), $chunkExample + ['chunk_index' => 0, 'chunk' => '@/path/to/chunk']);
         $add('UploadController@completeVideoChunks', 'Uploads', 'Complete a chunked upload', 'Assembles the signed-in user’s upload. All chunks must exist; total_size and metadata must match exactly and assembled media must have a supported MIME type. Completion removes the session; it is not repeatable. Then submit storage_path to POST /videos.', ['upload_method' => 'chunked', 'storage_path' => 'public:videos/1/example.mp4', 'video_url' => 'https://media.example.com/videos/1/example.mp4'], '201', ChunkUploads::rules(), $chunkExample);
-        return $result + \App\Http\FoundationApiReference::catalog() + \App\Http\ArtistApiReference::catalog();
+        return $result + \App\Http\FoundationApiReference::catalog() + \App\Http\ArtistApiReference::catalog() + \App\Http\BillingReleaseApiReference::catalog();
     }
 
     public static function schemas(): array
@@ -285,7 +310,7 @@ class DocsController extends Controller
         $user = ['id' => 1, 'name' => 'Alex Morgan', 'username' => 'alex', 'avatar' => null, 'bio' => null, 'followers_count' => 0, 'following_count' => 0, 'following' => false, 'cover_url' => null, 'cover_video_url' => null];
         $profile = array_diff_key($user, array_flip(['cover_url', 'cover_video_url'])) + ['likes_count' => 0, 'videos_count' => 1];
         $audio = ['reuse_allowed' => true, 'moderation_status' => 'approved', 'viewer' => ['saved' => false], 'id' => 1, 'title' => 'Original sound - Alex Morgan', 'audio_url' => 'https://media.example.com/sounds/1/example.m4a', 'duration' => 12, 'origin' => 'original', 'status' => 'ready', 'source_video_id' => 1, 'videos_count' => 1, 'creator' => $user, 'created_at' => $date];
-        $video = ['moderation_status' => 'approved', 'reuse_content' => true, 'id' => 1, 'audio_id' => 1, 'audio_mode' => 'replace', 'audio_settings' => null, 'audio' => $audio, 'video_url' => 'https://media.example.com/videos/1/example.mp4', 'thumbnail_url' => null, 'caption' => 'Hello #world', 'tags' => ['#world'], 'duration' => 12, 'location_name' => null, 'visibility' => 'public', 'high_quality_upload' => false, 'pinned_at' => null, 'edit' => ['trim_start' => null, 'trim_end' => null, 'cut_points' => [], 'cover_time' => null, 'crop_mode' => 'fit', 'text_overlay' => null, 'original_audio_muted' => false, 'filter_settings' => null, 'effect_settings' => null], 'status' => 'published', 'user' => $user, 'stats' => ['views' => 0, 'likes' => 0, 'comments' => 0, 'saves' => 0, 'shares' => 0], 'viewer' => ['liked' => false, 'saved' => false, 'following' => false], 'created_at' => $date];
+        $video = ['moderation_status' => 'approved', 'reuse_content' => true, 'id' => 1, 'audio_id' => 1, 'audio_mode' => 'replace', 'audio_settings' => null, 'audio' => $audio, 'video_url' => 'https://media.example.com/videos/1/example.mp4', 'thumbnail_url' => null, 'caption' => 'Hello #world', 'tags' => ['#world'], 'duration' => 12, 'location_name' => null, 'visibility' => 'public', 'high_quality_upload' => false, 'pinned_at' => null, 'edit' => ['trim_start' => null, 'trim_end' => null, 'cut_points' => [], 'cover_time' => null, 'crop_mode' => 'fit', 'text_overlay' => null, 'original_audio_muted' => false, 'filter_settings' => null, 'effect_settings' => null], 'status' => 'published', 'processing_state' => 'ready', 'publication_state' => 'published', 'publication_intent' => 'immediate', 'published_at' => $date, 'user' => $user, 'stats' => ['views' => 0, 'likes' => 0, 'comments' => 0, 'saves' => 0, 'shares' => 0], 'viewer' => ['liked' => false, 'saved' => false, 'following' => false], 'created_at' => $date];
         $notification = [
             'id' => 1,
             'type' => 'video_liked',

@@ -10,7 +10,7 @@ class ArtistResource extends JsonResource
 {
     public function toArray(?Request $request = null): array
     {
-        $capabilities = app(ArtistCapabilities::class)->forUser($this->user_id);
+        $capabilities = app(ArtistCapabilities::class)->forArtist($this->resource);
         $owner = (bool) $this->owner_view;
         $links = $this->whenLoaded('links', fn($links) => $links->all(), []);
         $featured = $this->whenLoaded('featuredVideo', default: null);

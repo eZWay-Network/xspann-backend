@@ -63,7 +63,16 @@ class Artist extends Model
 
     public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
-        return $query->select('artists.*')->with([
+        $plan = \Spark\Facades\DB::table('billing_paid_periods as bp')
+            ->join('billing_subscriptions as bs', 'bs.id', '=', 'bp.subscription_id')
+            ->join('billing_catalog as bc', 'bc.id', '=', 'bs.catalog_id')
+            ->select('bc.plan_code')->whereColumn('bs.user_id', 'artists.user_id')
+            ->where('bs.environment', config('billing.environment'))->whereNull('bs.deletion_requested_at')
+            ->whereNull('bp.revoked_at')->where('bp.starts_at', '<=', \App\Services\Billing\Billing::timestamp())
+            ->where('bp.ends_at', '>', \App\Services\Billing\Billing::timestamp())
+            ->orderByRaw('bp.ends_at DESC, bp.id DESC')->limit(1);
+
+        return $query->select('artists.*')->selectSub($plan, 'billing_plan')->with([
             'user' => fn($query) => $query->withApiData($viewer),
             'genres' => fn($query) => $query->orderBy('artist_genres.id'),
             'links' => fn($query) => $query->orderBy('position'),

@@ -95,3 +95,32 @@ command('accounts:retry', function (Prompt $prompt, array $args): void {
     }
     $prompt->message($updated ? 'Privacy request queued again.' : 'No failed request found.');
 })->description('Retry a failed privacy request after correcting its underlying storage or database problem');
+
+
+command('releases:publish', function (Prompt $prompt): void {
+    (new \App\Jobs\PublishReleases())->handle();
+    $prompt->message('Due releases and scheduling access checked.');
+})->description('Publish eligible due releases and pause schedules after access ends');
+
+command('billing:reconcile', function (Prompt $prompt): void {
+    (new \App\Jobs\BillingMaintenance())->handle();
+    $prompt->message('Billing inbox recovery and reconciliation completed.');
+})->description('Recover pending provider events and reconcile initiated purchases');
+
+command('billing:retry', function (Prompt $prompt, array $args): void {
+    $id = filter_var($args['event'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if (!$id) {
+        throw new InvalidArgumentException('Use --event=<local-inbox-id>.');
+    }
+    app(\App\Services\Billing\Webhooks::class)->process($id);
+    $prompt->message('Billing event reconciled.');
+})->description('Retry a billing inbox record after resolving its underlying problem');
+
+command('billing:allocate', function (Prompt $prompt, array $args): void {
+    $id = filter_var($args['adjustment'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if (!$id) {
+        throw new InvalidArgumentException('Use --adjustment=<id> --allocation=full_period|no_service_change|released --reason=<review reason>.');
+    }
+    \App\Services\Billing\Adjustments::allocate($id, $args['allocation'] ?? '', $args['reason'] ?? '');
+    $prompt->message('Adjustment allocation recorded and audited.');
+})->description('Record an explicit refund allocation or release a reviewed dispute hold');

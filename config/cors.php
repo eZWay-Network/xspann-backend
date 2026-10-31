@@ -24,7 +24,7 @@ return [
     'paths' => ['api/*'],
     'origin' => array_unique([env('FRONTEND_URL', 'http://localhost:3000'), 'http://localhost:3000', 'http://127.0.0.1:3000']),
     'methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    'headers' => ['Content-Type', 'Authorization', 'X-Requested-With', 'X-XSRF-TOKEN'],
+    'headers' => ['Content-Type', 'Authorization', 'X-Requested-With', 'X-XSRF-TOKEN', 'Idempotency-Key', 'X-Reauth-Proof', 'Range'],
     'credentials' => false,
     'age' => 86400, // 24 hours, set to 0 to disable caching of preflight requests
 ];

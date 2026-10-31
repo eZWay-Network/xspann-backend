@@ -215,6 +215,9 @@ Content-Type: application/json</pre>
                 <li><strong>Create the post.</strong> Pass the resulting <code>storage_path</code> to <a
                         href="#videocontroller-store">POST /videos</a>, along with the caption, visibility and optional
                     edit settings.</li>
+                <li><strong>Keep a release private.</strong> Send <code>publication_intent=draft</code> on every upload
+                    and post creation request. After processing is ready, use owner preview and versioned release
+                    actions to publish now or schedule with Pro. Drafts stay private until publication.</li>
                 <li><strong>Wait for processing.</strong> Poll your video detail endpoint. Handle
                     <code>processing</code>, <code>published</code> and <code>failed</code>. Deleted videos are
                     unavailable. An upload alone does not create a feed entry.
@@ -293,7 +296,7 @@ Content-Type: application/json</pre>
                                                 </tbody>
                                             </table>
                                         </div>
-                                    @else<p class="muted">No path, query or body parameters.</p>
+                                    @else<p class="muted">No path, query, header or body parameters.</p>
                                     @endif
                                     <h4>Responses</h4>
                                     <p><span class="success-status">{{ $endpoint['status'] }}</span> Successful
@@ -326,7 +329,7 @@ Authorization: Bearer &lt;access-token&gt;
                                         <div class="code-header"><span>Response ·
                                                 {{ $endpoint['status'] }}</span><button type="button"
                                                 data-copy-target="response-{{ $endpoint['id'] }}">Copy</button></div>
-                                        <pre id="response-{{ $endpoint['id'] }}">{{ json_encode($endpoint['response'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+                                        <pre id="response-{{ $endpoint['id'] }}">{{ ($endpoint['responseType'] ?? null) === 'binary' ? '[Binary media bytes: 200/206, or an authorized 302 redirect]' : json_encode($endpoint['response'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                     </div>
                                     @if (isset($endpoint['alternate']))
                                         <div class="code-panel">

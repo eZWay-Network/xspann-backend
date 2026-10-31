@@ -9,6 +9,12 @@ use function array_key_exists;
 class UpdateVideoRequest extends FormRequest
 {
     private const CREATION_FIELDS = [
+        'publication_intent',
+        'processing_state',
+        'publication_state',
+        'publish_at',
+        'published_at',
+        'version',
         'audio_id',
         'audio_mode',
         'audio_settings',

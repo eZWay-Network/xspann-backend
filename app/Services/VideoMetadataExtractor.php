@@ -128,10 +128,10 @@ class VideoMetadataExtractor
                 return [];
             }
 
-            $path = StorageService::storeThumbnail((int) $video->user_id, $thumbnail);
+            $path = StorageService::storeThumbnail((int) $video->user_id, $thumbnail, $video->publication_intent === 'draft' ? ReleaseMedia::diskName() : null);
 
             return [
-                'thumbnail_path' => $path,
+                'thumbnail_path' => StorageService::location($path)['key'],
                 'thumbnail_url' => StorageService::storedValue($path)
             ];
         } catch (Throwable) {

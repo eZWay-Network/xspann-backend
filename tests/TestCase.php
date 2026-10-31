@@ -60,6 +60,8 @@ abstract class TestCase extends \Spark\Testing\ApplicationTestCase
             'rights_version' => config('policies.rights_version'),
             'rights_confirmed_at' => now(),
             'status' => Video::STATUS_PUBLISHED,
+            'processing_state' => ($attributes['status'] ?? 'published') === 'published' ? 'ready' : (($attributes['status'] ?? '') === 'processing' ? 'processing' : 'failed'),
+            'publication_state' => ($attributes['status'] ?? 'published') === 'published' ? 'published' : 'draft',
             ...$attributes,
         ])->refresh();
     }

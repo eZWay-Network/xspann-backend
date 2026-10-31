@@ -25,7 +25,9 @@ class MediaReferenceTest extends TestCase
         $this->assertSame('s3:videos/1/clip.mp4', StorageService::storedValue('https://cdn.example.com/videos/1/clip.mp4'));
         $this->assertSame('https://cdn.example.com/videos/1/clip.mp4', StorageService::publicUrl('https://cdn.example.com/videos/1/clip.mp4'));
         $this->assertSame(media_url('videos/1/clip.mp4'), StorageService::publicUrl('videos/1/clip.mp4'));
-        $this->assertNull(StorageService::publicUrl('local:videos/1/clip.mp4'));
+        $this->assertTrue(str_contains(StorageService::publicUrl('local:videos/1/clip.mp4'), '/api/v1/media/'));
+        $privateUrl = StorageService::publicUrl('local:videos/1/clip.mp4');
+        $this->get(parse_url($privateUrl, PHP_URL_PATH) . '?' . parse_url($privateUrl, PHP_URL_QUERY))->assertStatus(404);
 
         $this->app->mergeConfig(['storage' => ['default' => 'public', 'disks' => ['s3' => ['url' => 'https://new.example.com']]]]);
 

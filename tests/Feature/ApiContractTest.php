@@ -8,6 +8,25 @@ use Tests\TestCase;
 class ApiContractTest extends TestCase
 {
     private const ROUTES = [
+        'GET /api/v1/plans',
+        'POST /api/v1/webhooks/stripe',
+        'GET /api/v1/media/{token}',
+        'GET /api/v1/me/entitlements',
+        'GET /api/v1/me/subscription',
+        'GET /api/v1/me/billing/invoices',
+        'POST /api/v1/billing/checkout',
+        'GET /api/v1/billing/checkouts/{reference}',
+        'POST /api/v1/billing/portal',
+        'POST /api/v1/billing/subscription/cancel',
+        'POST /api/v1/billing/subscription/resume',
+        'GET /api/v1/me/artist/releases',
+        'GET /api/v1/me/artist/releases/{video}',
+        'PATCH /api/v1/me/artist/releases/{video}',
+        'POST /api/v1/me/artist/releases/{video}/schedule',
+        'POST /api/v1/me/artist/releases/{video}/cancel-schedule',
+        'POST /api/v1/me/artist/releases/{video}/publish',
+        'POST /api/v1/me/videos/{video}/retry',
+        'GET /api/v1/me/videos/{video}/preview/{asset}',
         'GET /api/v1/artist-taxonomy',
         'GET /api/v1/artists',
         'GET /api/v1/artists/by-slug/{slug}',
@@ -160,13 +179,13 @@ class ApiContractTest extends TestCase
                 $operations[] = $entry['method'] . ' ' . $entry['route'];
                 $entries[$entry['id']] = $entry;
                 $this->assertTrue(strlen($entry['description']) > 20);
-                if ($entry['status'] === '204') {
+                if ($entry['status'] === '204' || ($entry['responseType'] ?? null) === 'binary') {
                     $this->assertSame(null, $entry['response']);
                 } else {
-                    $this->assertTrue(array_key_exists($entry['id'] === 'privacycontroller-download' ? 'account' : 'data', $entry['response']));
+                    $this->assertTrue(array_key_exists(match ($entry['id']) { 'privacycontroller-download' => 'account', 'billingcontroller-webhook' => 'received', default => 'data' }, $entry['response']));
                 }
                 foreach ($entry['parameters'] as $parameter) {
-                    $this->assertTrue(in_array($parameter['in'], ['path', 'query', 'body'], true));
+                    $this->assertTrue(in_array($parameter['in'], ['path', 'query', 'body', 'header'], true));
                 }
             }
         }
@@ -174,7 +193,9 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(106, count($entries));
+        $this->assertSame(125, count($entries));
+        $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
+        $this->assertSame('binary', $entries['releasecontroller-preview']['responseType']);
         foreach ([
             ['artistcontroller-index', 'genre_id', false],
             ['artistplaylistcontroller-store', 'category', false],
@@ -271,6 +292,10 @@ class ApiContractTest extends TestCase
             'pinned_at',
             'edit',
             'status',
+            'processing_state',
+            'publication_state',
+            'publication_intent',
+            'published_at',
             'user',
             'stats',
             'viewer',

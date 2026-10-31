@@ -36,11 +36,17 @@ class AudioController extends Controller
 
         PendingUploads::attach($audio->user_id, function () use ($audio, $input): void {
             abort_if($audio->refresh()->status === 'deleted', 404, 'Audio not found.');
+            if ($audio->source_video_id && $input->has('reuse_allowed')) {
+                $source = Video::find($audio->source_video_id);
+                if ($source && $source->reuse_content !== $input->boolean('reuse_allowed')) {
+                    abort_if($source->publication_state === 'scheduled', 409, 'Cancel the schedule before editing a release.');
+                    \App\Services\Releases::save($source, [
+                        'reuse_content' => $input->boolean('reuse_allowed'), 'version' => $source->version + 1,
+                    ]);
+                }
+            }
             if (!$audio->update($input)) {
                 throw new \RuntimeException('Audio update failed.');
-            }
-            if ($audio->source_video_id && $input->has('reuse_allowed')) {
-                Video::whereKey($audio->source_video_id)->update(['reuse_content' => $input->boolean('reuse_allowed')]);
             }
         });
 
@@ -50,7 +56,13 @@ class AudioController extends Controller
     public function destroy(Audio $audio): Response
     {
         authorize('model.delete', $audio);
-        $audio->update(['status' => 'deleted', 'reuse_allowed' => false]);
+        PendingUploads::attach($audio->user_id, function () use ($audio): void {
+            $audio->refresh();
+            if (!$audio->update(['status' => 'deleted', 'reuse_allowed' => false])) {
+                throw new \RuntimeException('Audio deletion failed.');
+            }
+            $audio->detachOriginal();
+        });
         \App\Jobs\DeleteAudio::dispatch($audio->id);
 
         return json(['data' => ['message' => 'Audio deleted']], 202);

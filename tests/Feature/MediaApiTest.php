@@ -30,7 +30,7 @@ class MediaApiTest extends TestCase
         $this->putJson('/api/v1/auth/profile', ['avatar' => media_url('avatars/1/avatar.png')])
             ->assertOk()->assertJsonPath('data.avatar', media_url('avatars/1/avatar.png'));
         $this->assertDatabaseHas('users', ['id' => $user->id, 'avatar' => 'public:avatars/1/avatar.png']);
-        Video::find($video->json('data.id'))->update(['status' => 'published']);
+        Video::find($video->json('data.id'))->update(['status' => 'published', 'processing_state' => 'ready', 'publication_state' => 'published']);
         $this->flushHeaders()->getJson('/api/v1/users/suggestions')->assertOk()
             ->assertJsonPath('data.0.cover_url', media_url('thumbnails/1/cover.jpg'))
             ->assertJsonPath('data.0.cover_video_url', media_url('videos/1/clip.mp4'));

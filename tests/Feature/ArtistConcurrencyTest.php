@@ -9,7 +9,7 @@ use Tests\TestCase;
 
 class ArtistConcurrencyTest extends TestCase
 {
-    use ArtistFixtures;
+    use ArtistFixtures, \Tests\Support\BillingFixtures;
 
     protected function createApplication(): Application
     {
@@ -23,7 +23,7 @@ class ArtistConcurrencyTest extends TestCase
     private function contend(string $method, string $path, array $inputs, array $tokens): array
     {
         $config = [];
-        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists'] as $key) {
+        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists', 'billing', 'testing'] as $key) {
             $config[$key] = config($key);
         }
         $file = $this->storagePath . '/concurrent-config.json';
@@ -45,7 +45,7 @@ class ArtistConcurrencyTest extends TestCase
                     CURLOPT_CUSTOMREQUEST => $method,
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT => 15,
-                    CURLOPT_HTTPHEADER => ['Host: ' . $host, 'Content-Type: application/json', 'Accept: application/json', 'Authorization: Bearer ' . $tokens[$index]],
+                    CURLOPT_HTTPHEADER => ['Idempotency-Key: concurrent-checkout-' . $index, 'Host: ' . $host, 'Content-Type: application/json', 'Accept: application/json', 'Authorization: Bearer ' . $tokens[$index]],
                     CURLOPT_POSTFIELDS => json_encode($inputs[$index], JSON_THROW_ON_ERROR),
                 ]);
                 curl_multi_add_handle($multi, $handles[$index]);
@@ -137,4 +137,39 @@ class ArtistConcurrencyTest extends TestCase
         $this->assertSame([201, 422], $statuses, json_encode($results));
         $this->assertDatabaseCount('artists', 1);
     }
+
+    public function testConcurrentReleasePublicationAcceptsOnlyOneVersion(): void
+    {
+        $owner = $this->makeUser();
+        $this->makeArtist($owner);
+        storage('local')->put('videos/1/private.mp4', 'private bytes');
+        $video = $this->makeVideo($owner, [
+            'storage_path' => 'local:videos/1/private.mp4', 'status' => 'draft',
+            'processing_state' => 'ready', 'publication_state' => 'draft', 'publication_intent' => 'draft',
+        ]);
+        $token = $this->token($owner);
+        $results = $this->contend('POST', "/me/artist/releases/$video->id/publish", [['version' => 1], ['version' => 1]], [$token, $token]);
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $this->assertSame([200, 409], $statuses, json_encode($results));
+        $this->assertSame('published', $video->refresh()->publication_state);
+        $this->assertSame(2, $video->version);
+    }
+
+    public function testConcurrentDifferentCheckoutKeysCannotCreateOverlappingPurchases(): void
+    {
+        $this->billingSetup();
+        $this->app->mergeConfig(['testing' => ['fake_stripe' => true]]);
+        $owner = $this->makeUser();
+        $this->makeArtist($owner);
+        $token = $this->token($owner);
+        $input = ['plan_code' => 'artist_pro', 'offer_version' => config('billing.offer_version')];
+        $results = $this->contend('POST', '/billing/checkout', [$input, $input], [$token, $token]);
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $this->assertSame([200, 409], $statuses, json_encode($results));
+        $this->assertDatabaseCount('billing_checkouts', 1);
+        $this->assertDatabaseCount('billing_customers', 1);
+    }
+
 }

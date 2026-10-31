@@ -36,14 +36,29 @@ class Audio extends Model
         }
 
         return DB::transaction(function (): bool {
+            $this->detachOriginal();
             // Preserve the failed selection before ON DELETE SET NULL erases it.
             // Already published clips retain their embedded soundtrack.
             Video::where('audio_id', $this->id)
-                ->whereIn('status', [Video::STATUS_PROCESSING, Video::STATUS_FAILED])
-                ->update(['status' => Video::STATUS_SOURCE_UNAVAILABLE, 'updated_at' => now()]);
+                ->whereIn('status', [Video::STATUS_PROCESSING, Video::STATUS_FAILED, 'draft', 'scheduled'])
+                ->update([
+                    'status' => Video::STATUS_SOURCE_UNAVAILABLE, 'processing_state' => 'failed',
+                    'publication_state' => 'draft', 'release_error' => 'source_unavailable',
+                    'publish_at' => null, 'publish_timezone' => null,
+                    'version' => DB::raw('version + 1'), 'updated_at' => now(),
+                ]);
 
             return parent::remove();
         });
+    }
+
+    /** Removing the library copy does not remove the soundtrack embedded in its source. */
+    public function detachOriginal(): void
+    {
+        if ($this->origin === 'original' && $this->source_video_id) {
+            Video::whereKey($this->source_video_id)->where('user_id', $this->user_id)->where('audio_id', $this->id)
+                ->update(['audio_id' => null, 'version' => DB::raw('version + 1'), 'updated_at' => now()]);
+        }
     }
 
     public function user(): BelongsTo
@@ -93,6 +108,11 @@ class Audio extends Model
 
     public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
+        $query->select('audios.*')->selectSub(Video::select('publication_state')
+            ->whereColumn('videos.id', 'audios.source_video_id')
+            ->where('moderation_status', 'approved')
+            ->whereNotIn('status', [Video::STATUS_DELETED, Video::STATUS_SOURCE_UNAVAILABLE])
+            ->limit(1), 'source_publication_state');
         if ($viewer) {
             $query->withExists(['saves as viewer_saved' => fn(QueryBuilder $query) => $query->where('user_id', $viewer->id)]);
         }

@@ -10,6 +10,9 @@ class VideoResource extends JsonResource
 {
     public function toArray(?Request $request = null): array
     {
+        $preview = $this->publication_intent === 'draft' && $this->publication_state !== 'published' && $request?->user('id') === $this->user_id;
+        $allowed = $this->moderation_status === 'approved' && ($this->publication_state === 'published' || $preview || $this->publication_intent === 'immediate');
+
         return [
             'id' => $this->id,
             'audio_id' => $this->audio_id,
@@ -17,8 +20,8 @@ class VideoResource extends JsonResource
             'reuse_content' => $this->reuse_content,
             'audio_settings' => $this->audio_settings,
             'audio' => $this->whenLoaded('audio', AudioResource::make(...)),
-            'video_url' => $this->moderation_status === 'approved' ? StorageService::publicUrl($this->storage_path) : null,
-            'thumbnail_url' => $this->moderation_status === 'approved' ? StorageService::publicUrl($this->thumbnail_url) : null,
+            'video_url' => $allowed ? ($preview ? \App\Services\ReleaseMedia::previewUrl($this->id, 'video') : StorageService::publicUrl($this->storage_path)) : null,
+            'thumbnail_url' => $allowed && $this->thumbnail_url ? ($preview ? \App\Services\ReleaseMedia::previewUrl($this->id, 'thumbnail') : StorageService::publicUrl($this->thumbnail_url)) : null,
             'caption' => $this->caption,
             'tags' => collect(preg_match_all('/#[\pL\pN_]+/u', (string) $this->caption, $matches) ? $matches[0] : [])->values(),
             'duration' => $this->duration,
@@ -39,6 +42,10 @@ class VideoResource extends JsonResource
             ],
             'moderation_status' => $this->moderation_status,
             'status' => $this->status,
+            'processing_state' => $this->processing_state,
+            'publication_state' => $this->publication_state,
+            'publication_intent' => $this->publication_intent,
+            'published_at' => $this->published_at,
             'user' => $this->whenLoaded('user', UserResource::make(...)),
             'stats' => [
                 'views' => $this->views_count,

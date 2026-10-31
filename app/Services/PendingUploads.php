@@ -7,18 +7,20 @@ use Spark\Facades\{DB, Cache};
 
 class PendingUploads
 {
-    public static function track(int $userId, string $path): void
+    public static function track(int $userId, string $path, ?string $diskName = null, bool $privateRelease = false): void
     {
+        $diskName ??= StorageService::diskName();
         try {
             DB::table('pending_uploads')->upsert([
                 'user_id' => $userId,
-                'disk' => StorageService::diskName(),
+                'disk' => $diskName,
                 'path' => $path,
+                'private_release' => $privateRelease,
                 'created_at' => now(),
             ], ['disk', 'path'], ['created_at']);
         } catch (\Throwable $exception) {
             // Do not leave an untracked completed upload if persistence fails.
-            StorageService::disk()->delete($path);
+            storage($diskName)->delete($path);
             throw $exception;
         }
     }

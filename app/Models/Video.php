@@ -18,6 +18,14 @@ class Video extends Model
     public const STATUS_DELETED = "deleted";
 
     protected array $fillable = [
+        'processing_state',
+        'publication_state',
+        'publication_intent',
+        'publish_at',
+        'publish_timezone',
+        'published_at',
+        'release_error',
+        'version',
         'user_id',
         'audio_id',
         'audio_mode',
@@ -52,6 +60,9 @@ class Video extends Model
     ];
 
     protected array $casts = [
+        'version' => 'integer',
+        'publish_at' => \App\Support\UtcDateTime::class,
+        'published_at' => \App\Support\UtcDateTime::class,
         'reuse_content' => 'boolean',
         'rights_confirmed_at' => 'datetime',
         'audio_settings' => 'array',
@@ -119,7 +130,8 @@ class Video extends Model
 
     public function scopePublished(QueryBuilder $query): QueryBuilder
     {
-        return $query->where('videos.status', self::STATUS_PUBLISHED);
+        return $query->where('videos.status', self::STATUS_PUBLISHED)
+            ->where('videos.processing_state', 'ready')->where('videos.publication_state', 'published');
     }
 
     public function scopeVisibleTo(QueryBuilder $query, ?User $viewer): QueryBuilder

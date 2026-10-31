@@ -46,6 +46,8 @@ return Application::create(path: dirname(__DIR__))
      * Register regularly scheduled jobs in the application.
      */
     ->withQueue([
+        job(\App\Jobs\PublishReleases::class)->repeatEveryMinutes(1)->onQueue('releases'),
+        job(\App\Jobs\BillingMaintenance::class)->repeatEveryMinutes(1)->onQueue('billing'),
         job(\App\Jobs\PruneUploads::class)->repeatDaily(),
         job([\App\Services\VideoRetry::class, 'retry'])->repeatHourly(),
         job([\App\Services\AudioRetry::class, 'retry'])->repeatHourly(),
