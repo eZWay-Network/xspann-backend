@@ -28,7 +28,7 @@ class StorageService
 
         $allowed = match ($kind) {
             'sounds' => ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm', 'mp4'],
-            'avatars' => ['jpg', 'jpeg', 'png', 'webp'],
+            'avatars', 'artist-images' => ['jpg', 'jpeg', 'png', 'webp'],
             'thumbnails' => ['jpg'],
             default => ['mp4', 'mov', 'webm'],
         };
@@ -44,11 +44,11 @@ class StorageService
     {
         // Spark's uploader verifies genuine HTTP uploads and streams local copies.
         $max = match ($kind) {
-            'avatars' => 5120, 'sounds' => 51200, default => 512000
+            'avatars', 'artist-images' => 5120, 'sounds' => 51200, default => 512000
         };
 
         $extensions = match ($kind) {
-            'avatars' => ['jpg', 'jpeg', 'png', 'webp'],
+            'avatars', 'artist-images' => ['jpg', 'jpeg', 'png', 'webp'],
             'sounds' => ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm', 'mp4'],
             default => ['mp4', 'mov', 'webm'],
         };
@@ -60,7 +60,7 @@ class StorageService
         $compress = null;
         $resize = null;
 
-        if ($kind === 'avatars') {
+        if (in_array($kind, ['avatars', 'artist-images'], true)) {
             $resize = [512, 512];
             $compress = 90;
         }
@@ -163,7 +163,7 @@ class StorageService
             foreach (array_unique($bases) as $base) {
                 if (str_starts_with($url, $base)) {
                     $key = rawurldecode(substr($url, strlen($base)));
-                    if (!preg_match('~^(videos|thumbnails|avatars|sounds)/[1-9][0-9]*/[^/]+$~D', $key)) {
+                    if (!preg_match('~^(videos|thumbnails|avatars|artist-images|sounds)/[1-9][0-9]*/[^/]+$~D', $key)) {
                         return null;
                     }
 

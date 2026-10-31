@@ -4,6 +4,11 @@ use App\Services\VideoRetry;
 use App\Jobs\PruneUploads;
 use Spark\Console\Prompt;
 
+command('artists:statistics', function (Prompt $prompt): void {
+    \App\Services\ArtistStatistics::collectAll();
+    $prompt->message('Current UTC artist statistics snapshots collected.');
+})->description('Collect artist totals without fabricating historical daily data');
+
 command('greet', function (Prompt $prompt) {
     $name = $prompt->ask('What is your name?');
     $prompt->message("Hello, {$name}!", 'success');

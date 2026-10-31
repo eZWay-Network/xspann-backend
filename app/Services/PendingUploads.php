@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\{Audio, User, Video};
+use App\Models\{Artist, Audio, User, Video};
 use Spark\Facades\{DB, Cache};
 
 class PendingUploads
@@ -59,14 +59,15 @@ class PendingUploads
                 $lastId = $upload->id;
                 self::locked($upload->user_id, function () use ($upload): void {
                     $path = $upload->path;
-                    if (!preg_match("~^(videos|avatars|thumbnails|sounds)/{$upload->user_id}/[a-z0-9_-][a-z0-9._-]*$~Di", $path)) {
+                    if (!preg_match("~^(videos|avatars|artist-images|thumbnails|sounds)/{$upload->user_id}/[a-z0-9_-][a-z0-9._-]*$~Di", $path)) {
                         throw new \RuntimeException('Invalid pending upload path.');
                     }
 
                     $disk = storage($upload->disk);
                     $values = StorageService::referenceValues($upload->disk . ":$path");
 
-                    $referenced = User::whereIn('avatar', $values)->exists()
+                    $referenced = Artist::whereIn('image', $values)->exists()
+                        || User::whereIn('avatar', $values)->exists()
                         || Audio::whereIn('storage_path', $values)->exists()
                         || Video::whereIn('storage_path', $values)
                             ->orWhereIn('thumbnail_url', $values)

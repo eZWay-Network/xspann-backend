@@ -14,6 +14,7 @@ class Report extends Model
         'reported_user_id',
         'audio_id',
         'comment_id',
+        'playlist_id',
         'target_type',
         'target_id',
         'reason',

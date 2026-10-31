@@ -23,6 +23,7 @@
   const requestUrl = (endpoint) => {
     const values = {
       username: "alex",
+      slug: "alex-band",
       provider: "google",
       hash: "<email-hash>",
     };
@@ -69,7 +70,7 @@
         );
       return (
         setup +
-        `const response = await fetch(${JSON.stringify(url)}, {\n${options.join(",\n")}\n});\nconst payload = await response.json();\nif (!response.ok) {\n  // payload.errors may contain field-level validation errors.\n  throw new Error(payload.message || \`HTTP \${response.status}\`);\n}\nconsole.log(payload.data);`
+        `const response = await fetch(${JSON.stringify(url)}, {\n${options.join(",\n")}\n});\nconst payload = response.status === 204 ? null : await response.json();\nif (!response.ok) {\n  // payload.errors may contain field-level validation errors.\n  throw new Error(payload.message || \`HTTP \${response.status}\`);\n}\nconsole.log(payload?.data);`
       );
     }
     const lines = [`curl --request ${endpoint.method} ${shellQuote(url)}`];

@@ -8,6 +8,28 @@ use Tests\TestCase;
 class ApiContractTest extends TestCase
 {
     private const ROUTES = [
+        'GET /api/v1/artist-taxonomy',
+        'GET /api/v1/artists',
+        'GET /api/v1/artists/by-slug/{slug}',
+        'GET /api/v1/artists/{artist}',
+        'GET /api/v1/artists/{artist}/videos',
+        'GET /api/v1/artists/{artist}/playlists',
+        'GET /api/v1/artists/{artist}/playlists/{playlist}',
+        'GET /api/v1/artists/{artist}/followers',
+        'POST /api/v1/artists/{artist}/follow',
+        'DELETE /api/v1/artists/{artist}/follow',
+        'POST /api/v1/uploads/artist-image',
+        'GET /api/v1/me/artist',
+        'PUT /api/v1/me/artist',
+        'PUT /api/v1/me/artist/links',
+        'GET /api/v1/me/artist/playlists',
+        'POST /api/v1/me/artist/playlists',
+        'GET /api/v1/me/artist/playlists/{playlist}',
+        'PATCH /api/v1/me/artist/playlists/{playlist}',
+        'DELETE /api/v1/me/artist/playlists/{playlist}',
+        'PUT /api/v1/me/artist/playlists/{playlist}/items',
+        'GET /api/v1/me/artist/analytics',
+        'GET /api/v1/me/artist/fans/summary',
         'GET /api/v1/policies',
         'POST /api/v1/auth/onboarding',
         'POST /api/v1/auth/reauthenticate',
@@ -138,7 +160,11 @@ class ApiContractTest extends TestCase
                 $operations[] = $entry['method'] . ' ' . $entry['route'];
                 $entries[$entry['id']] = $entry;
                 $this->assertTrue(strlen($entry['description']) > 20);
-                $this->assertTrue(array_key_exists($entry['id'] === 'privacycontroller-download' ? 'account' : 'data', $entry['response']));
+                if ($entry['status'] === '204') {
+                    $this->assertSame(null, $entry['response']);
+                } else {
+                    $this->assertTrue(array_key_exists($entry['id'] === 'privacycontroller-download' ? 'account' : 'data', $entry['response']));
+                }
                 foreach ($entry['parameters'] as $parameter) {
                     $this->assertTrue(in_array($parameter['in'], ['path', 'query', 'body'], true));
                 }
@@ -148,7 +174,18 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(84, count($entries));
+        $this->assertSame(106, count($entries));
+        foreach ([
+            ['artistcontroller-index', 'genre_id', false],
+            ['artistplaylistcontroller-store', 'category', false],
+            ['artistplaylistcontroller-update', 'title', false],
+            ['artistcontroller-links', 'links', true],
+            ['artistplaylistcontroller-items', 'video_ids', true],
+        ] as [$operation, $field, $required]) {
+            $parameters = array_column($entries[$operation]['parameters'], null, 'name');
+            $this->assertSame($required, $parameters[$field]['required']);
+        }
+        $this->assertSame(null, $entries['artistcontroller-index']['contentType']);
         $this->assertTrue($entries['notificationcontroller-clearall']['auth']);
         $this->assertSame('DELETE', $entries['notificationcontroller-clearall']['method']);
         $this->assertSame(['data' => ['message' => 'Read notifications cleared.']], $entries['notificationcontroller-clearall']['response']);

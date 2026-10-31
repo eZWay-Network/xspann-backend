@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\V1\{
     AuthController,
     AudioController,
     AudioSaveController,
+    ArtistController,
+    ArtistPlaylistController,
     CommentController,
     DiscoverController,
     FeedController,
@@ -26,6 +28,15 @@ use App\Http\Controllers\Api\V1\{
 use Spark\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    Route::get('/artist-taxonomy', [ArtistController::class, 'taxonomy']);
+    Route::get('/artists', [ArtistController::class, 'index']);
+    Route::get('/artists/by-slug/{slug}', [ArtistController::class, 'bySlug']);
+    Route::get('/artists/{artist}', [ArtistController::class, 'show']);
+    Route::get('/artists/{artist}/videos', [ArtistController::class, 'videos']);
+    Route::get('/artists/{artist}/playlists', [ArtistPlaylistController::class, 'index']);
+    Route::get('/artists/{artist}/playlists/{playlist}', [ArtistPlaylistController::class, 'show']);
+    Route::get('/artists/{artist}/followers', [ArtistController::class, 'followers']);
+
     Route::get('/policies', [AccountController::class, 'policies']);
     Route::post('/auth/onboarding', [AccountController::class, 'onboarding'])->middleware('throttle:5');
     Route::post('/account/deletion-requests', [PrivacyController::class, 'requestDeletionEmail'])->middleware('throttle:5');
@@ -80,6 +91,21 @@ Route::prefix('v1')->group(function () {
     Route::post('/videos/{video}/view', [ViewController::class, 'store'])->middleware('throttle:120');
 
     Route::middleware('auth')->group(function (): void {
+        Route::get('/me/artist', [ArtistController::class, 'mine']);
+        Route::put('/me/artist', [ArtistController::class, 'save'])->middleware('throttle:30');
+        Route::put('/me/artist/links', [ArtistController::class, 'links'])->middleware('throttle:30');
+        Route::get('/me/artist/analytics', [ArtistController::class, 'analytics']);
+        Route::get('/me/artist/fans/summary', [ArtistController::class, 'fans']);
+        Route::post('/artists/{artist}/follow', [ArtistController::class, 'follow'])->middleware('throttle:60');
+        Route::delete('/artists/{artist}/follow', [ArtistController::class, 'unfollow']);
+        Route::post('/uploads/artist-image', [UploadController::class, 'artistImage'])->middleware('throttle:20');
+        Route::get('/me/artist/playlists', [ArtistPlaylistController::class, 'mine']);
+        Route::post('/me/artist/playlists', [ArtistPlaylistController::class, 'store'])->middleware('throttle:30');
+        Route::get('/me/artist/playlists/{playlist}', [ArtistPlaylistController::class, 'ownShow']);
+        Route::patch('/me/artist/playlists/{playlist}', [ArtistPlaylistController::class, 'update'])->middleware('throttle:30');
+        Route::delete('/me/artist/playlists/{playlist}', [ArtistPlaylistController::class, 'destroy']);
+        Route::put('/me/artist/playlists/{playlist}/items', [ArtistPlaylistController::class, 'items'])->middleware('throttle:30');
+
         Route::get('/me/blocks', [BlockController::class, 'index']);
         Route::post('/users/{user}/block', [BlockController::class, 'store'])->middleware('throttle:30');
         Route::delete('/users/{user}/block', [BlockController::class, 'destroy']);

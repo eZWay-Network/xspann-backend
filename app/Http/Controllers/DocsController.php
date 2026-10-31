@@ -42,11 +42,12 @@ class DocsController extends Controller
             foreach ($matches[1] as $name) {
                 $description = match ($name) {
                     'username' => 'Account username (not its numeric ID).',
+                    'slug' => 'Unique lowercase artist slug.',
                     'provider' => 'Only google is supported.',
                     'hash' => 'Email SHA-1 hash from the verification link.',
                     default => 'Numeric ' . $name . ' ID.',
                 };
-                $entry['parameters'][] = ['name' => $name, 'in' => 'path', 'type' => in_array($name, ['username', 'provider', 'hash']) ? 'string' : 'integer', 'required' => true, 'description' => $description];
+                $entry['parameters'][] = ['name' => $name, 'in' => 'path', 'type' => in_array($name, ['username', 'provider', 'hash', 'slug']) ? 'string' : 'integer', 'required' => true, 'description' => $description];
             }
             if ($entry['limit'] !== null) {
                 $entry['parameters'][] = ['name' => 'page', 'in' => 'query', 'type' => 'integer', 'required' => false, 'description' => 'Page number; default 1.'];
@@ -100,6 +101,14 @@ class DocsController extends Controller
                     $entry['parameters'][] = ['name' => $name, 'in' => 'query', 'type' => $name === 'expires' ? 'integer' : 'string', 'required' => true, 'description' => $description];
                 }
             }
+            if ($entry['limit'] !== null && in_array($entry['group'], ['Artists', 'Artist playlists'], true)) {
+                foreach ($entry['parameters'] as &$parameter) {
+                    if ($parameter['name'] === 'limit') {
+                        $parameter['description'] = 'Items per page, 1–50; default 20. Invalid values return 422.';
+                    }
+                }
+                unset($parameter);
+            }
             $body = self::parameters($entry['rules']);
             $entry['parameters'] = array_merge($entry['parameters'], $body);
             $entry['contentType'] = array_filter($body, fn($p) => $p['type'] === 'file') ? 'multipart/form-data' : ($body ? 'application/json' : null);
@@ -131,6 +140,7 @@ class DocsController extends Controller
                 $entry['alternate'] = ['data' => ['upload_method' => 'multipart', 'upload_url' => url('/api/v1/uploads/videos/local'), 'storage_path' => null, 'headers' => [], 'field_name' => 'file', 'message' => 'Upload the video through the backend multipart endpoint.']];
             }
             if ($entry['method'] === 'GET') {
+                $entry['contentType'] = null;
                 foreach ($entry['parameters'] as &$parameter) {
                     if ($parameter['in'] === 'body') {
                         $parameter['in'] = 'query';
@@ -138,12 +148,15 @@ class DocsController extends Controller
                 }
                 unset($parameter);
             }
+            if ($entry['status'] === '204') {
+                $entry['response'] = null;
+            }
             if ($key === 'PrivacyController@download') {
                 $entry['response'] = $response;
             }
             if ($key === 'ModerationController@reports') {
                 $entry['parameters'][] = ['name' => 'status', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'open or resolved'];
-                $entry['parameters'][] = ['name' => 'type', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'user, video, audio or comment'];
+                $entry['parameters'][] = ['name' => 'type', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'user, video, audio, comment or playlist'];
             }
             if ($key === 'ModerationController@appeals') {
                 $entry['parameters'][] = ['name' => 'status', 'in' => 'query', 'type' => 'string', 'required' => false, 'description' => 'open (default), upheld or overturned'];
@@ -238,7 +251,7 @@ class DocsController extends Controller
             $add('BlockController@' . $action, 'Safety', $state ? 'Block an account' : 'Unblock an account', $state ? 'Cannot block yourself (422). Removes follow relationships in both directions. Blocked relationships are hidden from visibility-filtered profiles, videos and comments.' : 'Removes your block. Previously removed follows are not restored.', ['blocked' => $state], $state ? '201' : '200');
         }
         $add('BlockController@index', 'Safety', 'List blocked accounts', 'Accounts you have blocked, newest accounts first.', '$User', '200', [], [], 20);
-        $add('ReportController@store', 'Safety', 'Report a video or account', 'Provide exactly one of video_id or reported_user_id. Videos must be visible. You cannot report yourself. Reports are created with status=open.', ['id' => 1, 'status' => 'open'], '201', ['audio_id' => ['nullable', 'integer', 'min:1'], 'comment_id' => ['nullable', 'integer', 'min:1'], 'video_id' => ['nullable', 'integer', 'min:1'], 'reported_user_id' => ['nullable', 'integer', 'min:1'], 'reason' => ['required', 'string', 'max:255'], 'details' => ['nullable', 'string', 'max:2000']], ['video_id' => 1, 'reason' => 'Spam', 'details' => 'Repeated promotional content.']);
+        $add('ReportController@store', 'Safety', 'Report content or an account', 'Provide exactly one of video_id, reported_user_id, audio_id, comment_id or playlist_id. The target must be visible to you; playlists must be public and belong to an eligible artist. You cannot report yourself or your own content. Evidence is encrypted and retained for authorized review.', ['id' => 1, 'status' => 'open'], '201', ['playlist_id' => ['nullable', 'integer', 'min:1'], 'audio_id' => ['nullable', 'integer', 'min:1'], 'comment_id' => ['nullable', 'integer', 'min:1'], 'video_id' => ['nullable', 'integer', 'min:1'], 'reported_user_id' => ['nullable', 'integer', 'min:1'], 'reason' => ['required', 'string', 'max:255'], 'details' => ['nullable', 'string', 'max:2000']], ['video_id' => 1, 'reason' => 'Spam', 'details' => 'Repeated promotional content.']);
         $add('AudioSaveController@index', 'Audio library', 'List your saved sounds', 'Available saved sounds for the signed-in account, newest saves first. Hidden or unavailable sounds are omitted; saving does not bypass source privacy.', '$Audio', '200', [], [], 20);
         $add('AudioSaveController@store', 'Audio library', 'Save a sound', 'Saves an available sound to your library. First save returns 201; repeated saves return 200 without duplicates.', ['saved' => true, 'created' => true], '201 / 200');
         $add('AudioSaveController@destroy', 'Audio library', 'Unsave a sound', 'Removes only your saved reference, even when the sound is no longer available. Repeated removals return the same response.', ['saved' => false]);
@@ -263,7 +276,7 @@ class DocsController extends Controller
         $chunkExample = ['upload_id' => '123e4567-e89b-42d3-a456-426614174000', 'total_chunks' => 1, 'filename' => 'example.mp4', 'content_type' => 'video/mp4', 'total_size' => 1024];
         $add('UploadController@videoChunk', 'Uploads', 'Upload a video chunk', 'Send multipart/form-data. Generate one UUID per upload. Chunk index is zero-based and less than total_chunks. Chunks are at most 2 MiB; total video size is at most 524288000 bytes. Reusing an index replaces that chunk. Keep all session metadata identical.', ['upload_method' => 'chunked', 'upload_id' => $chunkExample['upload_id'], 'chunk_index' => 0, 'total_chunks' => 1], '201', ChunkUploads::rules(true), $chunkExample + ['chunk_index' => 0, 'chunk' => '@/path/to/chunk']);
         $add('UploadController@completeVideoChunks', 'Uploads', 'Complete a chunked upload', 'Assembles the signed-in user’s upload. All chunks must exist; total_size and metadata must match exactly and assembled media must have a supported MIME type. Completion removes the session; it is not repeatable. Then submit storage_path to POST /videos.', ['upload_method' => 'chunked', 'storage_path' => 'public:videos/1/example.mp4', 'video_url' => 'https://media.example.com/videos/1/example.mp4'], '201', ChunkUploads::rules(), $chunkExample);
-        return $result + \App\Http\FoundationApiReference::catalog();
+        return $result + \App\Http\FoundationApiReference::catalog() + \App\Http\ArtistApiReference::catalog();
     }
 
     public static function schemas(): array
@@ -327,7 +340,9 @@ class DocsController extends Controller
             if (in_array($name, ['filter_settings', 'effect_settings'], true)) {
                 $type = 'object';
             }
-            $parameters[] = ['name' => $name, 'in' => 'body', 'type' => $type, 'required' => in_array('required', $parts, true), 'description' => implode(' · ', $parts)];
+            $required = !in_array('sometimes', $parts, true)
+                && (in_array('required', $parts, true) || in_array('present', $parts, true));
+            $parameters[] = ['name' => $name, 'in' => 'body', 'type' => $type, 'required' => $required, 'description' => implode(' · ', $parts)];
             if (in_array('confirmed', $parts, true)) {
                 $parameters[] = ['name' => $name . '_confirmation', 'in' => 'body', 'type' => 'string', 'required' => true, 'description' => 'Must exactly match ' . $name . '.'];
             }

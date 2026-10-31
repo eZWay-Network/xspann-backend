@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Jobs\{DeleteAudio, DeleteUnusedMedia, DeleteVideo, ProcessPrivacyRequest};
-use App\Models\{Audio, Notification, User, Video};
+use App\Models\{Artist, Audio, Notification, User, Video};
 use Spark\Facades\{Cache, DB, Hash};
 use function in_array;
 
@@ -57,7 +57,10 @@ class PrivacyRequests
             'kind' => $kind,
             'status' => 'pending',
             'active_key' => "$kind:$user->id",
-            'manifest' => $kind === 'deletion' ? Hash::encrypt(json_encode(array_values(array_filter([$user->avatar])), JSON_THROW_ON_ERROR)) : null,
+            'manifest' => $kind === 'deletion' ? Hash::encrypt(json_encode(array_values(array_filter([
+                $user->avatar,
+                Artist::where('user_id', $user->id)->first()?->image,
+            ])), JSON_THROW_ON_ERROR)) : null,
             'expires_at' => $kind === 'export' ? now()->addHours(config('policies.export_hours', 24))->toDateTimeString() : null,
             'created_at' => now()->toDateTimeString(),
             'updated_at' => now()->toDateTimeString(),
@@ -140,6 +143,7 @@ class PrivacyRequests
         }
 
         $user->update(['avatar' => null]);
+        Artist::where('user_id', $user->id)->update(['image' => null]);
         (new DeleteUnusedMedia($user->id, $record->manifest ? json_decode(Hash::decrypt($record->manifest), true, flags: JSON_THROW_ON_ERROR) : []))->handle();
         foreach (DB::table('pending_uploads')->where('user_id', $user->id)->get() as $upload) {
             (new DeleteUnusedMedia($user->id, [$upload->disk . ':' . $upload->path]))->handle();
@@ -226,6 +230,28 @@ class PrivacyRequests
             'moderation_appeals' => ['user_id', ['id', 'decision_id', 'explanation', 'status', 'resolution', 'created_at']],
         ] as $table => [$owner, $columns]) {
             $data[$table] = DB::table($table)->select($columns)->where($owner, $user->id)->get()->toArray();
+        }
+
+        $artist = Artist::where('user_id', $user->id)->first();
+        $data['artist'] = null;
+
+        if ($artist) {
+            $data['artist'] = array_intersect_key($artist->toArray(), array_flip([
+                'id', 'stage_name', 'slug', 'bio', 'location', 'image', 'featured_video_id',
+                'listed', 'moderation_status', 'data_since', 'created_at', 'updated_at',
+            ]));
+            $data['artist']['genre_ids'] = DB::table('artist_genre_assignments')->where('artist_id', $artist->id)->pluck('genre_id');
+            $data['artist']['links'] = DB::table('artist_links')->select(['label', 'type', 'url', 'position'])
+                ->where('artist_id', $artist->id)->orderBy('position')->get()->toArray();
+            $data['artist']['playlists'] = DB::table('artist_playlists')
+                ->select(['id', 'title', 'description', 'genre_id', 'category', 'visibility', 'moderation_status', 'version', 'created_at', 'updated_at'])
+                ->where('artist_id', $artist->id)->get()->toArray();
+            $data['artist']['playlist_items'] = DB::table('artist_playlist_items')->select(['playlist_id', 'video_id', 'position'])
+                ->whereIn('playlist_id', DB::table('artist_playlists')->select('id')->where('artist_id', $artist->id))
+                ->orderByRaw('playlist_id ASC, position ASC')->get()->toArray();
+            $data['artist']['daily_statistics'] = DB::table('artist_daily_statistics')
+                ->select(['date', ...ArtistStatistics::METRICS, 'collected_at'])
+                ->where('artist_id', $artist->id)->orderBy('date')->get()->toArray();
         }
 
         $notifications = Notification::select(['id', 'type', 'data', 'read_at', 'created_at'])->where('user_id', $user->id)->get();

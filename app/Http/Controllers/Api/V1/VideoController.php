@@ -28,25 +28,13 @@ class VideoController extends Controller
 
     public function show(Request $request, Video $video): JsonResource
     {
-        abort_if(
-            $video->status === Video::STATUS_DELETED,
-            404,
-            'Video not found.'
-        );
+        $query = Video::visibleTo($request->user())->where('videos.status', '!=', Video::STATUS_DELETED);
 
-        abort_if(
-            $video->status !== Video::STATUS_PUBLISHED && $request->user('id') !== $video->user_id,
-            404,
-            'Video not found.'
-        );
+        if ($request->user('id') !== $video->user_id) {
+            $query->published();
+        }
 
-        abort_unless(
-            Video::whereKey($video->id)->visibleTo($request->user())->exists(),
-            404,
-            'Video not found.'
-        );
-
-        return VideoResource::make(Video::withApiData($request->user())->findOrFail($video->id));
+        return VideoResource::make($query->withApiData($request->user())->findOrFail($video->id));
     }
 
     public function store(StoreVideoRequest $request): Response

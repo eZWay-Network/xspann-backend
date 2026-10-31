@@ -10,7 +10,7 @@ class ReportController extends Controller
     public function store(Request $request): Response
     {
         $data = $request->validate([
-            'playlist_id' => ['prohibited'],
+            'playlist_id' => ['nullable', 'integer', 'min:1'],
             'message_id' => ['prohibited'],
             'announcement_id' => ['prohibited'],
             'boost_id' => ['prohibited'],

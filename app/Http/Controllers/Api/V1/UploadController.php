@@ -9,6 +9,13 @@ use Spark\Http\{Request, Response};
 
 class UploadController extends Controller
 {
+    public function artistImage(AvatarUploadRequest $request): Response
+    {
+        \App\Services\Artists::owned($request->user());
+
+        return $this->upload($request, 'artist-images', 'image_url');
+    }
+
     public function avatar(AvatarUploadRequest $request): Response
     {
         return $this->upload($request, 'avatars', 'avatar_url');

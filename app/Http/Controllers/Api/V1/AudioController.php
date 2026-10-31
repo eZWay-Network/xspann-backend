@@ -107,15 +107,13 @@ class AudioController extends Controller
             && $request->user()->hasVerifiedEmail()
             && $request->user('onboarded_at');
 
-        abort_if($audio->status === 'deleted', 404, 'Audio not found.');
+        $query = Audio::where('audios.status', '!=', 'deleted');
 
-        abort_unless(
-            $owner || Audio::whereKey($audio->id)->availableTo($request->user())->exists(),
-            404,
-            'Audio not found.',
-        );
+        if (!$owner) {
+            $query->availableTo($request->user());
+        }
 
-        return AudioResource::make(Audio::withApiData($request->user())->findOrFail($audio->id));
+        return AudioResource::make($query->withApiData($request->user())->findOrFail($audio->id));
     }
 
     public function videos(Request $request, Audio $audio): JsonResource

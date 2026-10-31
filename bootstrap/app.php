@@ -50,4 +50,5 @@ return Application::create(path: dirname(__DIR__))
         job([\App\Services\VideoRetry::class, 'retry'])->repeatHourly(),
         job([\App\Services\AudioRetry::class, 'retry'])->repeatHourly(),
         job(\App\Jobs\FoundationMaintenance::class)->repeatEveryMinutes(5)->onQueue('privacy'),
+        job([\App\Services\ArtistStatistics::class, 'collectAll'])->repeatHourly(),
     ]);

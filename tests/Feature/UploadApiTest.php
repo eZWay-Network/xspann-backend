@@ -31,7 +31,7 @@ class UploadApiTest extends TestCase
     private function startServer(): void
     {
         $config = [];
-        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies'] as $key) {
+        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists'] as $key) {
             $config[$key] = config($key);
         }
         $documentRoot = $this->storagePath . '/public';
@@ -157,6 +157,29 @@ class UploadApiTest extends TestCase
         $this->assertSame(['#test'], $published['tags']);
         $this->assertTrue(str_contains($published['thumbnail_url'] ?? '', '/uploads/thumbnails/1/'));
         $this->assertSame($video['id'], $this->http('/feed', [], method: 'GET')['data'][0]['id']);
+    }
+
+    public function testArtistImageUsesOwnedEnrollmentAndReencodesRealUploads(): void
+    {
+        $this->loginHttp();
+        $png = $this->storagePath . '/artist.png';
+        imagepng(imagecreatetruecolor(16, 16), $png);
+        file_put_contents($png, 'discard-this-trailing-metadata', FILE_APPEND);
+        $upload = ['file' => new \CURLFile($png, 'image/png', 'artist.png')];
+        $this->http('/uploads/artist-image', $upload, 404, true);
+        $profile = ['stage_name' => 'HTTP Artist', 'slug' => 'http-artist'];
+        $this->http('/me/artist', $profile, 201, method: 'PUT');
+        $data = $this->http('/uploads/artist-image', $upload, 201, true)['data'];
+        $this->assertTrue(str_starts_with($data['storage_path'], 'public:artist-images/1/'));
+        $bytes = storage('public')->get($this->mediaKey($data['storage_path']));
+        $this->assertFalse(str_contains($bytes, 'discard-this-trailing-metadata'));
+        $this->assertSame('image/png', getimagesizefromstring($bytes)['mime']);
+        $this->http('/me/artist', [...$profile, 'image' => $data['storage_path']], method: 'PUT');
+        $this->assertDatabaseHas('artists', ['user_id' => 1, 'image' => $data['storage_path']]);
+        $this->http('/uploads/artist-image', ['file' => new \CURLFile($this->videoFile(), 'image/png', 'fake.png')], 422, true);
+        $this->http('/uploads/artist-image', ['file' => new \CURLFile($png, 'image/png', 'artist.svg')], 422, true);
+        file_put_contents($png, str_repeat('x', 5 * 1024 * 1024), FILE_APPEND);
+        $this->http('/uploads/artist-image', $upload, 422, true);
     }
 
     public function testRealChunkedUploadMissingChunksAndManifestIntegrity(): void

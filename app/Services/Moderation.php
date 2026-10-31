@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\{Audio, Comment, Notification, Report, User, Video};
+use App\Models\{Artist, ArtistPlaylist, Audio, Comment, Notification, Report, User, Video};
 use Spark\Facades\{Cache, DB};
 use function count;
 use function in_array;
 
 class Moderation
 {
-    public const TARGETS = ['reported_user_id' => 'user', 'video_id' => 'video', 'audio_id' => 'audio', 'comment_id' => 'comment'];
+    public const TARGETS = ['reported_user_id' => 'user', 'video_id' => 'video', 'audio_id' => 'audio', 'comment_id' => 'comment', 'playlist_id' => 'playlist'];
 
     public static function report(User $reporter, array $input): Report
     {
@@ -26,13 +26,18 @@ class Moderation
             'video' => Video::published()->visibleTo($reporter)->findOrFail($id),
             'audio' => Audio::availableTo($reporter)->findOrFail($id),
             'comment' => Comment::visibleTo($reporter)->findOrFail($id),
+            'playlist' => ArtistPlaylist::visibleTo($reporter)->findOrFail($id),
         };
 
         if ($type === 'comment') {
             Video::published()->visibleTo($reporter)->findOrFail($target->video_id);
         }
 
-        $subject = $type === 'user' ? $id : (int) $target->user_id;
+        $subject = match ($type) {
+            'user' => $id,
+            'playlist' => (int) Artist::findOrFail($target->artist_id)->user_id,
+            default => (int) $target->user_id,
+        };
         abort_if($subject === $reporter->id, 422, 'You cannot report your own account or content.');
 
         $snapshot = ['type' => $type, 'id' => $id];
@@ -41,6 +46,7 @@ class Moderation
             'video' => ['caption', 'storage_path', 'audio_id', 'rights_version', 'rights_confirmed_at'],
             'audio' => ['title', 'storage_path', 'source_video_id', 'rights_version', 'rights_confirmed_at'],
             'comment' => ['body', 'video_id', 'parent_id'],
+            'playlist' => ['artist_id', 'title', 'description', 'genre_id', 'category', 'visibility'],
         } as $key) {
             $snapshot[$key] = $target->$key;
         }
@@ -176,7 +182,7 @@ class Moderation
             return;
         }
 
-        $model = match ($type) { 'video' => Video::class, 'audio' => Audio::class, 'comment' => Comment::class};
+        $model = match ($type) { 'video' => Video::class, 'audio' => Audio::class, 'comment' => Comment::class, 'playlist' => ArtistPlaylist::class};
         $model::whereKey($id)->update(['moderation_status' => $restricted ? 'restricted' : 'approved']);
     }
 

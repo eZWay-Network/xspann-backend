@@ -9,6 +9,47 @@ use Tests\TestCase;
 
 class FoundationAuditTest extends TestCase
 {
+    public function testVideoDetailRejectsUnpublishedStatusAfterRouteBinding(): void
+    {
+        $video = $this->makeVideo($this->makeUser());
+        $this->app->mergeConfig(['app' => ['debug' => true]]);
+        $pendingStatus = null;
+
+        event()->addListener('app:db.queryExecuted', function (string $query) use ($video, &$pendingStatus): void {
+            if ($pendingStatus && str_starts_with($query, 'SELECT') && str_contains($query, 'videos')) {
+                $status = $pendingStatus;
+                $pendingStatus = null;
+                $video->update(['status' => $status]);
+            }
+        });
+
+        foreach ([Video::STATUS_PROCESSING, Video::STATUS_DELETED] as $status) {
+            $video->update(['status' => Video::STATUS_PUBLISHED]);
+            $pendingStatus = $status;
+            $this->getJson('/api/v1/videos/' . $video->id)->assertStatus(404);
+            $this->assertSame(null, $pendingStatus);
+        }
+    }
+
+    public function testAudioOwnerDetailRejectsDeletionAfterRouteBinding(): void
+    {
+        $owner = $this->makeUser();
+        $audio = Audio::create(['user_id' => $owner->id, 'title' => 'Sound', 'storage_path' => 'sounds/1/a.m4a', 'status' => 'ready']);
+        $this->asUser($owner);
+        $this->app->mergeConfig(['app' => ['debug' => true]]);
+        $deleted = false;
+
+        event()->addListener('app:db.queryExecuted', function (string $query) use ($audio, &$deleted): void {
+            if (!$deleted && str_starts_with($query, 'SELECT') && str_contains($query, 'audios')) {
+                $deleted = true;
+                $audio->update(['status' => 'deleted']);
+            }
+        });
+
+        $this->getJson('/api/v1/audios/' . $audio->id)->assertStatus(404);
+        $this->assertTrue($deleted);
+    }
+
     public function testVideoUpdatesCannotDetachAudioOrChangeRenderedSettings(): void
     {
         $owner = $this->makeUser();

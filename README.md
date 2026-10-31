@@ -1,6 +1,6 @@
 # XPN Social API
 
-A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses TinyCore 4.2.9.
+A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses the installed TinyCore 4.2.13.
 
 Requires PHP 8.2+. Enable PDO and your database driver, `pdo_sqlite` for the default cache/queue/locks, `fileinfo`, `mbstring`, `openssl`, and `curl`. Install FFmpeg with libx264/AAC encoding and FFprobe for video compression, audio extraction, and cover generation. GD is used by the avatar upload test fixture.
 
@@ -21,9 +21,19 @@ php spark queue:work --sleep=1
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
 
+## Step 2 artists and playlists
+
+Step 2 implements the artist directory/profile, genres/HTTPS links, managed artist images, owned versioned playlists, account-follow aliases, and current statistics. It also extends playlist reporting, private exports and account/image deletion. All 22 Step 2 operations are documented at `/` (106 versioned operations total).
+
+Apply the new migration with `php spark migrate` after establishing the frozen Step 1 baseline. **Do not reset the database for Step 2.** No working database migration or reset was performed during implementation. Restart existing workers after deployment; hourly statistics collection runs on the default queue. `php spark artists:statistics` collects current UTC snapshots manually.
+
+Production capabilities resolve free access; Starter/Pro branches are tested with isolated fixtures until Step 3 supplies billing. The single resolver and catalog enforce 1/10/50 playlists and 1/5/5 links. Paid daily statistics are collected snapshots, not historical daily event estimates. See [Step 2 review](docs/STEP_2_REVIEW.md) and [manual HTTP collection](docs/STEP_2_REVIEW.http) for the full contract, downgrade/visibility rules, migration checks and practical review.
+
+The final Step 1–2 backend audit passed on 2026-10-31: **234 tests, 4,013 assertions, no skips**. It corrected stale-state reads, empty genre validation and API export field requirements, and added a combined processing/moderation/privacy/deletion workflow test. Steps 1–2 are ready for Step 3; details are in the local [audit report](docs/STEP_2_AUDIT.md). The repository's existing ignore rules exclude `docs/` from ordinary staging.
+
 ## Step 1 reset and account operations
 
-After reviewing this step, run `php spark migrate:fresh` **once** on your local development database. This deliberately replaces the old prelaunch schema and deletes database data; it does not clear stored media. The agent has not reset your database. The resulting baseline is frozen: from Step 2 onward, use new forward migrations and `php spark migrate` only. The seeder creates no accounts or known passwords.
+Historical Step 1 setup only: its review called for `php spark migrate:fresh` **once** to replace the old prelaunch schema. Do not repeat that reset once the baseline is established; it deletes database data. The baseline is frozen: from Step 2 onward, use new forward migrations and `php spark migrate` only. The seeder creates no accounts or known passwords.
 
 `GET /api/v1/policies` supplies policy versions/URLs and the content-rights declaration. New Google signups receive `onboarding_required=true`, an opaque ten-minute `onboarding_token`, and no access token. POST that token with adult birth date and policy versions to `/auth/onboarding`. Birth dates are encrypted and appear only in the owner's private data export.
 
@@ -169,7 +179,7 @@ Accept: application/json
 {"token":"<Google ID token>"}
 ```
 
-The endpoint returns HTTP 200 for both creation and login, using the same `data.user`, `data.token`, and `data.token_expires_at` response as password login. Use the returned app token as the Bearer token. Requests are limited to five per minute. Use HTTPS in production.
+The endpoint returns HTTP 200. Enrolled accounts receive `data.user`, `data.token`, and `data.token_expires_at`, as with password login. New or incomplete accounts receive `onboarding_required=true` and an opaque `onboarding_token`; complete `/auth/onboarding` before receiving an app bearer token. Requests are limited to five per minute. Use HTTPS in production.
 
 Signatures are checked against cached Google public keys, along with issuer, audience, expiry, and verified email. Accounts retain Google's stable subject ID. Existing accounts can link automatically when Google establishes ownership through Gmail or Google Workspace; other matching email addresses return 409 and require password login. This follows Google's [ID-token verification guidance](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token).
 
@@ -280,7 +290,7 @@ Audio uploads return `audio_url`; create the library entry separately through `P
 
 ## Endpoints
 
-All paths below include the `/api/v1` prefix. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, forgot/reset, verification resend, and signed email verification are public. All other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
+The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 106 versioned operations, including account lifecycle, moderation, artists and playlists. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
 
 | Method | Path |
 | --- | --- |
@@ -380,7 +390,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 66 versioned API endpoints and middleware assignments. |
+| `routes/api.php` | The 106 versioned API operations and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -404,7 +414,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover all 66 endpoints, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover the 106-operation route/reference contract, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Artist coverage includes enrollment, capability limits, concurrent playlist edits, statistics, moderation and privacy integration. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 
