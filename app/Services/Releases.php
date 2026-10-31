@@ -221,6 +221,9 @@ class Releases
     public static function save(Video $video, array $attributes): void
     {
         DB::transaction(function () use ($video, $attributes): void {
+            if ($video->publication_state === 'published' && array_intersect(array_keys($attributes), ['status', 'visibility', 'caption', 'thumbnail_url', 'reuse_content'])) {
+                \App\Services\Promotions\Invalidations::record('video', $video->id);
+            }
             if (!$video->update($attributes)) {
                 throw new \RuntimeException('Release could not be saved.');
             }

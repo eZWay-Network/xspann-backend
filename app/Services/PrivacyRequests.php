@@ -70,6 +70,7 @@ class PrivacyRequests
 
         if ($kind === 'deletion') {
             $user->update(['status' => 'deleting']);
+            \App\Services\Promotions\Invalidations::record('user', $user->id);
             Realtime::retire($user->id);
             DB::table('billing_subscriptions')->where('user_id', $user->id)->update(['deletion_requested_at' => \App\Services\Billing\Billing::timestamp()]);
             foreach (['jwt_access_tokens', 'staff_sessions', 'account_action_tokens'] as $table) {
@@ -137,6 +138,7 @@ class PrivacyRequests
         }
 
         app(\App\Services\Billing\SubscriptionActions::class)->deleteAccount($user->id);
+        \App\Services\Promotions\Privacy::deleting($user->id);
 
         // Keep rows and their paths until file cleanup succeeds, so retries can resume safely.
         foreach (Video::where('user_id', $user->id)->get() as $video) {
@@ -275,6 +277,7 @@ class PrivacyRequests
         }
 
         $data['communications'] = CommunicationPrivacy::export($user->id);
+        $data['promotions'] = \App\Services\Promotions\Privacy::export($user->id);
 
         $data['subscription'] = \App\Services\Billing\Billing::subscriptionData($user->id);
         $data['billing_invoices'] = DB::table('billing_invoices')->select(['invoice_id', 'status', 'amount_paid', 'amount_due', 'currency', 'issued_at'])

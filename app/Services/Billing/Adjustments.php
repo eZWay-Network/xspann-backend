@@ -131,9 +131,16 @@ class Adjustments
             $updates['boost_credit_cents'] = 0;
         }
 
+        $period = DB::table('billing_paid_periods')->where('invoice_id', $invoice->id)->first();
         DB::table('billing_paid_periods')->where('invoice_id', $invoice->id)->update($updates);
+        if ($period && $revoke && !$period->revoked_at) {
+            \App\Services\Promotions\Invalidations::record('period', $period->id);
+        }
         $owner = DB::table('billing_subscriptions')->where('id', $invoice->subscription_id)->value('user_id');
         if ($owner) {
+            if ($hold && $period && !$period->promotion_hold) {
+                \App\Services\Promotions\Invalidations::record('user', (int) $owner);
+            }
             \App\Services\Realtime::record((int) $owner, 'entitlements.updated', (int) $owner, 0);
         }
     }

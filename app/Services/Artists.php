@@ -59,6 +59,10 @@ class Artists
                 $attributes['stage_name'] = trim($attributes['stage_name']);
 
                 if ($artist) {
+                    if (array_filter(array_intersect(array_keys($attributes), ['stage_name', 'slug', 'image', 'listed']),
+                        fn($field) => ($field === 'image' ? StorageService::storedValue($attributes[$field]) : $attributes[$field]) !== $artist->$field)) {
+                        \App\Services\Promotions\Invalidations::record('artist', $artist->id);
+                    }
                     if (!$artist->fill($attributes)->save()) {
                         throw new \RuntimeException('Artist profile could not be saved.');
                     }

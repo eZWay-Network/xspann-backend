@@ -8,6 +8,30 @@ use Tests\TestCase;
 class ApiContractTest extends TestCase
 {
     private const ROUTES = [
+        'GET /api/v1/artists/featured',
+        'GET /api/v1/admin/boosts',
+        'GET /api/v1/admin/boosts/{boost}',
+        'POST /api/v1/admin/boosts/{boost}/decision',
+        'POST /api/v1/admin/boosts/{boost}/remedy',
+        'GET /api/v1/admin/placements',
+        'POST /api/v1/admin/placements',
+        'PATCH /api/v1/admin/placements/{placement}',
+        'POST /api/v1/admin/placements/{placement}/evidence',
+        'GET /api/v1/admin/promotion-surface',
+        'POST /api/v1/admin/promotion-surface/availability',
+        'GET /api/v1/promotion-offers',
+        'GET /api/v1/promotions/placements',
+        'POST /api/v1/promotions/events',
+        'GET /api/v1/me/artist/boost-balance',
+        'GET /api/v1/me/artist/boost-ledger',
+        'GET /api/v1/me/artist/boosts',
+        'POST /api/v1/me/artist/boosts',
+        'GET /api/v1/me/artist/boosts/{boost}',
+        'PATCH /api/v1/me/artist/boosts/{boost}',
+        'POST /api/v1/me/artist/boosts/{boost}/submit',
+        'POST /api/v1/me/artist/boosts/{boost}/cancel',
+        'GET /api/v1/me/artist/placements',
+        'POST /api/v1/me/artist/placements/{placement}/extension-consent',
         'GET /api/v1/me/communication-preferences',
         'PATCH /api/v1/me/communication-preferences',
         'GET /api/v1/conversations',
@@ -216,7 +240,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(148, count($entries));
+        $this->assertSame(172, count($entries));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
         $this->assertSame('binary', $entries['releasecontroller-preview']['responseType']);
         foreach ([

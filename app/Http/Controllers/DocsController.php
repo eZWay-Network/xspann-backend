@@ -40,6 +40,7 @@ class DocsController extends Controller
             $entry['parameters'] = [];
             $entry['headers'] = match ($key) {
                 'BillingController@checkout' => ['Idempotency-Key' => '<unique-purchase-key>'],
+                'PromotionController@submit', 'PromotionAdminController@remedy' => ['Idempotency-Key' => '<unique-promotion-operation-key>'],
                 'AnnouncementController@send' => ['Idempotency-Key' => '<unique-broadcast-key>'],
                 'BillingController@webhook' => ['Stripe-Signature' => '<signature-over-exact-raw-body>'],
                 default => [],
@@ -173,6 +174,9 @@ class DocsController extends Controller
                 if ($key === 'ConversationController@index') {
                     $entry['response']['meta']['unread_count'] = 1;
                 }
+            }
+            if ($key === 'PromotionController@placements') {
+                $entry['response']['meta'] = ['capacity' => 5];
             }
             if ($key === 'ConversationController@messages') {
                 $entry['response'] = ['data' => [$response], 'meta' => ['limit' => 20, 'has_more' => false, 'next_before_id' => null, 'next_after_id' => null]];
@@ -314,7 +318,7 @@ class DocsController extends Controller
         $chunkExample = ['upload_id' => '123e4567-e89b-42d3-a456-426614174000', 'total_chunks' => 1, 'filename' => 'example.mp4', 'content_type' => 'video/mp4', 'total_size' => 1024];
         $add('UploadController@videoChunk', 'Uploads', 'Upload a video chunk', 'Send multipart/form-data. Generate one UUID per upload. Chunk index is zero-based and less than total_chunks. Chunks are at most 2 MiB; total video size is at most 524288000 bytes. Reusing an index replaces that chunk. Keep all session metadata identical.', ['upload_method' => 'chunked', 'upload_id' => $chunkExample['upload_id'], 'chunk_index' => 0, 'total_chunks' => 1], '201', ChunkUploads::rules(true), $chunkExample + ['chunk_index' => 0, 'chunk' => '@/path/to/chunk']);
         $add('UploadController@completeVideoChunks', 'Uploads', 'Complete a chunked upload', 'Assembles the signed-in user’s upload. All chunks must exist; total_size and metadata must match exactly and assembled media must have a supported MIME type. Completion removes the session; it is not repeatable. Then submit storage_path to POST /videos.', ['upload_method' => 'chunked', 'storage_path' => 'public:videos/1/example.mp4', 'video_url' => 'https://media.example.com/videos/1/example.mp4'], '201', ChunkUploads::rules(), $chunkExample);
-        return $result + \App\Http\FoundationApiReference::catalog() + \App\Http\ArtistApiReference::catalog() + \App\Http\BillingReleaseApiReference::catalog() + \App\Http\CommunicationApiReference::catalog();
+        return $result + \App\Http\FoundationApiReference::catalog() + \App\Http\ArtistApiReference::catalog() + \App\Http\BillingReleaseApiReference::catalog() + \App\Http\CommunicationApiReference::catalog() + \App\Http\PromotionApiReference::catalog();
     }
 
     public static function schemas(): array

@@ -186,6 +186,7 @@ class Moderation
 
     private static function refreshTarget(string $type, int $id): void
     {
+        \App\Services\Promotions\Invalidations::record($type, $id);
         $restricted = DB::table('moderation_restrictions')->where('target_type', $type)->where('target_id', $id)->exists();
         if ($type === 'user') {
             User::whereKey($id)->whereIn('status', ['active', 'suspended'])->update(['status' => $restricted ? 'suspended' : 'active']);

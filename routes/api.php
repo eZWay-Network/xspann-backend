@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\V1\{PromotionController, PromotionAdminController};
+
 use App\Http\Controllers\Api\V1\{
     CommunicationController,
     ConversationController,
@@ -39,6 +41,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/webhooks/stripe', [BillingController::class, 'webhook']);
     Route::get('/media/{token}', [MediaController::class, 'show']);
     Route::get('/artist-taxonomy', [ArtistController::class, 'taxonomy']);
+    Route::get('/artists/featured', [PromotionController::class, 'featured']);
     Route::get('/artists', [ArtistController::class, 'index']);
     Route::get('/artists/by-slug/{slug}', [ArtistController::class, 'bySlug']);
     Route::get('/artists/{artist}', [ArtistController::class, 'show']);
@@ -71,12 +74,26 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware('staff')->group(function (): void {
+        Route::get('/admin/boosts', [PromotionAdminController::class, 'index']);
+        Route::get('/admin/boosts/{boost}', [PromotionAdminController::class, 'show']);
+        Route::post('/admin/boosts/{boost}/decision', [PromotionAdminController::class, 'decision'])->middleware('throttle:30');
+        Route::post('/admin/boosts/{boost}/remedy', [PromotionAdminController::class, 'remedy'])->middleware('throttle:30');
+        Route::get('/admin/placements', [PromotionAdminController::class, 'placements']);
+        Route::post('/admin/placements', [PromotionAdminController::class, 'storePlacement'])->middleware('throttle:30');
+        Route::patch('/admin/placements/{placement}', [PromotionAdminController::class, 'updatePlacement'])->middleware('throttle:30');
+        Route::post('/admin/placements/{placement}/evidence', [PromotionAdminController::class, 'evidence'])->middleware('throttle:30');
+        Route::get('/admin/promotion-surface', [PromotionAdminController::class, 'surface']);
+        Route::post('/admin/promotion-surface/availability', [PromotionAdminController::class, 'observe'])->middleware('throttle:60');
         Route::get('/admin/reports', [ModerationController::class, 'reports']);
         Route::get('/admin/reports/{report}', [ModerationController::class, 'report']);
         Route::post('/admin/reports/{report}/decision', [ModerationController::class, 'decide'])->middleware('throttle:30');
         Route::get('/admin/moderation-appeals', [ModerationController::class, 'appeals']);
         Route::post('/admin/moderation-appeals/{appeal}/decision', [ModerationController::class, 'decideAppeal'])->middleware('throttle:30');
     });
+
+    Route::get('/promotion-offers', [PromotionController::class, 'offers']);
+    Route::get('/promotions/placements', [PromotionController::class, 'placements'])->middleware('throttle:120');
+    Route::post('/promotions/events', [PromotionController::class, 'event'])->middleware('throttle:120');
 
     Route::get('/audios', [AudioController::class, 'index']);
     Route::get('/audios/{audio}', [AudioController::class, 'show']);
@@ -105,6 +122,16 @@ Route::prefix('v1')->group(function () {
     Route::post('/videos/{video}/view', [ViewController::class, 'store'])->middleware('throttle:120');
 
     Route::middleware('auth')->group(function (): void {
+        Route::get('/me/artist/boost-balance', [PromotionController::class, 'balance']);
+        Route::get('/me/artist/boost-ledger', [PromotionController::class, 'ledger']);
+        Route::get('/me/artist/boosts', [PromotionController::class, 'index']);
+        Route::post('/me/artist/boosts', [PromotionController::class, 'store'])->middleware('throttle:30');
+        Route::get('/me/artist/boosts/{boost}', [PromotionController::class, 'show']);
+        Route::patch('/me/artist/boosts/{boost}', [PromotionController::class, 'update'])->middleware('throttle:30');
+        Route::post('/me/artist/boosts/{boost}/submit', [PromotionController::class, 'submit'])->middleware('throttle:30');
+        Route::post('/me/artist/boosts/{boost}/cancel', [PromotionController::class, 'cancel'])->middleware('throttle:30');
+        Route::get('/me/artist/placements', [PromotionController::class, 'obligations']);
+        Route::post('/me/artist/placements/{placement}/extension-consent', [PromotionController::class, 'consent'])->middleware('throttle:30');
         Route::get('/me/communication-preferences', [CommunicationController::class, 'preferences']);
         Route::patch('/me/communication-preferences', [CommunicationController::class, 'updatePreferences']);
         Route::get('/conversations', [ConversationController::class, 'index']);

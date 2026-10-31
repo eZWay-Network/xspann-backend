@@ -2,7 +2,7 @@
 
 return [
     'environment' => env('BILLING_ENVIRONMENT', 'test'),
-    // Steps 4–5 paid benefits and the sales readiness review must finish first.
+    // Backend benefits are implemented; the web integration and sales readiness review must finish first.
     'live_sales_enabled' => false,
     'offer_version' => '2026-10-29',
     'stripe_secret' => env('STRIPE_SECRET_KEY'),

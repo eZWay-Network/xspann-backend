@@ -109,11 +109,19 @@ class VideoController extends Controller
                 unset($data['pinned']);
             }
 
+            if (array_filter(array_intersect(array_keys($data->all()), ['caption', 'visibility', 'thumbnail_url', 'reuse_content']), fn($field) => $data[$field] !== $video->$field)) {
+                \App\Services\Promotions\Invalidations::record('video', $video->id);
+            }
             $data->set('version', $video->version + 1);
             if (!$video->update($data)) {
                 throw new \RuntimeException('Video update failed.');
             }
             if ($data->has('reuse_content')) {
+                foreach (Audio::where('source_video_id', $video->id)->get() as $original) {
+                    if ($original->reuse_allowed !== $data->boolean('reuse_content')) {
+                        \App\Services\Promotions\Invalidations::record('audio', $original->id);
+                    }
+                }
                 Audio::where('source_video_id', $video->id)->update(['reuse_allowed' => $data->boolean('reuse_content')]);
             }
         });

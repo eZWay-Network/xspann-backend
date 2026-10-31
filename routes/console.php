@@ -135,3 +135,25 @@ command('realtime:publish', function (Prompt $prompt): void {
     (new \App\Jobs\PublishRealtime())->handle();
     $prompt->message('Pending realtime hints checked.');
 })->description('Publish committed outbox hints, retaining failures for retry');
+
+
+command('promotions:maintain', function (Prompt $prompt): void {
+    (new \App\Jobs\PromotionMaintenance())->handle();
+    $prompt->message('Promotion credit, inventory, delivery and obligation recovery completed.');
+})->description('Reconcile monthly credits and promotion delivery without inventing availability');
+
+command('promotions:surface', function (Prompt $prompt, array $args): void {
+    if (!in_array($args['available'] ?? null, ['0', '1'], true)
+        || !is_string($args['reference'] ?? null) || strlen($args['reference']) < 8 || strlen($args['reference']) > 200
+        || !is_string($args['note'] ?? null) || strlen(trim($args['note'])) < 8 || strlen($args['note']) > 1000) {
+        throw new InvalidArgumentException('Use --available=0|1 --reference=<unique-observation> --note=<verification or incident details>.');
+    }
+    $input = ['available' => $args['available'] === '1', 'reference' => $args['reference'], 'note' => $args['note']];
+    foreach (['starts_at', 'ends_at'] as $key) {
+        if (isset($args[$key])) {
+            $input[$key] = $args[$key];
+        }
+    }
+    \App\Services\Promotions\Availability::record($input);
+    $prompt->message('Authoritative surface observation recorded. Positive observations expire after 120 seconds.');
+})->description('Record verified web-surface availability or a bounded incident from a trusted operator/monitor');

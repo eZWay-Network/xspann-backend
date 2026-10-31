@@ -45,6 +45,7 @@ class AudioController extends Controller
                     ]);
                 }
             }
+            \App\Services\Promotions\Invalidations::record('audio', $audio->id);
             if (!$audio->update($input)) {
                 throw new \RuntimeException('Audio update failed.');
             }
@@ -58,6 +59,7 @@ class AudioController extends Controller
         authorize('model.delete', $audio);
         PendingUploads::attach($audio->user_id, function () use ($audio): void {
             $audio->refresh();
+            \App\Services\Promotions\Invalidations::record('audio', $audio->id);
             if (!$audio->update(['status' => 'deleted', 'reuse_allowed' => false])) {
                 throw new \RuntimeException('Audio deletion failed.');
             }

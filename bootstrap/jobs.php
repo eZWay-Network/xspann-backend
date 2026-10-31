@@ -5,6 +5,7 @@ use Spark\Queue\Queue;
 /** withQueue's list registers on default; named recurring jobs need explicit pushOnce queues. */
 return static function (Queue $queue): void {
     foreach ([
+        ['promotions', job(\App\Jobs\PromotionMaintenance::class)->repeatEveryMinutes(1)],
         ['realtime', job(\App\Jobs\PublishRealtime::class)->repeat('1 second')],
         ['notifications', job(\App\Jobs\DeliverAnnouncements::class)->repeatEveryMinutes(1)],
         ['releases', job(\App\Jobs\PublishReleases::class)->repeatEveryMinutes(1)],

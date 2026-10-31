@@ -21,9 +21,15 @@ php spark queue:work --sleep=1
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
 
+## Step 5 promotions and placements
+
+Step 5 adds invoice-linked Pro boost credit, atomic five-slot booking, staff review, Sponsored placement delivery, independent availability/incident accounting, unused-time credit remedies, and separate complimentary monthly feature/network-post obligations. The generated reference now covers **172 versioned operations**. See [Step 5 review](docs/STEP_5_REVIEW.md) and [manual HTTP collection](docs/STEP_5_REVIEW.http) for contracts, fixtures and operating details.
+
+Apply the new forward migration with `php spark migrate` and supervise `php spark queue:work --queue=promotions --sleep=1`. `promotions:maintain` provides recovery. Verified by the full suite: **367 tests / 5,792 assertions**, all passing. The working database was not migrated/reset. Bookings remain disabled until the real web surface and its independent availability monitor work; the monthly pilot has no capacity until configured. Live sales remain disabled pending web integration and the separate sales-readiness review. Existing native and organic feeds are unchanged.
+
 ## Step 4 messaging and artist updates
 
-Step 4 adds free one-to-one text conversations for eligible mutual followers, independent in-app artist consent, Pro announcements, message/announcement reporting, privacy cleanup, and Relay update hints with durable REST recovery. The generated reference at `/` covers **148 versioned operations**. Native application code is unchanged; live sales stay disabled pending Step 5 and the sales-readiness review.
+Step 4 adds free one-to-one text conversations for eligible mutual followers, independent in-app artist consent, Pro announcements, message/announcement reporting, privacy cleanup, and Relay update hints with durable REST recovery. The generated reference at `/` covers **172 versioned operations**. Native application code is unchanged; live sales stay disabled pending web integration and the sales-readiness review.
 
 Apply the new communications migration with `php spark migrate`, keeping the current database and APP_KEY. **The working database was not migrated or reset.** Conversation/message uniqueness, monotonic read cursors and per-user limits are enforced in the database. Announcements atomically reserve four accepted broadcasts per verified Pro paid period and reject audiences above 1,000 before quota use. Recipient snapshots record consent revisions; opting back in never revives old campaigns. Retries cannot duplicate messages, quota reservations, or announcement deliveries.
 
@@ -325,7 +331,7 @@ Point `public/uploads` (or the server alias) only at the configured public disk 
 
 ## Endpoints
 
-The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 148 versioned operations, including account lifecycle, moderation, artists, playlists, billing, releases, messaging, announcements and realtime. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
+The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 172 versioned operations, including account lifecycle, moderation, artists, playlists, billing, releases, messaging, announcements realtime, promotions and monthly placements. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
 
 | Method | Path |
 | --- | --- |
@@ -425,7 +431,7 @@ Backend S3 uploads need writable PHP/staging space and HTTP timeouts long enough
 
 | Location | Responsibility |
 | --- | --- |
-| `routes/api.php` | The 148 versioned API operations and middleware assignments. |
+| `routes/api.php` | The 172 versioned API operations and middleware assignments. |
 | `app/Http/Controllers/Api/V1` | Account, video, profile, social, comment, and upload endpoints. |
 | `app/Http/Requests` | Spark FormRequest rules and video editor field validation. |
 | `app/Models` | Spark ORM fields, casts, relations, visibility and viewer scopes. |
@@ -449,7 +455,7 @@ php test --filter=UploadApiTest
 composer validate --strict
 ```
 
-Tests cover the 148-operation route/reference contract, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Artist coverage includes enrollment, capability limits, concurrent playlist edits, statistics, moderation and privacy integration. Billing/release coverage includes raw signatures, replay/reordering, lost-response recovery, refund/dispute allocation, renewal/account deletion, concurrent purchases/publication, private local/S3 draft transport, UTC/DST scheduling, downgrade, rights changes and queue failures. Communication coverage includes concurrent mutual-follow chat, consent revisions, atomic announcement quotas, retry-safe fan-out, token-bound Relay sessions, real reconnect recovery, named recurring workers and report/privacy lifecycle. Resource assertions check exact field sets so raw model data cannot replace the public API response.
+Tests cover the 172-operation route/reference contract, authentication and token expiry, Google signature/claim verification and account linking, ownership and visibility, native throttling/CORS, pagination, editor validation, social actions, multipart and chunk uploads, local/S3 media representation, static file delivery, signed upload construction, private signed playback, deletion retries/cascades, blocks, all six reactions, verification-gated login, bounded query counts, and queued processing/email. Artist coverage includes enrollment, capability limits, concurrent playlist edits, statistics, moderation and privacy integration. Billing/release coverage includes raw signatures, replay/reordering, lost-response recovery, refund/dispute allocation, renewal/account deletion, concurrent purchases/publication, private local/S3 draft transport, UTC/DST scheduling, downgrade, rights changes and queue failures. Communication coverage includes concurrent mutual-follow chat, consent revisions, atomic announcement quotas, retry-safe fan-out, token-bound Relay sessions, real reconnect recovery, named recurring workers and report/privacy lifecycle. Resource assertions check exact field sets so raw model data cannot replace the public API response.
 
 Tests use isolated SQLite databases, queue/cache files, and media directories. One test base supplies model factories and native authentication; one HTTP helper starts and stops localhost fixtures for real multipart/chunk requests and S3 transfers. No test contacts a real bucket or sends email. Most process tests use controlled executable fixtures. The real decoder test runs automatically when FFmpeg and FFprobe are on PATH and otherwise reports a skip.
 
