@@ -7,6 +7,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Spark\Facades\DB;
 use Spark\Foundation\Exceptions\ValidationException;
+use function count;
 
 class Artists
 {
@@ -136,7 +137,7 @@ class Artists
 
         abort_unless(
             $date && $date->format('Y-m-d') === $birth && $date <= $today
-                && $date->diff($today)->y >= config('policies.minimum_age', 18),
+            && $date->diff($today)->y >= config('policies.minimum_age', 18),
             403,
             'Adult enrollment is required for an artist profile.',
         );

@@ -240,9 +240,20 @@ class PrivacyRequests
 
         if ($artist) {
             $data['artist'] = array_intersect_key($artist->toArray(), array_flip([
-                'id', 'stage_name', 'slug', 'bio', 'location', 'image', 'featured_video_id',
-                'listed', 'moderation_status', 'data_since', 'created_at', 'updated_at',
+                'id',
+                'stage_name',
+                'slug',
+                'bio',
+                'location',
+                'image',
+                'featured_video_id',
+                'listed',
+                'moderation_status',
+                'data_since',
+                'created_at',
+                'updated_at',
             ]));
+
             $data['artist']['genre_ids'] = DB::table('artist_genre_assignments')->where('artist_id', $artist->id)->pluck('genre_id');
             $data['artist']['links'] = DB::table('artist_links')->select(['label', 'type', 'url', 'position'])
                 ->where('artist_id', $artist->id)->orderBy('position')->get()->toArray();

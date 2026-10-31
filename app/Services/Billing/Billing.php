@@ -4,6 +4,8 @@ namespace App\Services\Billing;
 
 use App\Models\User;
 use Spark\Facades\{Cache, DB};
+use function in_array;
+use function is_string;
 
 class Billing
 {
@@ -71,17 +73,31 @@ class Billing
     public static function assertAccount(PaymentProvider $provider): void
     {
         $expected = config('billing.stripe_account');
-        abort_unless(is_string($expected) && preg_match('/^acct_[a-zA-Z0-9]+$/D', $expected), 503, 'Configure the billing account.');
-        abort_unless(($provider->request('GET', '/account')['id'] ?? null) === $expected, 503, 'Billing account mismatch.');
+        abort_unless(
+            is_string($expected) && preg_match('/^acct_[a-zA-Z0-9]+$/D', $expected),
+            503,
+            'Configure the billing account.'
+        );
+
+        abort_unless(
+            ($provider->request('GET', '/account')['id'] ?? null) === $expected,
+            503,
+            'Billing account mismatch.'
+        );
     }
 
     public static function returnUrl(string $field): string
     {
-        $url = config('billing.' . $field);
+        $url = config("billing.$field");
         $scheme = is_string($url) ? parse_url($url, PHP_URL_SCHEME) : null;
-        abort_unless(is_string($url) && filter_var($url, FILTER_VALIDATE_URL)
+
+        abort_unless(
+            is_string($url) && filter_var($url, FILTER_VALIDATE_URL)
             && in_array($scheme, config('billing.environment') === 'live' ? ['https'] : ['http', 'https'], true)
-            && !parse_url($url, PHP_URL_USER) && !parse_url($url, PHP_URL_FRAGMENT), 503, 'Configure fixed billing return URLs.');
+            && !parse_url($url, PHP_URL_USER) && !parse_url($url, PHP_URL_FRAGMENT),
+            503,
+            'Configure fixed billing return URLs.'
+        );
 
         return $url;
     }
@@ -96,7 +112,11 @@ class Billing
     public static function activeUser(int $id): User
     {
         $user = self::owner($id);
-        abort_unless($user->status === 'active', 403, 'Account is not eligible for new billing activity.');
+        abort_unless(
+            $user->status === 'active',
+            403,
+            'Account is not eligible for new billing activity.'
+        );
 
         return $user;
     }
@@ -104,8 +124,12 @@ class Billing
     public static function owner(int $id): User
     {
         $user = User::find($id);
-        abort_unless($user && in_array($user->status, ['active', 'suspended'], true)
-            && $user->hasVerifiedEmail() && $user->onboarded_at, 403, 'Billing account is not available.');
+        abort_unless(
+            $user && in_array($user->status, ['active', 'suspended'], true)
+            && $user->hasVerifiedEmail() && $user->onboarded_at,
+            403,
+            'Billing account is not available.'
+        );
 
         return $user;
     }

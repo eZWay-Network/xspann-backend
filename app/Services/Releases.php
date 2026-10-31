@@ -8,6 +8,8 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Spark\Facades\DB;
 use Spark\Foundation\Exceptions\ValidationException;
+use function array_key_exists;
+use function in_array;
 
 class Releases
 {
@@ -32,10 +34,12 @@ class Releases
     public static function eligible(Video $video): bool
     {
         $user = $video->user()->first();
-        if (!$user || $user->status !== 'active' || !$user->hasVerifiedEmail() || !$user->onboarded_at
+        if (
+            !$user || $user->status !== 'active' || !$user->hasVerifiedEmail() || !$user->onboarded_at
             || !$video->rights_confirmed_at || $video->rights_version !== config('policies.rights_version')
             || $video->moderation_status !== 'approved'
-            || in_array($video->status, [Video::STATUS_DELETED, Video::STATUS_SOURCE_UNAVAILABLE], true)) {
+            || in_array($video->status, [Video::STATUS_DELETED, Video::STATUS_SOURCE_UNAVAILABLE], true)
+        ) {
             return false;
         }
         if (!$video->audio_id) {
@@ -108,8 +112,12 @@ class Releases
             if ($action === 'cancel') {
                 abort_unless($video->publication_intent === 'draft', 409, 'An immediate upload cannot be converted to a private draft. Upload it privately first.');
                 self::save($video, [
-                    'publication_state' => 'draft', 'publication_intent' => 'draft', 'publish_at' => null,
-                    'publish_timezone' => null, 'release_error' => null, 'version' => $video->version + 1,
+                    'publication_state' => 'draft',
+                    'publication_intent' => 'draft',
+                    'publish_at' => null,
+                    'publish_timezone' => null,
+                    'release_error' => null,
+                    'version' => $video->version + 1,
                     'status' => $video->processing_state === 'ready' ? 'draft' : $video->status,
                 ]);
             } else {
@@ -120,9 +128,13 @@ class Releases
                     app(ArtistCapabilities::class)->require($user->id, 'release_scheduling');
                     abort_unless($at > Billing::timestamp(), 422, 'Publication time must still be in the future.');
                     self::save($video, [
-                        'publication_state' => 'scheduled', 'publication_intent' => 'draft',
-                        'publish_at' => $at, 'publish_timezone' => $input['timezone'], 'status' => 'scheduled',
-                        'release_error' => null, 'version' => $video->version + 1,
+                        'publication_state' => 'scheduled',
+                        'publication_intent' => 'draft',
+                        'publish_at' => $at,
+                        'publish_timezone' => $input['timezone'],
+                        'status' => 'scheduled',
+                        'release_error' => null,
+                        'version' => $video->version + 1,
                     ]);
                 } else {
                     $this->publish($video);
@@ -163,14 +175,21 @@ class Releases
                         }
                         if ($reason) {
                             self::save($video, [
-                                'publication_state' => 'draft', 'publication_intent' => 'draft',
+                                'publication_state' => 'draft',
+                                'publication_intent' => 'draft',
                                 'status' => $video->processing_state === 'ready' ? 'draft' : $video->status,
-                                'release_error' => $reason, 'version' => $video->version + 1,
+                                'release_error' => $reason,
+                                'version' => $video->version + 1,
                             ]);
-                            Notification::create(['user_id' => $video->user_id, 'type' => 'release_paused', 'data' => [
-                                'release_id' => $video->id, 'reason' => $reason,
-                                'message' => 'Your scheduled release is now a draft. Review it before scheduling or publishing again.',
-                            ]]);
+                            Notification::create([
+                                'user_id' => $video->user_id,
+                                'type' => 'release_paused',
+                                'data' => [
+                                    'release_id' => $video->id,
+                                    'reason' => $reason,
+                                    'message' => 'Your scheduled release is now a draft. Review it before scheduling or publishing again.',
+                                ]
+                            ]);
                         } elseif ($video->publish_at && $video->publish_at->getTimestamp() <= time()) {
                             $this->publish($video);
                         }
@@ -186,8 +205,11 @@ class Releases
     private function publish(Video $video): void
     {
         self::save($video, [
-            'publication_state' => 'published', 'status' => Video::STATUS_PUBLISHED,
-            'published_at' => Billing::timestamp(), 'release_error' => null, 'version' => $video->version + 1,
+            'publication_state' => 'published',
+            'status' => Video::STATUS_PUBLISHED,
+            'published_at' => Billing::timestamp(),
+            'release_error' => null,
+            'version' => $video->version + 1,
         ]);
     }
 

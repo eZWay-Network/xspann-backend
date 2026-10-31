@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\{Audio, Video};
 use Spark\Foundation\Exceptions\ValidationException;
 use Spark\Http\{Request, Response};
+use function is_string;
 
 class ReleaseMedia
 {
@@ -74,8 +75,10 @@ class ReleaseMedia
             if (Video::whereIn('storage_path', $values)->exists()) {
                 throw ValidationException::withMessages(['storage_path' => ['This private upload is already attached to a release.']]);
             }
-        } elseif ($upload?->private_release || Video::whereIn('storage_path', StorageService::referenceValues($reference))
-            ->where('publication_intent', 'draft')->where('publication_state', '!=', 'published')->exists()) {
+        } elseif (
+            $upload?->private_release || Video::whereIn('storage_path', StorageService::referenceValues($reference))
+                ->where('publication_intent', 'draft')->where('publication_state', '!=', 'published')->exists()
+        ) {
             throw ValidationException::withMessages(['publication_intent' => ['Create a draft from this private upload, then publish through the release action.']]);
         }
     }
@@ -114,11 +117,15 @@ class ReleaseMedia
             'Content-Type' => match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
                 'jpg', 'jpeg' => 'image/jpeg', 'm4a' => 'audio/mp4', 'mp3' => 'audio/mpeg', 'webm' => 'video/webm', default => 'video/mp4',
             },
-            'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff', 'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+            'Accept-Ranges' => 'bytes',
         ];
         if ($range = $request->header('Range')) {
-            if (!is_string($range) || !preg_match('/^bytes=(\d*)-(\d*)$/D', $range, $parts)
-                || ($parts[1] === '' && $parts[2] === '') || $size === 0) {
+            if (
+                !is_string($range) || !preg_match('/^bytes=(\d*)-(\d*)$/D', $range, $parts)
+                || ($parts[1] === '' && $parts[2] === '') || $size === 0
+            ) {
                 return new Response('', 416, [...$headers, 'Content-Range' => "bytes */$size"]);
             }
             $start = $parts[1] === '' ? max(0, $size - (int) $parts[2]) : (int) $parts[1];

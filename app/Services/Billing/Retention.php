@@ -3,6 +3,7 @@
 namespace App\Services\Billing;
 
 use Spark\Facades\DB;
+use function count;
 
 class Retention
 {
@@ -13,6 +14,7 @@ class Retention
         do {
             $customers = Billing::table('customers')->whereNull('user_id')->where('deleted_at', '<', $cutoff)
                 ->where('id', '>', $lastId)->orderBy('id')->limit(100)->get();
+
             foreach ($customers as $customer) {
                 $lastId = $customer->id;
                 DB::transaction(function () use ($customer, $cutoff): void {
@@ -20,17 +22,22 @@ class Retention
                     if ($subscriptions->whereNotNull('active_key')->exists()) {
                         return;
                     }
+
                     $ids = DB::table('billing_subscriptions')->where('customer_id', $customer->id)->pluck('id');
                     $invoices = $ids ? DB::table('billing_invoices')->whereIn('subscription_id', $ids)->pluck('id') : [];
-                    if ($invoices && DB::table('billing_adjustments')->whereIn('invoice_id', $invoices)
-                        ->where(fn($query) => $query->where('allocation', 'review_required')->orWhere('updated_at', '>=', $cutoff))->exists()) {
+                    if (
+                        $invoices && DB::table('billing_adjustments')->whereIn('invoice_id', $invoices)
+                            ->where(fn($query) => $query->where('allocation', 'review_required')->orWhere('updated_at', '>=', $cutoff))->exists()
+                    ) {
                         return;
                     }
+
                     if ($invoices) {
                         DB::table('billing_adjustments')->whereIn('invoice_id', $invoices)->delete();
                         DB::table('billing_paid_periods')->whereIn('invoice_id', $invoices)->delete();
                         DB::table('billing_invoices')->whereIn('id', $invoices)->delete();
                     }
+
                     DB::table('billing_subscriptions')->where('customer_id', $customer->id)->delete();
                     DB::table('billing_checkouts')->where('customer_id', $customer->id)->delete();
                     DB::table('billing_customers')->where('id', $customer->id)->delete();

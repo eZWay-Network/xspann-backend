@@ -10,7 +10,7 @@ class UtcDateTime implements CastsAttributes
 {
     public function get($value): ?Carbon
     {
-        return $value === null ? null : Carbon::parse($value, 'UTC')->setTimezone('UTC');
+        return $value === null ? null : Carbon::parse($value, 'UTC')->utc();
     }
 
     public function set($value): ?string

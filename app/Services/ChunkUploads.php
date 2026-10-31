@@ -131,7 +131,7 @@ class ChunkUploads
 
                 File::deleteDirectory($directory);
 
-                return $diskName . ':' . $path;
+                return "$diskName:$path";
             } finally {
                 File::delete($assembledPath);
             }

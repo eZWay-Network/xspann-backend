@@ -4,6 +4,7 @@ namespace App\Services;
 
 use function chr;
 use function ord;
+use function strlen;
 
 /** RFC 6238: SHA-1, six digits, 30-second time steps. */
 class Totp

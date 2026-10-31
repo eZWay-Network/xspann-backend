@@ -30,8 +30,10 @@ class VideoRetry
                 ProcessVideo::dispatch((int) $id)->send();
             } catch (\Throwable $exception) {
                 Video::whereKey($id)->where('status', Video::STATUS_PROCESSING)->update([
-                    'status' => Video::STATUS_FAILED, 'processing_state' => 'failed',
-                    'release_error' => 'encoding_dispatch_failed', 'updated_at' => now(),
+                    'status' => Video::STATUS_FAILED,
+                    'processing_state' => 'failed',
+                    'release_error' => 'encoding_dispatch_failed',
+                    'updated_at' => now(),
                 ]);
                 throw $exception;
             }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\{Artist, ArtistPlaylist, User, Video};
 use Spark\Facades\DB;
+use function count;
 
 class ArtistPlaylists
 {

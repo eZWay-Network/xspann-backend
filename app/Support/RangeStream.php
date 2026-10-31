@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Psr\Http\Message\StreamInterface;
+use function is_resource;
 
 /** Read-only window over a local media file; the response emitter reads in chunks. */
 class RangeStream implements StreamInterface

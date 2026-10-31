@@ -6,6 +6,7 @@ use App\Models\{Artist, Follow, Video};
 use DateTimeImmutable;
 use DateTimeZone;
 use Spark\Facades\DB;
+use function count;
 
 class ArtistStatistics
 {
