@@ -6,14 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Jobs\SendDeletionConfirmation;
 use App\Services\{AuditTrail, PrivacyRequests};
 use Spark\Facades\Hash;
+use Spark\Foundation\Exceptions\ValidationException;
 use Spark\Http\{Request, Response};
 
 class PrivacyController extends Controller
 {
     public function deleteAccount(Request $request): Response
     {
-        $input = $request->validate(['proof' => ['required', 'string', 'max:128']]);
-        $record = PrivacyRequests::request($request->user(), 'deletion', $input->proof);
+        $record = PrivacyRequests::request($request->user(), 'deletion', $this->proof($request));
 
         return json(['data' => ['reference' => $record->reference, 'status' => $record->status]], 202);
     }
@@ -36,10 +36,23 @@ class PrivacyController extends Controller
 
     public function export(Request $request): Response
     {
-        $input = $request->validate(['proof' => ['required', 'string', 'max:128']]);
-        $record = PrivacyRequests::request($request->user(), 'export', $input->proof);
+        $record = PrivacyRequests::request($request->user(), 'export', $this->proof($request));
 
         return json(['data' => ['id' => $record->id, 'reference' => $record->reference, 'status' => $record->status]], 202);
+    }
+
+    private function proof(Request $request): string
+    {
+        $input = $request->all();
+        $header = $request->header('X-Reauth-Proof');
+        if ($header !== null) {
+            if (array_key_exists('proof', $input) && $input['proof'] !== $header) {
+                throw ValidationException::withMessages(['proof' => ['The header and body proofs must match when both are supplied.']]);
+            }
+            $input['proof'] = $header;
+        }
+
+        return $request->validate(['proof' => ['required', 'string', 'max:128']], $input)->proof;
     }
 
     private function owned(Request $request, int $export): object

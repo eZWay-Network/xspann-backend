@@ -11,6 +11,28 @@ use Tests\TestCase;
 
 class NotificationTest extends TestCase
 {
+    public function testNotificationReadHintsIdentifyTheRecipientAndDoNotRepeatOnRetries(): void
+    {
+        $this->makeUser('other');
+        $owner = $this->makeUser();
+        $notice = Notification::create(['user_id' => $owner->id, 'type' => 'test', 'data' => []]);
+        $this->assertFalse($notice->id === $owner->id);
+        $this->asUser($owner)->patchJson('/api/v1/notifications/' . $notice->id . '/read')->assertOk();
+        $event = query('realtime_outbox')->where('type', 'notifications.updated')->first();
+        $this->assertSame($owner->id, (int) $event->resource_id);
+        $this->assertSame($owner->id, (int) $event->user_id);
+        $this->patchJson('/api/v1/notifications/' . $notice->id . '/read')->assertOk();
+        $this->assertSame(1, query('realtime_outbox')->where('type', 'notifications.updated')->count());
+
+        Notification::create(['user_id' => $owner->id, 'type' => 'test', 'data' => []]);
+        $this->patchJson('/api/v1/notifications/read-all')->assertOk();
+        $this->deleteJson('/api/v1/notifications/clear-all')->assertOk();
+        $events = query('realtime_outbox')->where('type', 'notifications.updated')->orderBy('id')->get();
+        $this->assertCount(3, $events);
+        $this->assertSame([$owner->id], array_values(array_unique($events->pluck('resource_id')->all())));
+        $this->assertTrue($events[0]->version < $events[1]->version && $events[1]->version < $events[2]->version);
+    }
+
     public function testClearAllDeletesOnlyTheRecipientsReadNotifications(): void
     {
         $owner = $this->makeUser();

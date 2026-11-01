@@ -10,6 +10,65 @@ use Tests\TestCase;
 
 class PrivacyFoundationTest extends TestCase
 {
+    public function testPrivacyProofHeaderSupportsExportAndDeletionAndRemainsSingleUse(): void
+    {
+        $owner = $this->makeUser();
+        $this->asUser($owner);
+        $proof = $this->proof('export_data');
+        $headers = ['X-Reauth-Proof' => $proof];
+        $this->postJson('/api/v1/me/export-requests', [], $headers)->assertStatus(202);
+        $this->postJson('/api/v1/me/export-requests', [], $headers)->assertStatus(422);
+        $this->assertDatabaseCount('privacy_requests', 1);
+
+        $proof = $this->proof('delete_account');
+        $this->postJson('/api/v1/me/deletion-requests', ['proof' => $proof], ['X-Reauth-Proof' => $proof])->assertStatus(202);
+        $this->assertSame('deleting', $owner->refresh()->status);
+        $this->getJson('/api/v1/auth/me')->assertStatus(401);
+    }
+
+    public function testConflictingPrivacyProofsDoNotConsumeTheValidProof(): void
+    {
+        $this->asUser($this->makeUser());
+        $proof = $this->proof('export_data');
+        $headers = ['X-Reauth-Proof' => $proof];
+        foreach (['different-proof', null, ['unexpected']] as $body) {
+            $this->postJson('/api/v1/me/export-requests', ['proof' => $body], $headers)->assertStatus(422);
+        }
+        $this->assertDatabaseCount('privacy_requests', 0);
+        $this->postJson('/api/v1/me/export-requests', [], $headers)->assertStatus(202);
+    }
+
+    public function testMalformedOrMissingPrivacyProofHeadersAreRejected(): void
+    {
+        $this->asUser($this->makeUser());
+        $proof = $this->proof('export_data');
+        foreach (['', str_repeat('a', 129)] as $header) {
+            $this->postJson('/api/v1/me/export-requests', [], ['X-Reauth-Proof' => $header])->assertStatus(422);
+        }
+        $this->postJson('/api/v1/me/export-requests')->assertStatus(422);
+        $this->assertDatabaseCount('privacy_requests', 0);
+        $this->postJson('/api/v1/me/export-requests', [], ['X-Reauth-Proof' => $proof])->assertStatus(202);
+    }
+
+    public function testPrivacyProofHeaderCannotCrossSessionPurposeOwnerOrExpiry(): void
+    {
+        $owner = $this->makeUser();
+        $token = $this->token($owner);
+        $this->withToken($token);
+        $proof = $this->proof('export_data');
+        $headers = ['X-Reauth-Proof' => $proof];
+        $this->postJson('/api/v1/me/deletion-requests', [], $headers)->assertStatus(422);
+        $this->asUser($owner)->postJson('/api/v1/me/export-requests', [], $headers)->assertStatus(422);
+        $this->asUser($this->makeUser('other'))->postJson('/api/v1/me/export-requests', [], $headers)->assertStatus(422);
+        $this->assertDatabaseCount('privacy_requests', 0);
+        $this->withToken($token)->postJson('/api/v1/me/export-requests', [], $headers)->assertStatus(202);
+
+        $expired = $this->proof('delete_account');
+        query('account_action_tokens')->where('token_hash', hash('sha256', $expired))->update(['expires_at' => now()->subSeconds(1)->toDateTimeString()]);
+        $this->postJson('/api/v1/me/deletion-requests', [], ['X-Reauth-Proof' => $expired])->assertStatus(422);
+        $this->assertSame('active', $owner->refresh()->status);
+    }
+
     public function testDeletionFailureRetainsDurableStateAndCanResumeStorageCleanup(): void
     {
         $server = new \Tests\Support\HttpServer(dirname(__DIR__) . '/Fixtures/s3-router.php', $this->storagePath, ['XSPANN_S3_TEST_ROOT' => $this->storagePath]);

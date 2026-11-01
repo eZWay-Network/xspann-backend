@@ -154,6 +154,7 @@ class ReleaseApiTest extends TestCase
             ['2099-02-30T12:00:00Z', 'UTC'], ['2099-01-01T12:00:00', 'UTC'],
             ['2099-01-01T12:00:00Z', 'Asia/Dhaka'], ['2099-01-01T12:00:00+06:00', 'not/a-zone'],
             ['2000-01-01T12:00:00Z', 'UTC'], ['2099-03-08T02:30:00-05:00', 'America/New_York'],
+            ['9999-12-31T23:59:59-05:00', 'America/New_York'],
         ] as [$at, $timezone]) {
             $this->postJson($path . '/schedule', ['version' => 1, 'publish_at' => $at, 'timezone' => $timezone])->assertStatus(422);
         }

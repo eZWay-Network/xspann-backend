@@ -8,6 +8,36 @@ use Spark\Facades\Schema;
 
 trait ReleaseUpgrades
 {
+    public function testReleaseDateMigrationPreservesExistingSchedulesAndGuardsLossyRollback(): void
+    {
+        $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_120000_release_schedule_dates.php';
+        $migration->down();
+        $owner = $this->makeUser();
+        $scheduled = $this->makeVideo($owner, [
+            'status' => 'scheduled', 'processing_state' => 'ready', 'publication_state' => 'scheduled', 'publication_intent' => 'draft',
+            'publish_at' => '2030-06-01 06:00:00', 'publish_timezone' => 'Asia/Dhaka', 'version' => 3,
+        ]);
+        $draft = $this->makeVideo($owner, ['status' => 'draft', 'publication_state' => 'draft', 'publication_intent' => 'draft']);
+        $migration->up();
+        $migration->up();
+        $this->assertDatabaseHas('videos', [
+            'id' => $scheduled->id, 'publish_at' => '2030-06-01 06:00:00', 'publish_timezone' => 'Asia/Dhaka',
+            'publication_state' => 'scheduled', 'version' => 3,
+        ]);
+        $this->assertSame(null, query('videos')->where('id', $draft->id)->value('publish_at'));
+        query('videos')->where('id', $scheduled->id)->update(['publish_at' => '2099-01-01 06:00:00']);
+        if (db()->getDriver() === 'mysql') {
+            $this->assertThrows(\RuntimeException::class, fn() => $migration->down());
+            $indexes = db()->getPdo()->query("SHOW INDEX FROM videos WHERE Key_name = 'videos_due_releases'")->fetchAll(\PDO::FETCH_ASSOC);
+            $this->assertSame(['publication_state', 'publish_at', 'id'], array_column($indexes, 'Column_name'));
+        }
+        $this->assertSame('2099-01-01 06:00:00', query('videos')->where('id', $scheduled->id)->value('publish_at'));
+        query('videos')->where('id', $scheduled->id)->update(['publish_at' => '2030-06-01 06:00:00']);
+        $migration->down();
+        $this->assertSame('2030-06-01 06:00:00', query('videos')->where('id', $scheduled->id)->value('publish_at'));
+        $migration->up();
+    }
+
     protected function emptyReleaseDatabase(): void
     {
         $paths = glob(dirname(__DIR__, 2) . '/database/migrations/migration_*.php');

@@ -19,7 +19,7 @@ class NotificationReads
             DB::table('announcement_deliveries')->where('user_id', $userId)->whereNull('read_at')
                 ->whereIn('notification_id', (clone $query)->select('id'))->update(['read_at' => Billing::timestamp()]);
             if ($query->update(['read_at' => now()])) {
-                Realtime::record($userId, 'notifications.updated', $id ?? $userId, 0);
+                Realtime::record($userId, 'notifications.updated', $userId, 0);
             }
         });
     }

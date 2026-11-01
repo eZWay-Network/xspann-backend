@@ -12,7 +12,8 @@ class FoundationApiReference
             $result[$action] = compact('group', 'title', 'description', 'response', 'status', 'rules', 'example', 'limit', 'errors');
         };
         $requiredPolicies = array_map(fn($document) => $document['version'], array_filter(config('policies.documents'), fn($document) => $document['required']));
-        $proof = ['proof' => ['required', 'string', 'max:128']];
+        $proof = ['proof' => ['sometimes', 'required', 'string', 'max:128']];
+        $proofTransport = ' Supply the proof in X-Reauth-Proof or the backward-compatible proof JSON field. At least one is required; if both are supplied they must match.';
         $version = ['version' => ['required', 'integer', 'min:1']];
         $reason = ['reason' => ['required', 'string', 'min:3', 'max:2000']];
         $conflict = ['409' => 'Already reviewed, duplicate appeal, or stale version. Reload before retrying.'];
@@ -57,7 +58,7 @@ class FoundationApiReference
             'PrivacyController@deleteAccount',
             'Privacy',
             'Request account deletion',
-            'Consumes a delete_account proof. Immediately hides the account and revokes all access and staff sessions. A durable background request removes media and personal records with retries. Retained report/audit evidence follows the documented retention policy. Deletion is not reversible.',
+            'Consumes a delete_account proof. Immediately hides the account and revokes all access and staff sessions. A durable background request removes media and personal records with retries. Retained report/audit evidence follows the documented retention policy. Deletion is not reversible.' . $proofTransport,
             ['reference' => '<request-reference>', 'status' => 'pending'],
             '202',
             $proof,
@@ -87,7 +88,7 @@ class FoundationApiReference
             'PrivacyController@export',
             'Privacy',
             'Request your data export',
-            'Consumes an export_data proof. At most one export is pending per account; another valid proof returns that pending request. Export includes own profile, content metadata, activity and policy/report records, excluding credentials, staff secrets and other users private evidence. Media files are not bundled.',
+            'Consumes an export_data proof. At most one export is pending per account; another valid proof returns that pending request. Export includes own profile, content metadata, activity and policy/report records, excluding credentials, staff secrets and other users private evidence. Media files are not bundled.' . $proofTransport,
             ['id' => 1, 'reference' => '<request-reference>', 'status' => 'pending'],
             '202',
             $proof,

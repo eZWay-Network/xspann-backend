@@ -66,13 +66,14 @@ class Releases
                 $valid = (!$errors || (!$errors['warning_count'] && !$errors['error_count']))
                     && $date->getOffset() === $local->getOffset()
                     && $date->format('Y-m-d\TH:i:s') === $local->format('Y-m-d\TH:i:s')
+                    && (int) $date->setTimezone(new DateTimeZone('UTC'))->format('Y') <= 9999
                     && $date->getTimestamp() > time();
             } catch (\Throwable) {
                 $valid = false;
             }
         }
         if (!$valid) {
-            throw ValidationException::withMessages(['publish_at' => ['Supply a future ISO-8601 second with an offset valid in the selected IANA timezone.']]);
+            throw ValidationException::withMessages(['publish_at' => ['Supply a future ISO-8601 second with an offset valid in the selected IANA timezone and a four-digit UTC year.']]);
         }
 
         return Billing::timestamp($date->getTimestamp());

@@ -242,6 +242,13 @@ class ApiContractTest extends TestCase
         $this->assertSame($expected, $operations);
         $this->assertSame(172, count($entries));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
+        foreach (['privacycontroller-export', 'privacycontroller-deleteaccount'] as $operation) {
+            $parameters = array_column($entries[$operation]['parameters'], null, 'name');
+            $this->assertSame('header', $parameters['X-Reauth-Proof']['in']);
+            $this->assertFalse($parameters['X-Reauth-Proof']['required']);
+            $this->assertFalse($parameters['proof']['required']);
+            $this->assertTrue(str_contains($entries[$operation]['description'], 'At least one is required'));
+        }
         $this->assertSame('binary', $entries['releasecontroller-preview']['responseType']);
         foreach ([
             ['artistcontroller-index', 'genre_id', false],

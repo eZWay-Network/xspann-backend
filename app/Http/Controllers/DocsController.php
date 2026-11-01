@@ -39,6 +39,8 @@ class DocsController extends Controller
             }
             $entry['parameters'] = [];
             $entry['headers'] = match ($key) {
+                'PrivacyController@export' => ['X-Reauth-Proof' => '<export-proof>'],
+                'PrivacyController@deleteAccount' => ['X-Reauth-Proof' => '<delete-account-proof>'],
                 'BillingController@checkout' => ['Idempotency-Key' => '<unique-purchase-key>'],
                 'PromotionController@submit', 'PromotionAdminController@remedy' => ['Idempotency-Key' => '<unique-promotion-operation-key>'],
                 'AnnouncementController@send' => ['Idempotency-Key' => '<unique-broadcast-key>'],
@@ -46,7 +48,7 @@ class DocsController extends Controller
                 default => [],
             };
             foreach ($entry['headers'] as $name => $example) {
-                $entry['parameters'][] = ['name' => $name, 'in' => 'header', 'type' => 'string', 'required' => true, 'description' => $example];
+                $entry['parameters'][] = ['name' => $name, 'in' => 'header', 'type' => 'string', 'required' => $name !== 'X-Reauth-Proof', 'description' => $name === 'X-Reauth-Proof' ? 'One-use reauthentication proof, at most 128 characters. Required unless supplied in the proof JSON field; both must match when present.' : $example];
             }
             if ($key === 'MediaController@show') {
                 foreach (['expires' => 'Unix expiry from the returned URL.', 'signature' => 'HMAC from the returned URL.'] as $name => $description) {

@@ -4,7 +4,7 @@ namespace Tests\Support;
 
 use App\Jobs\{DeliverAnnouncements, ProcessPrivacyRequest, PromotionMaintenance, PublishReleases};
 use App\Models\{User, Video};
-use App\Services\{AccountSecurity, Totp};
+use App\Services\{AccountSecurity, Releases, Totp};
 use App\Services\Billing\{Billing, PaymentProvider, Webhooks};
 use Spark\Console\Process;
 use Spark\Queue\Queue;
@@ -18,6 +18,29 @@ trait ReleaseJourneys
     private ?HttpServer $journeyServer = null;
     private string $journeyConfiguration;
     private string $stripeState;
+
+    public function testFarFutureReleaseScheduleRoundTripsOnTheSelectedDatabase(): void
+    {
+        $this->billingSetup();
+        $owner = $this->makeUser();
+        $this->makeArtist($owner);
+        $this->asUser($owner);
+        $attempt = $this->checkout();
+        $this->event('invoice.paid', $this->stripe->complete($attempt->session_id));
+        $path = "videos/$owner->id/future.mp4";
+        storage('local')->put($path, 'private future release');
+        $video = $this->makeVideo($owner, [
+            'storage_path' => 'local:' . $path, 'thumbnail_url' => null,
+            'status' => 'draft', 'processing_state' => 'ready', 'publication_state' => 'draft', 'publication_intent' => 'draft',
+        ]);
+        $this->postJson('/api/v1/me/artist/releases/' . $video->id . '/schedule', [
+            'version' => 1, 'publish_at' => '2099-01-01T12:00:00+06:00', 'timezone' => 'Asia/Dhaka',
+        ])->assertOk()->assertJsonPath('data.publish_at', '2099-01-01T06:00:00.000000Z');
+        $this->assertSame('2099-01-01 06:00:00', query('videos')->where('id', $video->id)->value('publish_at'));
+        app(Releases::class)->runDue();
+        $this->assertSame('scheduled', $video->refresh()->publication_state);
+        $this->flushHeaders()->getJson('/api/v1/videos/' . $video->id)->assertStatus(404);
+    }
 
     private function startJourney(): void
     {
