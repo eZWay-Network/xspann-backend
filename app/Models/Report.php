@@ -17,6 +17,7 @@ class Report extends Model
         'playlist_id',
         'message_id',
         'announcement_id',
+        'boost_id',
         'target_type',
         'target_id',
         'reason',

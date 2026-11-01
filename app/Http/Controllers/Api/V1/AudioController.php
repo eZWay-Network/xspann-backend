@@ -45,8 +45,19 @@ class AudioController extends Controller
                     ]);
                 }
             }
+            $changes = [];
+            if ($input->has('title') && $input->title !== $audio->title) {
+                $changes['title'] = $input->title;
+            }
+            if ($input->has('reuse_allowed') && $input->boolean('reuse_allowed') !== $audio->reuse_allowed) {
+                $changes['reuse_allowed'] = $input->boolean('reuse_allowed');
+            }
+            if ($changes === []) {
+                return;
+            }
+
             \App\Services\Promotions\Invalidations::record('audio', $audio->id);
-            if (!$audio->update($input)) {
+            if (!$audio->update($changes)) {
                 throw new \RuntimeException('Audio update failed.');
             }
         });

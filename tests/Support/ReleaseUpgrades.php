@@ -8,6 +8,45 @@ use Spark\Facades\Schema;
 
 trait ReleaseUpgrades
 {
+    public function testBoostReportForwardMigrationPreservesExistingReportsAndEvidence(): void
+    {
+        $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_130000_boost_reports.php';
+        $migration->down();
+        $owner = $this->makeUser();
+        $this->makeArtist($owner);
+        $video = $this->makeVideo($owner);
+        $fan = $this->makeUser('reporter');
+        $legacy = $this->asUser($fan)->postJson('/api/v1/reports', ['video_id' => $video->id, 'reason' => 'Existing report'])->assertCreated()->json('data.id');
+        $before = query('reports')->where('id', $legacy)->first();
+        $migration->up();
+        $migration->up();
+        $after = query('reports')->where('id', $legacy)->first();
+        $this->assertSame($before->evidence, $after->evidence);
+        $this->assertSame($video->id, (int) $after->video_id);
+        $this->assertSame(null, $after->boost_id);
+
+        $boost = \App\Services\Promotions\Boosts::create($owner, $this->boostInput($video->id));
+        $report = \App\Models\Report::create([
+            'user_id' => $fan->id,
+            'subject_user_id' => $owner->id,
+            'boost_id' => $boost->id,
+            'target_type' => 'boost',
+            'target_id' => $boost->id,
+            'reason' => 'Retained campaign evidence',
+            'evidence' => json_encode(['type' => 'boost', 'id' => $boost->id]),
+        ]);
+        $this->assertThrows(\RuntimeException::class, fn() => $migration->down());
+        query('promotion_boosts')->where('id', $boost->id)->delete();
+        $this->assertSame(null, $report->refresh()->boost_id);
+        $this->assertSame($boost->id, (int) $report->target_id);
+        $this->assertSame(['type' => 'boost', 'id' => $boost->id], json_decode($report->evidence, true));
+        $this->assertThrows(\PDOException::class, fn() => query('reports')->where('id', $legacy)->update(['boost_id' => 999999]));
+        $report->remove();
+        $migration->down();
+        $migration->up();
+        $this->assertSame($before->evidence, query('reports')->where('id', $legacy)->value('evidence'));
+    }
+
     public function testReleaseDateMigrationPreservesExistingSchedulesAndGuardsLossyRollback(): void
     {
         $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_120000_release_schedule_dates.php';

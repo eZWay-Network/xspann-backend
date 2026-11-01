@@ -13,6 +13,33 @@ class PromotionAuditTest extends TestCase
 {
     use PromotionFixtures;
 
+    public function testUnchangedAudioPatchDoesNotInterruptAcceptedAdvertising(): void
+    {
+        [$owner] = $this->paidArtist();
+        $this->promotionSetup();
+        $staff = $this->promotionStaff();
+        $audio = Audio::create([
+            'user_id' => $owner->id,
+            'title' => 'Approved soundtrack',
+            'storage_path' => "sounds/$owner->id/original.m4a",
+            'origin' => 'upload',
+            'status' => 'ready',
+            'reuse_allowed' => true,
+        ]);
+        $video = $this->makeVideo($owner, ['audio_id' => $audio->id]);
+        $boost = $this->activateCreative($owner, $staff, $video->id);
+        $this->asUser($owner);
+        $this->assertCount(1, Delivery::placements(null));
+
+        foreach ([[], ['title' => $audio->title], ['reuse_allowed' => true]] as $input) {
+            $this->patchJson('/api/v1/audios/' . $audio->id, $input)->assertOk();
+            $this->assertCount(1, Delivery::placements(null));
+        }
+        $this->assertSame(null, Invalidations::cutoff($boost));
+        $this->patchJson('/api/v1/audios/' . $audio->id, ['title' => 'Changed soundtrack attribution'])->assertOk();
+        $this->assertSame([], Delivery::placements(null));
+    }
+
     public function testRemovingOriginalAudioCannotReviveItsReviewedCampaign(): void
     {
         [$owner] = $this->paidArtist();

@@ -9,7 +9,7 @@ use function in_array;
 
 class Moderation
 {
-    public const TARGETS = ['reported_user_id' => 'user', 'video_id' => 'video', 'audio_id' => 'audio', 'comment_id' => 'comment', 'playlist_id' => 'playlist', 'message_id' => 'message', 'announcement_id' => 'announcement'];
+    public const TARGETS = ['reported_user_id' => 'user', 'video_id' => 'video', 'audio_id' => 'audio', 'comment_id' => 'comment', 'playlist_id' => 'playlist', 'message_id' => 'message', 'announcement_id' => 'announcement', 'boost_id' => 'boost'];
 
     public static function report(User $reporter, array $input): Report
     {
@@ -35,6 +35,7 @@ class Moderation
             'playlist' => ArtistPlaylist::visibleTo($reporter)->findOrFail($id),
             'message' => Conversations::reportedMessage($id, $reporter->id),
             'announcement' => Announcements::delivered($id, $reporter->id, true),
+            'boost' => \App\Services\Promotions\Delivery::reportedBoost($id, $reporter),
         };
 
         if ($type === 'comment') {
@@ -57,9 +58,18 @@ class Moderation
             'playlist' => ['artist_id', 'title', 'description', 'genre_id', 'category', 'visibility'],
             'message' => ['conversation_id', 'body', 'created_at'],
             'announcement' => ['artist_id', 'title', 'body', 'video_id'],
+            'boost' => ['artist_id', 'video_id', 'surface', 'starts_at', 'ends_at', 'rights_version', 'rights_confirmed_at'],
         } as $key) {
             $snapshot[$key] = $type === 'announcement' && in_array($key, ['title', 'body'], true)
                 ? \Spark\Facades\Hash::decrypt($target->$key) : $target->$key;
+        }
+
+        if ($type === 'boost') {
+            $artist = Artist::findOrFail($target->artist_id);
+            $video = Video::findOrFail($target->video_id);
+            $snapshot['disclosure'] = 'Sponsored';
+            $snapshot['sponsor'] = ['stage_name' => $artist->stage_name, 'slug' => $artist->slug];
+            $snapshot['creative'] = ['caption' => $video->caption, 'storage_path' => $video->storage_path];
         }
 
         return Report::create([
@@ -187,6 +197,13 @@ class Moderation
     private static function refreshTarget(string $type, int $id): void
     {
         \App\Services\Promotions\Invalidations::record($type, $id);
+        if ($type === 'boost') {
+            // The durable cutoff stops serving/events immediately. Promotion maintenance
+            // releases inventory and settles unused credit under its own mutex.
+            // An overturned decision cannot silently restart already settled advertising.
+            return;
+        }
+
         $restricted = DB::table('moderation_restrictions')->where('target_type', $type)->where('target_id', $id)->exists();
         if ($type === 'user') {
             User::whereKey($id)->whereIn('status', ['active', 'suspended'])->update(['status' => $restricted ? 'suspended' : 'active']);

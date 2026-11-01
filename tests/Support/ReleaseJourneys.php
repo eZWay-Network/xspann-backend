@@ -319,7 +319,13 @@ trait ReleaseJourneys
             query('promotion_boosts')->where('id', $boost)->update(['starts_at' => Billing::timestamp(time() - 1), 'ends_at' => Billing::timestamp(time() + 86399)]);
             (new PromotionMaintenance())->handle();
             $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertOk()->assertJsonCount(1, 'data');
+            $report = $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Review sponsored claim.'])->assertCreated()->json('data.id');
+            $this->wire('GET', "/admin/reports/$report", $fanToken)->assertForbidden();
+            $this->wire('GET', "/admin/reports/$report", $staffToken)->assertOk()->assertJsonPath('data.evidence.video_id', $video);
+            $this->wire('POST', "/admin/reports/$report/decision", $staffToken, ['action' => 'dismiss', 'version' => 1, 'reason' => 'Verified the advertising claim.'])->assertOk();
+            $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertJsonCount(1, 'data');
             $this->wire('POST', "/users/$owner->id/block", $fanToken)->assertCreated();
+            $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Hidden sponsored claim.'])->assertNotFound();
             $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertJsonCount(0, 'data');
             $this->wire('GET', "/artists/$artist", $fanToken)->assertNotFound();
             $this->wire('GET', "/me/announcements/$announcement", $fanToken)->assertNotFound();

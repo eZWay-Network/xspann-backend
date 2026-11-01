@@ -229,7 +229,7 @@ class ApiContractTest extends TestCase
                 if ($entry['status'] === '204' || ($entry['responseType'] ?? null) === 'binary') {
                     $this->assertSame(null, $entry['response']);
                 } else {
-                    $this->assertTrue(array_key_exists(match ($entry['id']) { 'privacycontroller-download' => 'account', 'billingcontroller-webhook' => 'received', 'realtimecontroller-authorize' => 'auth', default => 'data' }, $entry['response']));
+                    $this->assertTrue(array_key_exists(match ($entry['id']) { 'privacycontroller-download' => 'account', 'billingcontroller-webhook' => 'received', 'realtimecontroller-authorize' => 'auth', default => 'data'}, $entry['response']));
                 }
                 foreach ($entry['parameters'] as $parameter) {
                     $this->assertTrue(in_array($parameter['in'], ['path', 'query', 'body', 'header'], true));
@@ -242,6 +242,13 @@ class ApiContractTest extends TestCase
         $this->assertSame($expected, $operations);
         $this->assertSame(172, count($entries));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
+        $reportParameters = array_column($entries['reportcontroller-store']['parameters'], null, 'name');
+        $queueParameters = array_column($entries['moderationcontroller-reports']['parameters'], null, 'name');
+        foreach (\App\Services\Moderation::TARGETS as $field => $type) {
+            $this->assertSame('body', $reportParameters[$field]['in']);
+            $this->assertFalse($reportParameters[$field]['required']);
+            $this->assertTrue(str_contains($queueParameters['type']['description'], $type));
+        }
         foreach (['privacycontroller-export', 'privacycontroller-deleteaccount'] as $operation) {
             $parameters = array_column($entries[$operation]['parameters'], null, 'name');
             $this->assertSame('header', $parameters['X-Reauth-Proof']['in']);
@@ -290,7 +297,7 @@ class ApiContractTest extends TestCase
     public function testValidationAndMissingRecordsAreJsonWithCors(): void
     {
         $headers = ['Origin' => 'http://localhost:3000'];
-        $this->postJson('/api/v1/auth/register', [...$this->enrollment(), ], $headers)->assertStatus(422)->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
+        $this->postJson('/api/v1/auth/register', [...$this->enrollment(),], $headers)->assertStatus(422)->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
         foreach (['videos/98765', 'audios/98765', 'users/missing-user', 'comments/98765/replies'] as $path) {
             $this->getJson('/api/v1/' . $path, $headers)
                 ->assertStatus(404)

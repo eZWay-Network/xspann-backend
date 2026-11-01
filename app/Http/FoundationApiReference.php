@@ -122,7 +122,7 @@ class FoundationApiReference
         );
         $add('AudioController@destroy', 'Audio library', 'Remove your sound', 'Owner only. Stops new selection immediately and queues idempotent file cleanup. Existing rendered videos keep embedded audio; their audio_id is cleared when cleanup removes the audio row. Rights restrictions use moderation and propagate separately.', ['message' => 'Audio deleted'], '202');
         $report = ['id' => 1, 'target_type' => 'video', 'target_id' => 2, 'reason' => 'Copyright concern', 'status' => 'open', 'version' => 1, 'created_at' => '2026-10-29T12:00:00Z'];
-        $add('ModerationController@reports', 'Moderation', 'Review report queue', 'Staff role plus recent MFA required. Optional status=open|resolved and type=user|video|audio|comment|playlist filters. Bounded pagination, oldest first. Queue access is audited. No evidence is included in the listing.', $report, '200', [], [], 20);
+        $add('ModerationController@reports', 'Moderation', 'Review report queue', 'Staff role plus recent MFA required. Optional status=open|resolved and type=' . implode('|', array_values(\App\Services\Moderation::TARGETS)) . ' filters. Bounded pagination, oldest first. Queue access is audited. No evidence is included in the listing.', $report, '200', [], [], 20);
         $add(
             'ModerationController@report',
             'Moderation',
@@ -134,7 +134,7 @@ class FoundationApiReference
             'ModerationController@decide',
             'Moderation',
             'Resolve a report',
-            'Staff with recent MFA; cannot review reports they filed or content they own. action=dismiss closes without restriction; restrict hides the target and affected audio/video/comment derivatives. action=restore releases this report’s active restriction after later review, unless an appeal is open (use its independent reviewer). Requires the displayed version. Records an immutable reason and decision, notifies the subject and resolves the report atomically.',
+            'Staff with recent MFA; cannot review reports they filed or content they own. action=dismiss closes without restriction; restrict hides the target and affected audio/video/comment derivatives. A boost restriction immediately stops serving/events; promotion maintenance settles unused credit and releases inventory. The underlying organic video is unaffected unless separately restricted. action=restore releases this report’s active restriction after later review, unless an appeal is open (use its independent reviewer). Restoring a boost does not restart settled advertising; create and submit a new campaign. Requires the displayed version. Records an immutable reason and decision, notifies the subject and resolves the report atomically.',
             ['decision_id' => 1, 'status' => 'resolved', 'version' => 2],
             '200',
             ['action' => ['required', ['in' => ['dismiss', 'restrict', 'restore']]]] + $reason + $version,

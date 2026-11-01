@@ -13,7 +13,7 @@ class ReportController extends Controller
             'playlist_id' => ['nullable', 'integer', 'min:1'],
             'message_id' => ['nullable', 'integer', 'min:1'],
             'announcement_id' => ['nullable', 'integer', 'min:1'],
-            'boost_id' => ['prohibited'],
+            'boost_id' => ['nullable', 'integer', 'min:1'],
             'audio_id' => ['nullable', 'integer', 'min:1'],
             'comment_id' => ['nullable', 'integer', 'min:1'],
             'video_id' => ['nullable', 'integer', 'min:1'],

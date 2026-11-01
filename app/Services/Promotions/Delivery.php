@@ -10,6 +10,23 @@ use Spark\Facades\{DB, Hash};
 
 class Delivery
 {
+    private static function eligible(object $boost, ?User $viewer): bool
+    {
+        return $boost->status === 'active'
+            && $boost->starts_at <= Billing::timestamp() && $boost->ends_at > Billing::timestamp()
+            && Promotion::reserved($boost) && !Invalidations::cutoff($boost)
+            && Promotion::creative($boost->artist_id, $boost->video_id, $viewer) && Credits::funded($boost)
+            && $boost->rights_version === config('promotions.rights_version');
+    }
+
+    public static function reportedBoost(int $id, User $viewer): object
+    {
+        $boost = Boosts::find($id);
+        abort_unless(Availability::healthy() && self::eligible($boost, $viewer), 404, 'Placement not found.');
+
+        return $boost;
+    }
+
     public static function placements(?User $viewer): array
     {
         if (!Availability::healthy()) {
@@ -22,10 +39,7 @@ class Delivery
             ->orderBy('id')->limit(Promotion::capacity())->get();
         $eligible = [];
         foreach ($rows as $row) {
-            if (
-                !Invalidations::cutoff($row) && Promotion::creative($row->artist_id, $row->video_id, $viewer) && Credits::funded($row)
-                && $row->rights_version === config('promotions.rights_version')
-            ) {
+            if (self::eligible($row, $viewer)) {
                 $eligible[] = $row;
             }
         }
@@ -91,10 +105,8 @@ class Delivery
             }
             abort_if($token['expires'] <= time(), 410, 'Promotion token expired.');
             $boost = Boosts::find($token['boost_id']);
-            abort_unless($boost->status === 'active' && (int) $boost->version === $token['version']
-                && $boost->ends_at > Billing::timestamp() && Promotion::creative($boost->artist_id, $boost->video_id, $viewer)
-                && !Invalidations::cutoff($boost) && Credits::funded($boost) && Promotion::reserved($boost)
-                && $boost->rights_version === config('promotions.rights_version') && Availability::healthy(), 410, 'Placement is no longer available.');
+            abort_unless((int) $boost->version === $token['version'] && self::eligible($boost, $viewer)
+                && Availability::healthy(), 410, 'Placement is no longer available.');
             if (DB::table('promotion_events')->where('token_hash', $digest)->where('kind', $input['type'])->exists()) {
                 return ['accepted' => true, 'duplicate' => true, 'billable' => false];
             }
