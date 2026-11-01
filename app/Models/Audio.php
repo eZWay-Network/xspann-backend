@@ -36,16 +36,21 @@ class Audio extends Model
         }
 
         return DB::transaction(function (): bool {
+            \App\Services\Promotions\Invalidations::record('audio', $this->id);
             $this->detachOriginal();
             // Preserve the failed selection before ON DELETE SET NULL erases it.
             // Already published clips retain their embedded soundtrack.
             Video::where('audio_id', $this->id)
                 ->whereIn('status', [Video::STATUS_PROCESSING, Video::STATUS_FAILED, 'draft', 'scheduled'])
                 ->update([
-                    'status' => Video::STATUS_SOURCE_UNAVAILABLE, 'processing_state' => 'failed',
-                    'publication_state' => 'draft', 'release_error' => 'source_unavailable',
-                    'publish_at' => null, 'publish_timezone' => null,
-                    'version' => DB::raw('version + 1'), 'updated_at' => now(),
+                    'status' => Video::STATUS_SOURCE_UNAVAILABLE,
+                    'processing_state' => 'failed',
+                    'publication_state' => 'draft',
+                    'release_error' => 'source_unavailable',
+                    'publish_at' => null,
+                    'publish_timezone' => null,
+                    'version' => DB::raw('version + 1'),
+                    'updated_at' => now(),
                 ]);
 
             return parent::remove();

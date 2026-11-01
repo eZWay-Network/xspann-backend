@@ -15,12 +15,17 @@ class Delivery
         if (!Availability::healthy()) {
             return [];
         }
-        $rows = Promotion::table('boosts')->where('status', 'active')->where('starts_at', '<=', Billing::timestamp())
-            ->where('ends_at', '>', Billing::timestamp())->orderBy('id')->limit((int) config('promotions.capacity'))->get();
+        $rows = Promotion::table('boosts')->where('status', 'active')->where('surface', config('promotions.surface'))
+            ->where('starts_at', '<=', Billing::timestamp())->where('ends_at', '>', Billing::timestamp())
+            ->whereIn('id', Promotion::table('slots')->select('boost_id')->whereNull('released_at')
+                ->where('surface', config('promotions.surface'))->where('slot', '>=', 1)->where('slot', '<=', Promotion::capacity()))
+            ->orderBy('id')->limit(Promotion::capacity())->get();
         $eligible = [];
         foreach ($rows as $row) {
-            if (!Invalidations::cutoff($row) && Promotion::creative($row->artist_id, $row->video_id, $viewer) && Credits::funded($row)
-                && $row->rights_version === config('promotions.rights_version')) {
+            if (
+                !Invalidations::cutoff($row) && Promotion::creative($row->artist_id, $row->video_id, $viewer) && Credits::funded($row)
+                && $row->rights_version === config('promotions.rights_version')
+            ) {
                 $eligible[] = $row;
             }
         }
@@ -38,12 +43,19 @@ class Delivery
                 continue;
             }
             $result[] = [
-                'boost_id' => (int) $row->id, 'surface' => $row->surface, 'disclosure' => 'Sponsored',
+                'boost_id' => (int) $row->id,
+                'surface' => $row->surface,
+                'disclosure' => 'Sponsored',
                 'sponsor' => ['artist_id' => $artist->id, 'user_id' => $artist->user_id, 'name' => $artist->stage_name, 'slug' => $artist->slug],
-                'video' => VideoResource::make($video)->resolve(), 'expires_at' => Billing::date($row->ends_at),
+                'video' => VideoResource::make($video)->resolve(),
+                'expires_at' => Billing::date($row->ends_at),
                 'event_token' => Hash::encrypt(json_encode([
-                    'purpose' => 'promotion_event', 'environment' => $row->environment, 'boost_id' => $row->id,
-                    'version' => $row->version, 'viewer' => $viewer?->id, 'nonce' => bin2hex(random_bytes(16)),
+                    'purpose' => 'promotion_event',
+                    'environment' => $row->environment,
+                    'boost_id' => $row->id,
+                    'version' => $row->version,
+                    'viewer' => $viewer?->id,
+                    'nonce' => bin2hex(random_bytes(16)),
                     'expires' => min(time() + 300, Promotion::seconds($row->ends_at)),
                 ], JSON_THROW_ON_ERROR)),
             ];
@@ -81,12 +93,18 @@ class Delivery
             $boost = Boosts::find($token['boost_id']);
             abort_unless($boost->status === 'active' && (int) $boost->version === $token['version']
                 && $boost->ends_at > Billing::timestamp() && Promotion::creative($boost->artist_id, $boost->video_id, $viewer)
-                && !Invalidations::cutoff($boost) && Credits::funded($boost) && Availability::healthy(), 410, 'Placement is no longer available.');
+                && !Invalidations::cutoff($boost) && Credits::funded($boost) && Promotion::reserved($boost)
+                && $boost->rights_version === config('promotions.rights_version') && Availability::healthy(), 410, 'Placement is no longer available.');
             if (DB::table('promotion_events')->where('token_hash', $digest)->where('kind', $input['type'])->exists()) {
                 return ['accepted' => true, 'duplicate' => true, 'billable' => false];
             }
-            DB::table('promotion_events')->insert(['boost_id' => $boost->id, 'event_id' => $id,
-                'token_hash' => $digest, 'kind' => $input['type'], 'created_at' => Billing::timestamp()]);
+            DB::table('promotion_events')->insert([
+                'boost_id' => $boost->id,
+                'event_id' => $id,
+                'token_hash' => $digest,
+                'kind' => $input['type'],
+                'created_at' => Billing::timestamp()
+            ]);
 
             return ['accepted' => true, 'duplicate' => false, 'billable' => false];
         });

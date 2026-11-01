@@ -23,16 +23,21 @@ class Availability
         $query = fn() => Promotion::table('availability')->where('surface', config('promotions.surface'))
             ->where('starts_at', '<=', $now)->where('ends_at', '>', $now);
 
-        return self::configured() && $query()->where('available', true)->exists() && !$query()->where('available', false)->exists();
+        return self::configured() && Promotion::capacity() > 0
+            && $query()->where('available', true)->exists() && !$query()->where('available', false)->exists();
     }
 
     public static function offer(): array
     {
         return [
-            'id' => config('promotions.offer_id'), 'surface' => config('promotions.surface'),
-            'enabled' => self::healthy(), 'configured' => self::configured(),
-            'price_cents' => (int) config('promotions.price_cents'), 'currency' => 'usd',
-            'duration_seconds' => (int) config('promotions.duration_seconds'), 'capacity' => (int) config('promotions.capacity'),
+            'id' => config('promotions.offer_id'),
+            'surface' => config('promotions.surface'),
+            'enabled' => self::healthy(),
+            'configured' => self::configured(),
+            'price_cents' => (int) config('promotions.price_cents'),
+            'currency' => 'usd',
+            'duration_seconds' => (int) config('promotions.duration_seconds'),
+            'capacity' => Promotion::capacity(),
             'rights_version' => config('promotions.rights_version'),
             'disclosure' => 'Sponsored',
             'terms' => 'A 24-hour rotation slot on the web Promoted videos surface. No guaranteed views, followers or sales. No top-ups, transfers, withdrawal or credit expiry. Only independently recorded eligible availability counts. Unused time returns ceil(price_cents × undelivered_seconds / duration_seconds) credit cents; an extension requires explicit owner consent.',
@@ -62,10 +67,17 @@ class Availability
                 abort_unless($start <= $now && $end > $start && $end <= Billing::timestamp(time() + 120), 422, 'Incident windows must overlap the past or present.');
             }
             $id = DB::table('promotion_availability')->insert([
-                'environment' => config('billing.environment'), 'surface' => config('promotions.surface'),
-                'available' => $input['available'], 'starts_at' => $start, 'ends_at' => $end,
-                'reference' => $input['reference'], 'note' => $input['note'], 'actor_id' => $actor,
-                'actor_type' => $actor ? 'staff' : 'console', 'request_hash' => $hash, 'created_at' => $now,
+                'environment' => config('billing.environment'),
+                'surface' => config('promotions.surface'),
+                'available' => $input['available'],
+                'starts_at' => $start,
+                'ends_at' => $end,
+                'reference' => $input['reference'],
+                'note' => $input['note'],
+                'actor_id' => $actor,
+                'actor_type' => $actor ? 'staff' : 'console',
+                'request_hash' => $hash,
+                'created_at' => $now,
             ]);
             AuditTrail::record('promotion.surface.observed', ['observation_id' => $id, 'available' => $input['available']], $actor, $actor ? 'staff' : 'console');
 
@@ -73,10 +85,10 @@ class Availability
         });
     }
 
-    public static function windows(string $surface, string $start, string $end, bool $available): array
+    public static function windows(string $surface, string $start, string $end, bool $available, ?string $environment = null): array
     {
         $windows = [];
-        foreach (Promotion::table('availability')->where('surface', $surface)->where('available', $available)
+        foreach (DB::table('promotion_availability')->where('environment', $environment ?? config('billing.environment'))->where('surface', $surface)->where('available', $available)
             ->where('starts_at', '<', $end)->where('ends_at', '>', $start)->get() as $row) {
             $windows[] = [max(Promotion::seconds($start), Promotion::seconds($row->starts_at)), min(Promotion::seconds($end), Promotion::seconds($row->ends_at))];
         }
@@ -133,7 +145,7 @@ class Availability
         if ($start >= $end) {
             return;
         }
-        foreach (self::subtract(self::windows($boost->surface, $start, $end, true), self::windows($boost->surface, $start, $end, false)) as [$a, $b]) {
+        foreach (self::subtract(self::windows($boost->surface, $start, $end, true, $boost->environment), self::windows($boost->surface, $start, $end, false, $boost->environment)) as [$a, $b]) {
             DB::table('promotion_delivery')->insert(['boost_id' => $boost->id, 'starts_at' => Billing::timestamp($a), 'ends_at' => Billing::timestamp($b)]);
         }
     }
@@ -152,7 +164,7 @@ class Availability
             return 0;
         }
         // Late incident evidence can lower delivery and trigger an additional capped reversal.
-        $outages = self::windows($boost->surface, Billing::timestamp($windows[0][0]), Billing::timestamp(end($windows)[1]), false);
+        $outages = self::windows($boost->surface, Billing::timestamp($windows[0][0]), Billing::timestamp(end($windows)[1]), false, $boost->environment);
         $seconds = 0;
         foreach (self::subtract($windows, $outages) as [$a, $b]) {
             $seconds += $b - $a;

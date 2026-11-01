@@ -23,9 +23,9 @@ The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service
 
 ## Step 5 promotions and placements
 
-Step 5 adds invoice-linked Pro boost credit, atomic five-slot booking, staff review, Sponsored placement delivery, independent availability/incident accounting, unused-time credit remedies, and separate complimentary monthly feature/network-post obligations. The generated reference now covers **172 versioned operations**. See [Step 5 review](docs/STEP_5_REVIEW.md) and [manual HTTP collection](docs/STEP_5_REVIEW.http) for contracts, fixtures and operating details.
+Step 5 adds invoice-linked Pro boost credit, atomic five-slot booking, staff review, Sponsored placement delivery, independent availability/incident accounting, unused-time credit remedies, and separate complimentary monthly feature/network-post obligations. The generated reference now covers **172 versioned operations**. See [Step 5 review](docs/STEP_5_REVIEW.md), [follow-up audit](docs/STEP_5_AUDIT.md) and [manual HTTP collection](docs/STEP_5_REVIEW.http) for contracts, fixtures and operating details.
 
-Apply the new forward migration with `php spark migrate` and supervise `php spark queue:work --queue=promotions --sleep=1`. `promotions:maintain` provides recovery. Verified by the full suite: **367 tests / 5,792 assertions**, all passing. The working database was not migrated/reset. Bookings remain disabled until the real web surface and its independent availability monitor work; the monthly pilot has no capacity until configured. Live sales remain disabled pending web integration and the separate sales-readiness review. Existing native and organic feeds are unchanged.
+Apply the new forward migration with `php spark migrate` and supervise `php spark queue:work --queue=promotions --sleep=1`. `promotions:maintain` provides recovery. Verified by the full suite: **381 tests / 5,883 assertions**, all passing. The working database was not migrated/reset. Bookings remain disabled until the real web surface and its independent availability monitor work; the monthly pilot has no capacity until configured. Live sales remain disabled pending web integration and the separate sales-readiness review. Existing native and organic feeds are unchanged.
 
 ## Step 4 messaging and artist updates
 

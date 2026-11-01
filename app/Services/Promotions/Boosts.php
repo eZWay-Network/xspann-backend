@@ -28,10 +28,15 @@ class Boosts
             $artist = Promotion::owner($user);
             $data = self::creativeInput($artist->id, $input);
             $id = DB::table('promotion_boosts')->insert([
-                ...$data, 'user_id' => $user->id, 'artist_id' => $artist->id,
-                'environment' => config('billing.environment'), 'surface' => config('promotions.surface'),
-                'price_cents' => config('promotions.price_cents'), 'duration_seconds' => config('promotions.duration_seconds'),
-                'created_at' => Billing::timestamp(), 'updated_at' => Billing::timestamp(),
+                ...$data,
+                'user_id' => $user->id,
+                'artist_id' => $artist->id,
+                'environment' => config('billing.environment'),
+                'surface' => config('promotions.surface'),
+                'price_cents' => config('promotions.price_cents'),
+                'duration_seconds' => config('promotions.duration_seconds'),
+                'created_at' => Billing::timestamp(),
+                'updated_at' => Billing::timestamp(),
             ]);
 
             return self::find($id);
@@ -47,9 +52,13 @@ class Boosts
         Promotion::future($start);
 
         return [
-            'eligibility_revision' => Invalidations::revision(), 'video_id' => (int) $input['video_id'], 'offer_id' => $input['offer_id'], 'starts_at' => $start,
+            'eligibility_revision' => Invalidations::revision(),
+            'video_id' => (int) $input['video_id'],
+            'offer_id' => $input['offer_id'],
+            'starts_at' => $start,
             'ends_at' => Billing::timestamp(Promotion::seconds($start) + (int) config('promotions.duration_seconds')),
-            'rights_version' => $input['rights_version'], 'rights_confirmed_at' => Billing::timestamp(),
+            'rights_version' => $input['rights_version'],
+            'rights_confirmed_at' => Billing::timestamp(),
         ];
     }
 
@@ -83,10 +92,17 @@ class Boosts
             Promotion::reserveSlot($boost, $boost->starts_at, $boost->ends_at);
             self::update($boost, ['status' => 'pending_review']);
             DB::table('promotion_placements')->insert([
-                'boost_id' => $id, 'user_id' => $user->id, 'artist_id' => $boost->artist_id,
-                'environment' => $boost->environment, 'type' => 'boost', 'destination' => $boost->surface,
-                'status' => 'pending_review', 'starts_at' => $boost->starts_at, 'ends_at' => $boost->ends_at,
-                'created_at' => Billing::timestamp(), 'updated_at' => Billing::timestamp(),
+                'boost_id' => $id,
+                'user_id' => $user->id,
+                'artist_id' => $boost->artist_id,
+                'environment' => $boost->environment,
+                'type' => 'boost',
+                'destination' => $boost->surface,
+                'status' => 'pending_review',
+                'starts_at' => $boost->starts_at,
+                'ends_at' => $boost->ends_at,
+                'created_at' => Billing::timestamp(),
+                'updated_at' => Billing::timestamp(),
             ]);
             AuditTrail::record('promotion.boost.submitted', ['boost_id' => $id], $user->id);
 
@@ -104,7 +120,7 @@ class Boosts
                     abort_unless($boost->status === 'pending_review' && $boost->starts_at > Billing::timestamp(), 409, 'Approve a pending campaign before its requested start.');
                     abort_unless(!Invalidations::cutoff($boost) && Promotion::creative($boost->artist_id, $boost->video_id) && Credits::funded($boost)
                         && $boost->rights_version === config('promotions.rights_version'), 409, 'Creative, rights or funding is ineligible.');
-                    abort_unless(Availability::healthy(), 503, 'Promotion surface is unavailable.');
+                    abort_unless(Availability::healthy() && Promotion::reserved($boost), 503, 'Promotion surface or reserved inventory is unavailable.');
                     self::update($boost, ['status' => 'scheduled']);
                     break;
                 case 'reject':
@@ -116,7 +132,7 @@ class Boosts
                     abort_unless(in_array($boost->status, ['pending_review', 'scheduled', 'active', 'interrupted'], true), 409, 'Campaign is already terminal.');
                     if ($input['decision'] === 'hold') {
                         self::update($boost, ['staff_hold' => true]);
-                        Invalidations::record('user', $boost->user_id);
+                        Invalidations::record($boost->user_id ? 'user' : 'boost', $boost->user_id ?? $boost->id);
                         $boost = self::find($id);
                     }
                     self::tick($id);
@@ -157,10 +173,11 @@ class Boosts
         $now = Billing::timestamp();
         if (in_array($boost->status, ['pending_review', 'scheduled', 'active'], true)) {
             $cutoff = Invalidations::cutoff($boost);
-            $eligible = !$cutoff && Promotion::creative($boost->artist_id, $boost->video_id)
+            $inventory = Promotion::reserved($boost);
+            $eligible = $inventory && !$cutoff && Promotion::creative($boost->artist_id, $boost->video_id)
                 && Credits::funded($boost) && $boost->rights_version === config('promotions.rights_version');
             if (!$eligible) {
-                if ($cutoff && $boost->status === 'active' && Availability::configured()) {
+                if ($inventory && $cutoff && $boost->status === 'active' && Availability::configured()) {
                     Availability::accrue($boost, min($now, $cutoff));
                 }
                 self::stop($boost, 'interrupted', 'eligibility_changed');
@@ -198,12 +215,14 @@ class Boosts
                     }
                 }
             }
-        } elseif (in_array($boost->status, ['interrupted', 'cancelled', 'rejected', 'completed'], true)
-            && !$boost->settled_at && $boost->settle_after && $boost->settle_after <= $now) {
+        } elseif (
+            in_array($boost->status, ['interrupted', 'cancelled', 'rejected', 'completed'], true)
+            && !$boost->settled_at && $boost->settle_after && $boost->settle_after <= $now
+        ) {
             self::settle($boost);
         }
         $boost = self::find($id);
-        if ($boost->settled_at && $boost->activated_at && !$boost->staff_hold && $boost->user_id && !Credits::held($boost->user_id)) {
+        if ($boost->settled_at && $boost->activated_at && !Credits::heldForBoost($boost)) {
             // Includes completed campaigns affected by a late incident; never re-debits credit.
             Credits::remedy($boost, Availability::delivered($boost));
             if ($boost->status === 'completed' && Availability::delivered($boost) < $boost->duration_seconds) {
@@ -212,22 +231,36 @@ class Boosts
         }
     }
 
+    public static function deleting(object $boost): void
+    {
+        if ($boost->status === 'active' && Promotion::reserved($boost) && Availability::configured()) {
+            Availability::accrue($boost, Billing::timestamp());
+        }
+        if (in_array($boost->status, ['draft', 'pending_review', 'scheduled', 'active', 'interrupted'], true)) {
+            self::stop($boost, 'cancelled', 'account_deleted');
+        } else {
+            self::settle($boost);
+            Promotion::releaseSlot($boost->id);
+        }
+    }
+
     private static function stop(object $boost, string $status, string $reason, bool $settle = true): void
     {
         Promotion::releaseSlot($boost->id);
         Credits::release($boost);
         self::update($boost, [
-            'status' => $status, 'stop_reason' => $reason,
+            'status' => $status,
+            'stop_reason' => $reason,
             'settle_after' => $boost->settle_after ?? Billing::timestamp(time() + (int) config('promotions.remedy_grace_seconds')),
         ]);
         if ($settle) {
-            self::settle(self::find($boost->id));
+            self::settle(DB::table('promotion_boosts')->where('id', $boost->id)->first());
         }
     }
 
     private static function settle(object $boost): void
     {
-        if ($boost->staff_hold || ($boost->user_id && Credits::held($boost->user_id))) {
+        if (Credits::heldForBoost($boost)) {
             return;
         }
         if ($boost->activated_at) {
@@ -244,7 +277,7 @@ class Boosts
             $boost = self::find($id);
             Promotion::version($boost, (int) $input['version']);
             abort_unless($boost->status === 'interrupted' && $boost->activated_at, 409, 'Only an interrupted, activated campaign needs this remedy.');
-            abort_if($boost->staff_hold || Credits::held($boost->user_id), 409, 'Resolve the recorded spending hold first.');
+            abort_if(Credits::heldForBoost($boost), 409, 'Resolve the recorded spending hold first.');
             if ($input['action'] === 'credit') {
                 self::settle($boost);
             } else {
@@ -265,8 +298,14 @@ class Boosts
                     abort_unless(Promotion::seconds($placement->extension_ends_at) - Promotion::seconds($placement->extension_starts_at) === $remaining, 409, 'Delivery evidence changed. Obtain consent to revised dates.');
                     abort_unless(Availability::healthy() && !Invalidations::cutoff($boost) && Promotion::creative($boost->artist_id, $boost->video_id) && Credits::funded($boost), 409, 'The campaign cannot resume.');
                     Promotion::reserveSlot($boost, $placement->extension_starts_at, $placement->extension_ends_at);
-                    self::update($boost, ['status' => 'scheduled', 'starts_at' => $placement->extension_starts_at,
-                        'ends_at' => $placement->extension_ends_at, 'checked_at' => null, 'settle_after' => null, 'stop_reason' => null]);
+                    self::update($boost, [
+                        'status' => 'scheduled',
+                        'starts_at' => $placement->extension_starts_at,
+                        'ends_at' => $placement->extension_ends_at,
+                        'checked_at' => null,
+                        'settle_after' => null,
+                        'stop_reason' => null
+                    ]);
                     DB::table('promotion_placements')->where('id', $placement->id)->update(['extension_consent' => 'applied', 'version' => DB::raw('version + 1')]);
                 }
             }
@@ -279,12 +318,16 @@ class Boosts
     public static function update(object $boost, array $data): void
     {
         DB::table('promotion_boosts')->where('id', $boost->id)->update([
-            ...$data, 'version' => $boost->version + 1, 'updated_at' => Billing::timestamp(),
+            ...$data,
+            'version' => $boost->version + 1,
+            'updated_at' => Billing::timestamp(),
         ]);
         $placement = array_intersect_key($data, array_flip(['status', 'starts_at', 'ends_at']));
         if ($placement) {
             DB::table('promotion_placements')->where('boost_id', $boost->id)->update([
-                ...$placement, 'version' => DB::raw('version + 1'), 'updated_at' => Billing::timestamp(),
+                ...$placement,
+                'version' => DB::raw('version + 1'),
+                'updated_at' => Billing::timestamp(),
             ]);
         }
     }

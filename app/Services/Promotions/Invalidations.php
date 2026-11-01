@@ -11,7 +11,41 @@ class Invalidations
     /** Append inside the content/account transaction, without acquiring promotion inventory locks. */
     public static function record(string $type, int $id): void
     {
-        DB::table('promotion_invalidations')->insert(['target_type' => $type, 'target_id' => $id, 'created_at' => Billing::timestamp()]);
+        $now = Billing::timestamp();
+        DB::table('promotion_invalidations')->insert(['target_type' => $type, 'target_id' => $id, 'created_at' => $now]);
+
+        // Foreign keys may later become NULL. Preserve the affected campaign identity now.
+        $boosts = DB::table('promotion_boosts');
+        switch ($type) {
+            case 'audio':
+                $boosts->whereIn('video_id', Video::select('id')->where('audio_id', $id));
+                break;
+            case 'user':
+            case 'artist':
+            case 'video':
+                $boosts->where($type . '_id', $id);
+                break;
+            case 'period':
+                $boosts->whereIn('id', DB::table('promotion_reservations')->select('boost_id')
+                    ->whereIn('credit_id', DB::table('promotion_credits')->select('id')->where('period_id', $id)));
+                break;
+            default:
+                return;
+        }
+        $lastId = 0;
+        do {
+            $rows = (clone $boosts)->where('id', '>', $lastId)->orderBy('id')->limit(100)->get()->all();
+            $cutoffs = self::cutoffs($rows);
+            foreach ($rows as $boost) {
+                $lastId = $boost->id;
+                // Preserve older target-only evidence before deletion severs its lookup path.
+                DB::table('promotion_invalidations')->insert([
+                    'target_type' => 'boost',
+                    'target_id' => $boost->id,
+                    'created_at' => $cutoffs[$boost->id] ?? $now
+                ]);
+            }
+        } while (count($rows) === 100);
     }
 
     public static function revision(): int
@@ -26,12 +60,13 @@ class Invalidations
 
         return DB::table('promotion_invalidations')->where('id', '>', $boost->eligibility_revision)
             ->where(fn($q) => $q
-                ->where(fn($q) => $q->where('target_type', 'user')->where('target_id', $boost->user_id ?? 0))
+                ->where(fn($q) => $q->where('target_type', 'boost')->where('target_id', $boost->id))
+                ->orWhere(fn($q) => $q->where('target_type', 'user')->where('target_id', $boost->user_id ?? 0))
                 ->orWhere(fn($q) => $q->where('target_type', 'artist')->where('target_id', $boost->artist_id ?? 0))
                 ->orWhere(fn($q) => $q->where('target_type', 'video')->where('target_id', $boost->video_id ?? 0))
                 ->orWhere(fn($q) => $q->where('target_type', 'audio')->where('target_id', $audio ?? 0))
                 ->orWhere(fn($q) => $q->where('target_type', 'period')->whereIn('target_id', $periods)))
-            ->orderBy('id')->value('created_at');
+            ->orderBy('created_at')->value('created_at');
     }
 
     public static function cutoffs(array $rows): array
@@ -45,8 +80,13 @@ class Invalidations
             ->whereIn('r.boost_id', $ids)->select(['r.boost_id', 'c.period_id'])->get();
         $targets = [];
         foreach ($rows as $row) {
-            $targets[$row->id] = ['user:' . ($row->user_id ?? 0), 'artist:' . ($row->artist_id ?? 0),
-                'video:' . ($row->video_id ?? 0), 'audio:' . (($videos[$row->video_id ?? 0] ?? null)?->audio_id ?? 0)];
+            $targets[$row->id] = [
+                'boost:' . $row->id,
+                'user:' . ($row->user_id ?? 0),
+                'artist:' . ($row->artist_id ?? 0),
+                'video:' . ($row->video_id ?? 0),
+                'audio:' . (($videos[$row->video_id ?? 0] ?? null)?->audio_id ?? 0)
+            ];
         }
         foreach ($periods as $period) {
             if ($period->period_id) {
@@ -65,7 +105,7 @@ class Invalidations
                 foreach ($typeIds as $type => $ids) {
                     $query->orWhere(fn($q) => $q->where('target_type', $type)->whereIn('target_id', array_unique($ids)));
                 }
-            })->orderBy('id')->get();
+            })->orderBy('created_at')->get();
         $cutoffs = [];
         foreach ($rows as $row) {
             foreach ($events as $event) {
@@ -85,6 +125,15 @@ class Invalidations
             ->whereColumn('pi.id', '>', 'promotion_placements.eligibility_revision')
             ->where(fn($q) => $q->where(fn($q) => $q->where('pi.target_type', 'artist')->whereColumn('pi.target_id', 'promotion_placements.artist_id'))
                 ->orWhere(fn($q) => $q->where('pi.target_type', 'user')->whereColumn('pi.target_id', 'promotion_placements.user_id')));
+    }
+
+    public static function placementCutoff(object $row): ?string
+    {
+        return DB::table('promotion_invalidations')->where('id', '>', $row->eligibility_revision)
+            ->where(fn($query) => $query
+                ->where(fn($query) => $query->where('target_type', 'artist')->where('target_id', $row->artist_id ?? 0))
+                ->orWhere(fn($query) => $query->where('target_type', 'user')->where('target_id', $row->user_id ?? 0)))
+            ->orderBy('id')->value('created_at');
     }
 
 }

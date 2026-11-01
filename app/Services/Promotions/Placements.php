@@ -40,17 +40,29 @@ class Placements
             abort_unless(Promotion::table('enrollments')->where('month', $month)->count() < (int) config('promotions.pilot_monthly_capacity'), 409, 'Monthly pilot capacity is full or unconfirmed.');
             abort_unless(Promotion::table('enrollments')->where('month', $month)->where('network_account', $network)->count() < (int) $accounts[$network]['monthly_capacity'], 409, 'Monthly network capacity is full.');
             $enrollment = DB::table('promotion_enrollments')->insert([
-                'artist_id' => $artist->id, 'user_id' => $artist->user_id, 'environment' => config('billing.environment'),
-                'month' => $month, 'network_account' => $network, 'confirmed_by' => $staff->id, 'created_at' => Billing::timestamp(),
+                'artist_id' => $artist->id,
+                'user_id' => $artist->user_id,
+                'environment' => config('billing.environment'),
+                'month' => $month,
+                'network_account' => $network,
+                'confirmed_by' => $staff->id,
+                'created_at' => Billing::timestamp(),
             ]);
             $selected = null;
             foreach (['feature', 'network_post'] as $type) {
                 $id = DB::table('promotion_placements')->insert([
-                    'eligibility_revision' => Invalidations::revision(), 'enrollment_id' => $enrollment, 'artist_id' => $artist->id, 'user_id' => $artist->user_id,
-                    'environment' => config('billing.environment'), 'type' => $type, 'month' => $month,
+                    'eligibility_revision' => Invalidations::revision(),
+                    'enrollment_id' => $enrollment,
+                    'artist_id' => $artist->id,
+                    'user_id' => $artist->user_id,
+                    'environment' => config('billing.environment'),
+                    'type' => $type,
+                    'month' => $month,
                     'destination' => $type === 'feature' ? 'web_featured_artists' : $network,
-                    'due_at' => $due, 'reason' => $input['reason'],
-                    'created_at' => Billing::timestamp(), 'updated_at' => Billing::timestamp(),
+                    'due_at' => $due,
+                    'reason' => $input['reason'],
+                    'created_at' => Billing::timestamp(),
+                    'updated_at' => Billing::timestamp(),
                 ]);
                 if ($type === $input['type']) {
                     $selected = self::find($id);
@@ -115,7 +127,10 @@ class Placements
                 $start = Promotion::at($input['starts_at'] ?? '');
                 $end = Promotion::at($input['ends_at'] ?? '');
                 abort_unless(Promotion::artistEligible($row->artist_id), 422, 'Artist is not publicly eligible.');
-                if ($row->status === 'interrupted' || ($row->starts_at && $row->starts_at <= Billing::timestamp())) {
+                if (
+                    $row->status === 'interrupted' || ($row->starts_at &&
+                        ($row->starts_at <= Billing::timestamp() || Invalidations::placementCutoff($row)))
+                ) {
                     // A running/missed obligation cannot be silently moved by an operator.
                     Promotion::future($start);
                     abort_unless($end > $start && ($row->type !== 'feature' || Promotion::seconds($end) - Promotion::seconds($start) === 604800)
@@ -134,8 +149,14 @@ class Placements
 
     public static function proposal(object $row, string $start, string $end, string $reason): void
     {
-        self::write($row, ['status' => 'interrupted', 'extension_starts_at' => $start, 'extension_ends_at' => $end,
-            'extension_consent' => 'pending', 'consented_at' => null, 'reason' => $reason]);
+        self::write($row, [
+            'status' => 'interrupted',
+            'extension_starts_at' => $start,
+            'extension_ends_at' => $end,
+            'extension_consent' => 'pending',
+            'consented_at' => null,
+            'reason' => $reason
+        ]);
     }
 
     public static function consent(User $owner, int $id, int $version, bool $accepted): object
@@ -156,8 +177,13 @@ class Placements
                 }
             }
             self::write($row, ['extension_consent' => $accepted ? 'accepted' : 'rejected', 'consented_at' => Billing::timestamp()]);
-            AuditTrail::record('promotion.extension.consent', ['placement_id' => $id, 'proposal_version' => $version, 'accepted' => $accepted,
-                'starts_at' => $row->extension_starts_at, 'ends_at' => $row->extension_ends_at], $owner->id);
+            AuditTrail::record('promotion.extension.consent', [
+                'placement_id' => $id,
+                'proposal_version' => $version,
+                'accepted' => $accepted,
+                'starts_at' => $row->extension_starts_at,
+                'ends_at' => $row->extension_ends_at
+            ], $owner->id);
 
             return self::find($id);
         });
@@ -177,10 +203,12 @@ class Placements
             }
             Promotion::version($row, (int) $input['version']);
             abort_unless(in_array($row->status, ['scheduled', 'active', 'awaiting_evidence'], true), 409, 'Schedule or resolve the interruption before recording delivery.');
-            abort_unless(Promotion::artistEligible($row->artist_id) && !Promotion::table('placements')->where('id', $id)->whereExists(Invalidations::placementQuery())->exists(), 409, 'Resolve artist eligibility and delivery interruptions before completing the obligation.');
             $start = Promotion::at($input['actual_starts_at']);
             $end = Promotion::at($input['actual_ends_at']);
             abort_unless($start <= $end && $end <= Billing::timestamp() && $start >= $row->starts_at && $end <= $row->ends_at, 422, 'Actual delivery must be in the approved window and cannot be in the future.');
+            $cutoff = Invalidations::placementCutoff($row);
+            abort_unless($cutoff ? ($row->type === 'feature' ? $cutoff >= $end : $cutoff > $end)
+                : Promotion::artistEligible($row->artist_id), 409, 'Resolve artist eligibility and delivery interruptions before completing the obligation.');
             if ($row->type === 'feature') {
                 abort_unless(Promotion::seconds($end) - Promotion::seconds($start) === 604800, 422, 'Record the actual full seven-day feature window.');
             }
@@ -190,13 +218,23 @@ class Placements
                 && !parse_url($proof, PHP_URL_USER) && in_array(parse_url($proof, PHP_URL_PORT), [null, 443], true) && in_array(strtolower((string) $host), config('promotions.proof_hosts', []), true);
             $validReference = preg_match('/^evidence:[a-zA-Z0-9][a-zA-Z0-9._\/-]{7,180}$/D', $proof);
             abort_unless($validUrl || $validReference, 422, 'Use an approved HTTPS proof host or an evidence: archive reference.');
-            $canonical = $validUrl ? 'https://' . strtolower($host) . rtrim(parse_url($proof, PHP_URL_PATH) ?? '/', '/') : $proof;
-            $proofHash = hash('sha256', $canonical);
-            abort_if(DB::table('promotion_evidence')->where('proof_hash', $proofHash)->exists(), 409, 'This proof already completes another obligation.');
+            $canonical = self::proofIdentity($proof);
+            $proofHash = hash('sha256', 'v2:' . $canonical);
+            // Also inspect legacy path-only hashes; existing evidence stays immutable.
+            $legacy = $validUrl ? 'https://' . strtolower($host) . rtrim(parse_url($proof, PHP_URL_PATH) ?? '/', '/') : $proof;
+            foreach (DB::table('promotion_evidence')->whereIn('proof_hash', [$proofHash, hash('sha256', $legacy)])->get() as $previous) {
+                abort_if(self::proofIdentity($previous->proof) === $canonical, 409, 'This proof already completes another obligation.');
+            }
             DB::table('promotion_evidence')->insert([
-                'placement_id' => $id, 'proof_hash' => $proofHash, 'proof' => $proof, 'request_hash' => $hash,
-                'actual_starts_at' => $start, 'actual_ends_at' => $end, 'note' => $input['note'],
-                'actor_id' => $staff->id, 'created_at' => Billing::timestamp(),
+                'placement_id' => $id,
+                'proof_hash' => $proofHash,
+                'proof' => $proof,
+                'request_hash' => $hash,
+                'actual_starts_at' => $start,
+                'actual_ends_at' => $end,
+                'note' => $input['note'],
+                'actor_id' => $staff->id,
+                'created_at' => Billing::timestamp(),
             ]);
             self::write($row, ['status' => 'completed']);
             AuditTrail::record('promotion.placement.delivered', ['placement_id' => $id], $staff->id, 'staff');
@@ -214,7 +252,8 @@ class Placements
         if ($row->type === 'boost' || !in_array($row->status, ['scheduled', 'active'], true)) {
             return;
         }
-        if (!Promotion::artistEligible($row->artist_id) || Promotion::table('placements')->where('id', $row->id)->whereExists(Invalidations::placementQuery())->exists()) {
+        $cutoff = Invalidations::placementCutoff($row);
+        if (($cutoff && $cutoff < $row->ends_at) || (!$cutoff && !Promotion::artistEligible($row->artist_id))) {
             self::write($row, ['status' => 'interrupted', 'reason' => 'Artist is no longer publicly eligible.']);
         } elseif ($row->ends_at <= Billing::timestamp()) {
             self::write($row, ['status' => 'awaiting_evidence']);
@@ -226,7 +265,33 @@ class Placements
     private static function write(object $row, array $data): void
     {
         DB::table('promotion_placements')->where('id', $row->id)->update([
-            ...$data, 'version' => $row->version + 1, 'updated_at' => Billing::timestamp(),
+            ...$data,
+            'version' => $row->version + 1,
+            'updated_at' => Billing::timestamp(),
         ]);
+    }
+
+    private static function proofIdentity(string $proof): string
+    {
+        if (str_starts_with($proof, 'evidence:')) {
+            return $proof;
+        }
+        $identity = 'https://' . strtolower((string) parse_url($proof, PHP_URL_HOST))
+            . rtrim(parse_url($proof, PHP_URL_PATH) ?? '/', '/');
+        $parameters = [];
+        foreach (explode('&', parse_url($proof, PHP_URL_QUERY) ?? '') as $part) {
+            if ($part === '') {
+                continue;
+            }
+            [$key, $value] = array_pad(explode('=', $part, 2), 2, '');
+            $key = urldecode($key);
+            if (str_starts_with(strtolower($key), 'utm_') || in_array(strtolower($key), ['fbclid', 'gclid', 'igsh', 'igshid', 'si'], true)) {
+                continue;
+            }
+            $parameters[] = rawurlencode($key) . '=' . rawurlencode(urldecode($value));
+        }
+        sort($parameters, SORT_STRING);
+
+        return $identity . ($parameters ? '?' . implode('&', $parameters) : '');
     }
 }

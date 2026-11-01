@@ -103,8 +103,12 @@ class Promotion
         }
         $result = $callback();
         DB::table('promotion_operations')->insert([
-            'user_id' => $actor, 'environment' => config('billing.environment'), 'operation' => $operation,
-            'key_hash' => $keyHash, 'request_hash' => $hash, 'result' => json_encode($result, JSON_THROW_ON_ERROR),
+            'user_id' => $actor,
+            'environment' => config('billing.environment'),
+            'operation' => $operation,
+            'key_hash' => $keyHash,
+            'request_hash' => $hash,
+            'result' => json_encode($result, JSON_THROW_ON_ERROR),
             'created_at' => Billing::timestamp(),
         ]);
 
@@ -113,19 +117,38 @@ class Promotion
 
     public static function reserveSlot(object $boost, string $start, string $end): void
     {
-        for ($slot = 1; $slot <= (int) config('promotions.capacity'); $slot++) {
+        abort_unless($boost->surface === config('promotions.surface'), 409, 'This campaign targets a retired surface.');
+        for ($slot = 1; $slot <= self::capacity(); $slot++) {
             $occupied = self::table('slots')->where('surface', $boost->surface)->where('slot', $slot)
                 ->whereNull('released_at')->where('starts_at', '<', $end)->where('ends_at', '>', $start)->exists();
             if (!$occupied) {
                 DB::table('promotion_slots')->insert([
-                    'boost_id' => $boost->id, 'environment' => $boost->environment, 'surface' => $boost->surface,
-                    'slot' => $slot, 'starts_at' => $start, 'ends_at' => $end,
+                    'boost_id' => $boost->id,
+                    'environment' => $boost->environment,
+                    'surface' => $boost->surface,
+                    'slot' => $slot,
+                    'starts_at' => $start,
+                    'ends_at' => $end,
                 ]);
 
                 return;
             }
         }
         abort(409, 'No rotation slot is available for the requested window.');
+    }
+
+    public static function capacity(): int
+    {
+        return max(0, min(5, (int) config('promotions.capacity')));
+    }
+
+    public static function reserved(object $boost): bool
+    {
+        return $boost->surface === config('promotions.surface')
+            && DB::table('promotion_slots')->where('boost_id', $boost->id)
+                ->where('environment', $boost->environment)->where('surface', $boost->surface)
+                ->where('slot', '>=', 1)->where('slot', '<=', self::capacity())
+                ->whereNull('released_at')->exists();
     }
 
     public static function releaseSlot(int $id): void

@@ -2,6 +2,7 @@
 
 namespace App\Services\Billing;
 
+use App\Services\Promotions\Promotion;
 use Spark\Facades\DB;
 use function count;
 
@@ -17,7 +18,8 @@ class Retention
 
             foreach ($customers as $customer) {
                 $lastId = $customer->id;
-                DB::transaction(function () use ($customer, $cutoff): void {
+                // Serialize source-period removal with promotion settlement and staff holds.
+                Promotion::transaction(function () use ($customer, $cutoff): void {
                     $subscriptions = DB::table('billing_subscriptions')->where('customer_id', $customer->id);
                     if ($subscriptions->whereNotNull('active_key')->exists()) {
                         return;
@@ -28,6 +30,20 @@ class Retention
                     if (
                         $invoices && DB::table('billing_adjustments')->whereIn('invoice_id', $invoices)
                             ->where(fn($query) => $query->where('allocation', 'review_required')->orWhere('updated_at', '>=', $cutoff))->exists()
+                    ) {
+                        return;
+                    }
+
+                    if (
+                        $invoices && (
+                            DB::table('billing_paid_periods')->whereIn('invoice_id', $invoices)->where('promotion_hold', true)->exists()
+                            || DB::table('promotion_reservations as r')
+                                ->join('promotion_boosts as b', 'b.id', '=', 'r.boost_id')
+                                ->join('promotion_credits as c', 'c.id', '=', 'r.credit_id')
+                                ->join('billing_paid_periods as p', 'p.id', '=', 'c.period_id')
+                                ->whereIn('p.invoice_id', $invoices)
+                                ->where(fn($query) => $query->whereNull('b.settled_at')->orWhere('b.staff_hold', true))->exists()
+                        )
                     ) {
                         return;
                     }

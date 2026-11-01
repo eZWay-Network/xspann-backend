@@ -20,14 +20,25 @@ class Reports
         if (count($deliveries)) {
             $starts = array_column($deliveries->all(), 'starts_at');
             $ends = array_column($deliveries->all(), 'ends_at');
-            $outages = Availability::windows(config('promotions.surface'), min($starts), max($ends), false);
+            foreach (DB::table('promotion_availability')->whereIn('environment', array_unique(array_column($rows, 'environment')))
+                ->whereIn('surface', array_unique(array_column($rows, 'surface')))->where('available', false)
+                ->where('starts_at', '<', max($ends))->where('ends_at', '>', min($starts))->get() as $outage) {
+                $outages[$outage->environment][$outage->surface][] = [Promotion::seconds($outage->starts_at), Promotion::seconds($outage->ends_at)];
+            }
         }
         $events = DB::table('promotion_events')->whereIn('boost_id', $ids)->select(['boost_id', 'kind'])
             ->selectRaw('COUNT(*) AS total')->groupBy(['boost_id', 'kind'])->get();
         foreach ($rows as $row) {
-            $report = ['reserved_cents' => 0, 'charged_cents' => 0, 'returned_cents' => 0,
-                'delivered_seconds' => 0, 'undelivered_seconds' => (int) $row->duration_seconds,
-                'render_events' => 0, 'click_events' => 0, 'telemetry_is_billable' => false];
+            $report = [
+                'reserved_cents' => 0,
+                'charged_cents' => 0,
+                'returned_cents' => 0,
+                'delivered_seconds' => 0,
+                'undelivered_seconds' => (int) $row->duration_seconds,
+                'render_events' => 0,
+                'click_events' => 0,
+                'telemetry_is_billable' => false
+            ];
             foreach ($reservations as $reservation) {
                 if ($reservation->boost_id !== $row->id) {
                     continue;
@@ -45,7 +56,7 @@ class Reports
             if ($cutoff = ($cutoffs[$row->id] ?? null)) {
                 $windows = Availability::subtract($windows, [[Promotion::seconds($cutoff), PHP_INT_MAX]]);
             }
-            foreach (Availability::subtract(Availability::merge($windows), $outages) as [$start, $end]) {
+            foreach (Availability::subtract(Availability::merge($windows), $outages[$row->environment][$row->surface] ?? []) as [$start, $end]) {
                 $report['delivered_seconds'] += $end - $start;
             }
             $report['delivered_seconds'] = min((int) $row->duration_seconds, $report['delivered_seconds']);
@@ -69,8 +80,13 @@ class Reports
         $proofs = DB::table('promotion_evidence')->whereIn('placement_id', array_column($rows, 'id'))->get()->keyBy('placement_id');
         foreach ($rows as $row) {
             $proof = $proofs[$row->id] ?? null;
-            $row->evidence = $proof ? ['proof' => $proof->proof, 'actual_starts_at' => Billing::date($proof->actual_starts_at),
-                'actual_ends_at' => Billing::date($proof->actual_ends_at), 'note' => $proof->note, 'recorded_at' => Billing::date($proof->created_at)] : null;
+            $row->evidence = $proof ? [
+                'proof' => $proof->proof,
+                'actual_starts_at' => Billing::date($proof->actual_starts_at),
+                'actual_ends_at' => Billing::date($proof->actual_ends_at),
+                'note' => $proof->note,
+                'recorded_at' => Billing::date($proof->created_at)
+            ] : null;
         }
 
         return $rows;

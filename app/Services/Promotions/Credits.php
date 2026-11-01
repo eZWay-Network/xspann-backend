@@ -20,8 +20,11 @@ class Credits
             $credit = Promotion::table('credits')->where('period_id', $period->id)->first();
             if (!$credit && !$period->revoked_at && (int) $period->boost_credit_cents === 500 && $period->starts_at <= Billing::timestamp()) {
                 $id = DB::table('promotion_credits')->insert([
-                    'user_id' => $user, 'period_id' => $period->id, 'environment' => config('billing.environment'),
-                    'amount_cents' => 500, 'created_at' => Billing::timestamp(),
+                    'user_id' => $user,
+                    'period_id' => $period->id,
+                    'environment' => config('billing.environment'),
+                    'amount_cents' => 500,
+                    'created_at' => Billing::timestamp(),
                 ]);
                 self::entry($id, null, "grant:$id", 'grant', 500, 0, 0);
                 $credit = Promotion::table('credits')->where('id', $id)->first();
@@ -35,12 +38,24 @@ class Credits
         }
     }
 
-    public static function held(int $user): bool
+    public static function held(int $user, ?string $environment = null): bool
     {
-        return Promotion::table('boosts')->where('user_id', $user)->where('staff_hold', true)->exists()
+        $environment ??= config('billing.environment');
+
+        return DB::table('promotion_boosts')->where('environment', $environment)->where('user_id', $user)->where('staff_hold', true)->exists()
             || DB::table('billing_paid_periods as p')->join('billing_subscriptions as s', 's.id', '=', 'p.subscription_id')
-            ->where('s.user_id', $user)->where('s.environment', config('billing.environment'))
-            ->where('p.promotion_hold', true)->exists();
+                ->where('s.user_id', $user)->where('s.environment', $environment)
+                ->where('p.promotion_hold', true)->exists();
+    }
+
+    public static function heldForBoost(object $boost): bool
+    {
+        return (bool) $boost->staff_hold
+            || ($boost->user_id && self::held($boost->user_id, $boost->environment))
+            || DB::table('promotion_reservations as r')
+                ->join('promotion_credits as c', 'c.id', '=', 'r.credit_id')
+                ->join('billing_paid_periods as p', 'p.id', '=', 'c.period_id')
+                ->where('r.boost_id', $boost->id)->where('p.promotion_hold', true)->exists();
     }
 
     public static function usable(object $credit): bool
@@ -166,7 +181,7 @@ class Credits
 
     private static function revokeAvailable(int $id): void
     {
-        $credit = Promotion::table('credits')->where('id', $id)->first();
+        $credit = DB::table('promotion_credits')->where('id', $id)->first();
         if (!$credit || self::usable($credit)) {
             return;
         }
@@ -180,8 +195,13 @@ class Credits
     private static function entry(int $credit, ?int $boost, string $key, string $kind, int $available, int $reserved, int $used): void
     {
         DB::table('promotion_ledger')->insert([
-            'credit_id' => $credit, 'boost_id' => $boost, 'entry_key' => $key, 'kind' => $kind,
-            'available_delta' => $available, 'reserved_delta' => $reserved, 'used_delta' => $used,
+            'credit_id' => $credit,
+            'boost_id' => $boost,
+            'entry_key' => $key,
+            'kind' => $kind,
+            'available_delta' => $available,
+            'reserved_delta' => $reserved,
+            'used_delta' => $used,
             'created_at' => Billing::timestamp(),
         ]);
     }
