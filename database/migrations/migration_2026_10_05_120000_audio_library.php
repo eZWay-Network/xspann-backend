@@ -62,10 +62,11 @@ return new class {
     public function down(): void
     {
         Schema::table('videos', function (Blueprint $table) {
-            $table->dropIndex(['audio_id']);
             if (db()->getDriver() !== 'sqlite') {
                 $table->dropForeign(['audio_id']);
             }
+            // MySQL cannot drop the supporting index while its foreign key exists.
+            $table->dropIndex(['audio_id']);
             $table->dropColumn('audio_id');
             $table->dropColumn('audio_mode');
             $table->dropColumn('audio_settings');
