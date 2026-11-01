@@ -14,6 +14,11 @@ class PromotionMaintenance implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\Staff\Heartbeats::run('promotions', fn () => $this->maintain());
+    }
+
+    private function maintain(): void
+    {
         // Stable key batches prevent one bad record from starving later accounts/campaigns.
         $this->each(DB::table('users')->whereIn('status', ['active', 'suspended']), fn($row) => Credits::sync($row->id), 'credits');
         $this->each(Promotion::table('boosts')->where('status', '!=', 'draft'), fn($row) => Boosts::tick($row->id), 'boost');

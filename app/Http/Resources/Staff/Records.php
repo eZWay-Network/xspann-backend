@@ -17,7 +17,7 @@ final class Records
                 : ['kind' => 'page', ...$page->paginationMeta()],
             'filters' => $filters,
             'filter_options' => array_map(fn ($values) => array_map(fn ($value) => ['value' => $value, 'label' => self::label($value)], $values), $choices),
-            'filter_fields' => array_values(array_intersect(['owner_id', 'artist_id', 'assignee_id', 'period_id'], array_keys($filters))),
+            'filter_fields' => array_values(array_intersect(['owner_id', 'artist_id', 'assignee_id', 'period_id', 'invoice_id', 'subscription_id'], array_keys($filters))),
             'list_url' => (string) route($route),
         ];
     }

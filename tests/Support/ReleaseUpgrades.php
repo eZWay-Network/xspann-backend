@@ -8,6 +8,50 @@ use Spark\Facades\Schema;
 
 trait ReleaseUpgrades
 {
+    public function testStaffFinanceForwardUpgradePreservesPaidHistoryAndMembership(): void
+    {
+        $this->billingSetup();
+        $owner = $this->makeUser('upgradebuyer');
+        $this->makeArtist($owner);
+        $this->asUser($owner);
+        $attempt = $this->checkout();
+        $this->event('invoice.paid', $this->stripe->complete($attempt->session_id));
+        $before = query('billing_invoices')->first();
+        $secret = \Spark\Facades\Hash::encrypt('FORWARD-MFA-FIXTURE');
+        query('staff_accounts')->insert(['user_id' => $owner->id, 'role' => 'finance', 'enabled' => true,
+            'mfa_secret' => $secret, 'last_counter' => 123, 'version' => 7, 'created_at' => now(), 'updated_at' => now()]);
+        $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_160000_staff_finance_operations.php';
+        $migration->down();
+        $migration->up();
+        $migration->up();
+        $this->assertSame($before->amount_paid, query('billing_invoices')->where('id', $before->id)->value('amount_paid'));
+        $this->assertDatabaseHas('staff_accounts', ['user_id' => $owner->id, 'mfa_secret' => $secret, 'last_counter' => 123, 'version' => 7]);
+        $this->assertDatabaseCount('billing_paid_periods', 1);
+        $this->assertTrue(query('artist_genres')->where('archived', false)->where('version', 1)->exists());
+        $migration->down();
+        $migration->up();
+        $this->assertSame($before->invoice_id, query('billing_invoices')->where('id', $before->id)->value('invoice_id'));
+
+        $member = query('staff_accounts')->where('user_id', $owner->id)->first();
+        $context = new \App\Services\Staff\Context($owner, $member, (object) []);
+        $range = \App\Queries\Staff\Overview::range([]);
+        $report = \App\Queries\Staff\Finance::read($context, $range);
+        $this->assertSame(1999, $report['invoices'][0]['amount_paid']);
+        $this->assertSame(1, $report['paid_access'][0]['accounts']);
+        $this->assertSame('available', \App\Queries\Staff\OperationalHealth::read()['queue_availability']);
+        $export = (int) query('staff_exports')->insert([
+            'actor_id' => $owner->id, 'membership_version' => 7, 'type' => 'finance', 'environment' => 'test',
+            'filters' => json_encode($range), 'idempotency_hash' => hash('sha256', 'upgrade-export'),
+            'status' => 'queued', 'expires_at' => \App\Services\Staff\Sessions::timestamp(86400),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->assertSame(['completed', 'export_ready'], \App\Services\Staff\Exports::generate($export, $owner->id, $member));
+        \App\Services\Staff\Exports::deleting($owner->id);
+        \App\Services\Staff\Exports::maintain();
+        $this->assertDatabaseHas('staff_exports', ['id' => $export, 'status' => 'expired']);
+        $this->assertFalse(\Spark\Facades\Storage::disk('local')->exists(\App\Services\Staff\Exports::path($export)));
+    }
+
     public function testStaffCommunityCutoverPreservesEvidenceAndRetiresOnlyLegacyGrants(): void
     {
         $owner = $this->makeUser('cutoverowner');

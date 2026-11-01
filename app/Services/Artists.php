@@ -75,6 +75,7 @@ class Artists
                 }
 
                 if (array_key_exists('genre_ids', $input)) {
+                    \App\Models\ArtistGenre::assertAssignable($input['genre_ids'], $artist->genres()->pluck('artist_genres.id'));
                     $artist->genres()->sync(array_map('intval', $input['genre_ids']));
                 }
 

@@ -98,19 +98,45 @@ final class Overview
                 self::metric('Eligible accounts', self::eligible()->count(), 'Active, verified and onboarded now', 'users'),
                 self::metric('Public videos', self::publicVideos()->count(), 'Published, ready and approved now', 'video'),
             ];
+            if ($role === 'moderator') {
+                $metrics[2] = self::metric('Unassigned reports', DB::table('reports')->where('status', 'open')
+                    ->whereNotIn('id', DB::table('report_workflows')->select('report_id')->whereNotNull('assignee_id'))->count(),
+                    'Open reports without an assigned reviewer', 'users');
+                $metrics[3] = self::metric('Reports older than 24 hours', DB::table('reports')->where('status', 'open')
+                    ->where('created_at', '<', now()->subHours(24)->toDateTimeString())->count(),
+                    'Open cases needing triage attention', 'clock');
+            }
             $seriesQuery = DB::table('reports');
             $seriesColumn = 'reports.created_at';
             $seriesTitle = 'Retained report intake';
             $definition = 'Reports created in each UTC day, across the retained case history. No evidence is included.';
             $distributionTitle = 'Report queue';
             $distribution = [['label' => 'Open', 'value' => $count('reports', 'open')], ['label' => 'Closed', 'value' => DB::table('reports')->where('status', '!=', 'open')->count()]];
-        } elseif ($role === 'promotion_operator' || $role === 'finance') {
+        } elseif ($role === 'finance') {
+            $billing = fn (string $table) => \App\Services\Billing\Billing::table($table);
+            $metrics = [
+                self::metric('Current paid accounts', Finance::paidAccess()->count(), 'Unrevoked current paid periods', 'users'),
+                self::metric('Retained paid invoices', $billing('invoices')->where('status', 'paid')->count(), ucfirst($environment) . ' invoices across retained history', 'activity'),
+                self::metric('Failed receipts', $billing('webhooks')->where('status', 'failed')->count(), 'Provider events requiring recovery', 'flag'),
+                self::metric('Adjustments to review', $billing('adjustments')->where('allocation', 'review_required')->count(), 'Current allocation queue', 'shield'),
+            ];
+            $seriesQuery = $billing('invoices')->where('status', 'paid');
+            $seriesColumn = 'billing_invoices.issued_at';
+            $seriesTitle = 'Paid invoices issued';
+            $definition = 'Number of retained paid invoices issued each UTC day in the ' . $environment . ' environment. Monetary totals remain separated by currency below.';
+            $distributionTitle = 'Current paid-access mix';
+            $distribution = array_map(fn ($row) => ['label' => $row->plan_code, 'value' => (int) $row->accounts],
+                Finance::paidAccess()->selectRaw('c.plan_code, COUNT(*) AS accounts')->groupBy('c.plan_code')->get()->all());
+        } elseif ($role === 'promotion_operator') {
             $boosts = fn () => DB::table('promotion_boosts')->where('environment', $environment);
             $metrics = [];
 
-            foreach (['pending_review' => 'Pending review', 'active' => 'Active boosts', 'interrupted' => 'Interrupted boosts', 'scheduled' => 'Scheduled boosts'] as $status => $label) {
+            foreach (['pending_review' => 'Pending review', 'active' => 'Active boosts', 'interrupted' => 'Interrupted boosts'] as $status => $label) {
                 $metrics[] = self::metric($label, $boosts()->where('status', $status)->count(), ucfirst($environment) . ' campaigns now', 'megaphone');
             }
+            $metrics[] = self::metric('Obligations awaiting evidence', DB::table('promotion_placements')
+                ->where('environment', $environment)->where('status', 'awaiting_evidence')->count(),
+                'Feature and network-post obligations counted separately', 'flag');
             $seriesQuery = $boosts();
             $seriesColumn = 'promotion_boosts.created_at';
             $seriesTitle = 'Retained campaign creation';
@@ -159,7 +185,7 @@ final class Overview
     private static function series(QueryBuilder $query, string $column, array $range): array
     {
         // One aggregate query. Convert each UTC boundary into the app's storage timezone.
-        $timezone = new \DateTimeZone(str_starts_with($column, 'promotion_') ? 'UTC' : config('app.timezone', 'UTC'));
+        $timezone = new \DateTimeZone((str_starts_with($column, 'promotion_') || str_starts_with($column, 'billing_')) ? 'UTC' : config('app.timezone', 'UTC'));
         $day = new \DateTimeImmutable($range['from'], new \DateTimeZone('UTC'));
         $last = new \DateTimeImmutable($range['to'], new \DateTimeZone('UTC'));
         $expressions = $bindings = $dates = [];

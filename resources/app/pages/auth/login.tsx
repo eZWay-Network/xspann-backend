@@ -1,4 +1,4 @@
-import { Head, useForm } from "@inertiajs/react";
+import { Head, Link, useForm } from "@inertiajs/react";
 import { AuthLayout } from "@/components/auth-layout";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,12 @@ export default function Login({
         <Button type="submit" className="w-full" loading={form.processing}>
           Continue securely
         </Button>
+        <Link
+          href="/forgot-password"
+          className="block text-center text-sm text-primary"
+        >
+          Forgot password?
+        </Link>
         <p className="text-center text-xs leading-5 text-muted-foreground">
           You’ll verify an authenticator code next.
         </p>

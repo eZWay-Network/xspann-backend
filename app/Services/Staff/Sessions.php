@@ -125,7 +125,6 @@ final class Sessions
 
     public static function revokeAll(int $userId): void
     {
-        // One registry is also used by legacy API tests until the coordinated Step 2 move.
         DB::table('staff_sessions')->where('user_id', $userId)->delete();
     }
 
@@ -167,7 +166,7 @@ final class Sessions
 
         // Return only to a registered, protected GET page, never an API or auth action.
         foreach (app(\Spark\Http\Routing\Router::class)->getRoutes() as $name => $route) {
-            if (in_array($name, ['staff.reports.evidence', 'staff.reports.media', 'staff.boosts.preview'], true)) {
+            if (in_array($name, ['staff.reports.evidence', 'staff.reports.media', 'staff.boosts.preview', 'staff.exports.download'], true)) {
                 continue;
             }
             $segments = array_map(fn ($segment) => str_starts_with($segment, '{')

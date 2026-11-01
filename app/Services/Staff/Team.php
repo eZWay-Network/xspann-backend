@@ -138,7 +138,16 @@ final class Team
             }
             $action = $input['action'];
             $role = $action === 'role' ? $input['role'] : $member->role;
-            $enabled = $action === 'disable' ? false : (bool) $member->enabled;
+            $enabled = $action === 'disable' ? false : ($action === 'enable' ? true : (bool) $member->enabled);
+            if ($action === 'enable') {
+                abort_unless(!$member->enabled && Sessions::eligible(User::find($member->user_id)) && $member->mfa_secret, 409, 'This account requires a new enrollment.');
+                // A retained, decryptable enrolled factor is required; enabling never replaces it.
+                try {
+                    Totp::code(Hash::decrypt($member->mfa_secret), (int) $member->last_counter);
+                } catch (\Throwable) {
+                    throw new StaffException('This account requires a new authenticator enrollment.', 409);
+                }
+            }
 
             if ((int) $member->user_id === $context->user->id && $action === 'role') {
                 throw new StaffException('You cannot assign your own role.', 403);

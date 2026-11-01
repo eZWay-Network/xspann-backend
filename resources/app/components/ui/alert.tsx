@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 export function Alert({
@@ -6,9 +6,14 @@ export function Alert({
   variant = "error",
 }: {
   children: ReactNode;
-  variant?: "error" | "success";
+  variant?: "error" | "success" | "info";
 }) {
-  const Icon = variant === "error" ? CircleAlert : CircleCheck;
+  const Icon =
+    variant === "error"
+      ? CircleAlert
+      : variant === "success"
+        ? CircleCheck
+        : Info;
   return (
     <div
       role={variant === "error" ? "alert" : "status"}
@@ -16,7 +21,9 @@ export function Alert({
         "flex items-start gap-2.5 rounded-md border p-3 text-sm leading-5",
         variant === "error"
           ? "border-destructive/15 bg-destructive-soft text-destructive"
-          : "border-success/15 bg-success-soft text-success",
+          : variant === "success"
+            ? "border-success/15 bg-success-soft text-success"
+            : "border-border bg-muted/40 text-muted-foreground",
       )}
     >
       <Icon className="mt-0.5 size-4 shrink-0" />

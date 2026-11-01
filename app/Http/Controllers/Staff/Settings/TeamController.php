@@ -34,6 +34,7 @@ final class TeamController
                 'id' => (int) $row->id, 'user_id' => (int) $row->user_id, 'name' => $row->name, 'username' => $row->username,
                 'role' => $row->role, 'enabled' => (bool) $row->enabled, 'version' => (int) $row->version,
                 'action_url' => (string) route('staff.team.update', ['member' => $row->id]),
+                'show_url' => (string) route('staff.team.show', ['member' => $row->id]),
                 'can_change_role' => (int) $row->user_id !== Context::from($request)->user->id,
             ], $members->items()),
             'invitations' => array_map(fn ($row) => [
@@ -47,6 +48,20 @@ final class TeamController
             'invite_url' => (string) route('staff.team.invite'),
             'confirmation_url' => (string) route('staff.challenge')->withQuery(['destination' => '/settings/team']),
             'page' => ['title' => 'Team & access', 'breadcrumbs' => []],
+        ]);
+    }
+
+    public function show(Request $request, int $member): Response
+    {
+        $row = DB::table('staff_accounts')->select(['id', 'user_id', 'role', 'enabled', 'version', 'created_at', 'updated_at'])->where('id', $member)->firstOrFail();
+        $fields = \App\Http\Resources\Staff\Records::fields($row, ['id', 'user_id', 'role', 'enabled', 'version', 'created_at', 'updated_at'], 'UTC');
+        $fields[] = ['label' => 'Active browser sessions', 'value' => DB::table('staff_sessions')->where('user_id', $row->user_id)
+            ->whereNull('revoked_at')->where('expires_at', '>', Sessions::timestamp())->where('absolute_expires_at', '>', Sessions::timestamp())->count()];
+
+        return Inertia::render('settings/member', [
+            'page' => ['title' => 'Staff member #' . $member, 'breadcrumbs' => []], 'fields' => $fields,
+            'links' => [['label' => 'Manage team access', 'url' => (string) route('staff.team')]],
+            'permissions' => Permissions::forRole($row->role),
         ]);
     }
 

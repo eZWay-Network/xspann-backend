@@ -12,6 +12,11 @@ class PublishReleases implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\Staff\Heartbeats::run('releases', fn () => $this->maintain());
+    }
+
+    private function maintain(): void
+    {
         app(Releases::class)->runDue();
     }
 }

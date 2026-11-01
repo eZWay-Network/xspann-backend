@@ -52,7 +52,7 @@ final class StaffPerimeter
             ) {
                 return $this->error(404);
             }
-            if (preg_match('~^(?:users|artists|content/(?:videos|audios|playlists)|moderation/(?:reports|appeals)|promotions/(?:boosts|placements)|operations/(?:privacy|actions))/([^/]+)(?:/|$)~D', trim($request->getPath(), '/'), $match)
+            if (preg_match('~^(?:users|artists|content/(?:videos|audios|playlists)|moderation/(?:reports|appeals)|promotions/(?:boosts|placements)|billing/(?:subscriptions|invoices|checkouts|adjustments|webhooks)|releases|exports|settings/taxonomy/genres|operations/media/(?:videos|audios)|operations/(?:privacy|actions|communications))/([^/]+)(?:/|$)~D', trim($request->getPath(), '/'), $match)
                 && trim($request->getPath(), '/') !== 'promotions/placements/create'
                 && !preg_match('/^[1-9][0-9]{0,14}$/D', $match[1])) {
                 return $this->error(404);

@@ -14,6 +14,11 @@ class FoundationMaintenance implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\Staff\Heartbeats::run('privacy', fn () => $this->maintain());
+    }
+
+    private function maintain(): void
+    {
         \App\Services\CommunicationPrivacy::maintain();
 
         DB::table('account_action_tokens')->where('expires_at', '<=', now()->toDateTimeString())->delete();

@@ -1,3 +1,7 @@
+import {
+  RecoveryDialog,
+  type RecoveryAction,
+} from "@/components/staff/recovery-form";
 import type { AppPageProps } from "@/types";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, router, usePage } from "@inertiajs/react";
@@ -25,6 +29,7 @@ export type RecordRow = {
   description: string | null;
   created_at: string | null;
   links?: { label: string; url: string }[];
+  recovery?: (RecoveryAction & { key: string }) | null;
 };
 export type RecordsProps = {
   rows: RecordRow[];
@@ -44,6 +49,7 @@ export type RecordsProps = {
   description: string;
   create_url?: string | null;
   children?: ReactNode;
+  renderAction?: (row: RecordRow) => ReactNode;
 };
 export function RecordsScreen({
   rows,
@@ -55,6 +61,7 @@ export function RecordsScreen({
   description,
   create_url,
   children,
+  renderAction,
 }: RecordsProps) {
   const [search, setSearch] = useState(filters.q);
   const [references, setReferences] = useState<Record<string, string>>({});
@@ -208,6 +215,8 @@ export function RecordsScreen({
                       {row.created_at ? formatDateTime(row.created_at) : "—"}
                     </TableCell>
                     <TableCell>
+                      {renderAction?.(row)}
+                      {row.recovery && <RecoveryDialog action={row.recovery} />}
                       {row.url && (
                         <Link
                           href={row.url}

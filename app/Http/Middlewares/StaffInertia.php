@@ -15,6 +15,7 @@ final class StaffInertia
         $context = Context::from($request);
 
         Inertia::share([
+            'workspace' => Inertia::always(\App\Services\Staff\Settings::workspace()),
             'auth' => Inertia::always(SharedProps::auth($context)),
             'navigation' => Inertia::always(SharedProps::navigation($context)),
             'preferences' => Inertia::always(SharedProps::preferences($context)),

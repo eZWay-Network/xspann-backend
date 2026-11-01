@@ -46,9 +46,9 @@ class Webhooks
         }
     }
 
-    public function process(int $id): void
+    public function process(int $id, ?int $maxPages = null): void
     {
-        Cache::lock("billing.webhook.$id", 300)->block(10, function () use ($id): void {
+        Cache::lock("billing.webhook.$id", 300)->block(10, function () use ($id, $maxPages): void {
             $record = Billing::table('webhooks')->where('id', $id)->first();
             if (!$record || in_array($record->status, ['processed', 'ignored'], true)) {
                 return;
@@ -61,7 +61,7 @@ class Webhooks
             ]);
             try {
                 $event = json_decode(Hash::decrypt($record->payload), true, flags: JSON_THROW_ON_ERROR);
-                $applied = $this->apply($event);
+                $applied = $this->apply($event, $maxPages);
 
                 DB::table('billing_webhooks')->where('id', $id)->update([
                     'status' => $applied ? 'processed' : 'ignored',
@@ -82,7 +82,7 @@ class Webhooks
         });
     }
 
-    private function apply(array $event): bool
+    private function apply(array $event, ?int $maxPages): bool
     {
         $remote = [];
         $type = $event['type'];
@@ -127,11 +127,11 @@ class Webhooks
             return false;
         }
 
-        return Billing::locked($attempt->user_id ?? -$attempt->customer_id, function () use ($attempt, $id, $checkoutEvent, $invoiceEvent, $subscriptionEvent, $refundEvent, $disputeEvent, $type, $remote): bool {
+        return Billing::locked($attempt->user_id ?? -$attempt->customer_id, function () use ($attempt, $id, $checkoutEvent, $invoiceEvent, $subscriptionEvent, $refundEvent, $disputeEvent, $type, $remote, $maxPages): bool {
             // Retrieve again after locking: old event snapshots are never an ordering authority.
             $subscription = $checkoutEvent
                 ? $this->reconciliation->checkout($attempt, $this->provider->retrieveCheckout($id), validateOffer: false)
-                : $this->reconciliation->recoverCheckout($attempt, validateOffer: false);
+                : $this->reconciliation->recoverCheckout($attempt, validateOffer: false, maxPages: $maxPages);
 
             if (!$subscription) {
                 if (!$checkoutEvent) {
@@ -146,15 +146,15 @@ class Webhooks
             }
 
             if ($invoiceEvent) {
-                $this->reconciliation->invoice($subscription, $id);
+                $this->reconciliation->invoice($subscription, $id, maxPages: $maxPages);
             } elseif ($checkoutEvent || $subscriptionEvent) {
-                $this->reconciliation->invoices($subscription);
+                $this->reconciliation->invoices($subscription, $maxPages);
             } else {
                 $adjustment = $type === 'charge.refunded' ? null : [
                     'kind' => $disputeEvent ? 'dispute' : 'refund',
                     'object' => $this->provider->request('GET', ($disputeEvent ? '/disputes/' : '/refunds/') . $id),
                 ];
-                $this->reconciliation->invoice($subscription, $remote['id'], $adjustment);
+                $this->reconciliation->invoice($subscription, $remote['id'], $adjustment, $maxPages);
             }
 
             return true;

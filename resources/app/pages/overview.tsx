@@ -1,8 +1,10 @@
-import { router } from "@inertiajs/react";
-import { useState } from "react";
+import { ReportFilters } from "@/components/staff/report-filters";
+import { ExportButton } from "@/components/staff/export-button";
+import {
+  FinanceSummary,
+  type FinanceReport,
+} from "@/components/staff/finance-summary";
 import { PageHeader } from "@/components/page-header";
-import { Select } from "@/components/ui/select";
-import { DateRange } from "@/components/ui/date-range";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 import { ActivityChart } from "@/components/dashboard/activity-chart";
 import { Distribution } from "@/components/dashboard/distribution";
@@ -13,50 +15,32 @@ export default function Overview({
   overview,
   filters,
   filter_url,
+  finance,
+  export_url,
 }: {
   overview: OverviewData;
   filters: { period: string; from: string; to: string; timezone: string };
   filter_url: string;
+  finance: FinanceReport | null;
+  export_url: string | null;
 }) {
-  const [loading, setLoading] = useState(false);
-  const { auth, environment, preferences, formatDateTime } = useApp();
-  const apply = (data: { period: string; from?: string; to?: string }) =>
-    router.get(filter_url, data, {
-      preserveScroll: true,
-      preserveState: true,
-      onStart: () => setLoading(true),
-      onFinish: () => setLoading(false),
-    });
+  const { auth, environment, preferences, formatDateTime, workspace } =
+    useApp();
   return (
-    <div className="page-stack" aria-busy={loading}>
+    <div className="page-stack">
       <PageHeader
         title="Workspace overview"
-        description={`Welcome back, ${auth!.user.name}. Here’s what’s happening across your workspace.`}
+        description={`Welcome back, ${auth!.user.name}. Here’s what’s happening in ${workspace.name}.`}
         actions={
           <>
-            <Select
-              label="Reporting period"
-              value={filters.period}
-              disabled={loading}
-              onValueChange={(period) => {
-                if (period !== "custom") apply({ period });
-              }}
-              options={[
-                { value: "month", label: "This month" },
-                { value: "7", label: "Last 7 days" },
-                { value: "30", label: "Last 30 days" },
-                { value: "90", label: "Last 90 days" },
-                ...(filters.period === "custom"
-                  ? [{ value: "custom", label: "Custom dates" }]
-                  : []),
-              ]}
-            />
-            <DateRange
-              from={filters.from}
-              to={filters.to}
-              disabled={loading}
-              onChange={(from, to) => apply({ period: "custom", from, to })}
-            />
+            <ReportFilters filters={filters} url={filter_url} />
+            {export_url && (
+              <ExportButton
+                url={export_url}
+                type="dashboard"
+                filters={filters}
+              />
+            )}
           </>
         }
       />
@@ -65,6 +49,7 @@ export default function Overview({
         <ActivityChart chart={overview.chart} />
         <Distribution distribution={overview.distribution} />
       </div>
+      {finance && <FinanceSummary report={finance} />}
       <AttentionRecords />
       <div className="flex flex-wrap justify-between gap-2 text-[11px] leading-5 text-muted-foreground">
         <p>{overview.comparison_note}</p>

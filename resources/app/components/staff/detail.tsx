@@ -20,6 +20,7 @@ export type DetailProps = {
   history?: RecordLink[];
   public_links?: RecordLink[];
   case_target?: CaseTarget | null;
+  actions?: ReactNode;
   children?: ReactNode;
 };
 export function DetailFields({
@@ -78,6 +79,7 @@ export function DetailScreen({
   history = [],
   public_links = [],
   case_target,
+  actions,
   children,
 }: DetailProps) {
   const { page, errors } = usePage<AppPageProps>().props;
@@ -86,6 +88,7 @@ export function DetailScreen({
       <PageHeader
         title={page.title}
         description="Operational record and related activity."
+        actions={actions}
       />
       <FormErrors errors={{ form: errors.form }} />
       <DetailFields fields={fields} />

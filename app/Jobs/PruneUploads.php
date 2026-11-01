@@ -17,6 +17,11 @@ class PruneUploads implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\Staff\Heartbeats::run('uploads', fn () => $this->maintain());
+    }
+
+    private function maintain(): void
+    {
         Cache::lock('uploads.prune', 3600)->block(1, function (): void {
             $cutoff = time() - max(24, (int) config('storage.pending_upload_hours', 48)) * 3600;
             PendingUploads::prune($cutoff);

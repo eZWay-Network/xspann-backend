@@ -54,6 +54,7 @@ export interface AppPageProps extends PageProps {
     session_expires_at: string;
   } | null;
   navigation: NavigationGroup[];
+  workspace: { name: string; support_url: string | null };
   csrf_token: string;
   page: { title: string; breadcrumbs: { title: string; url: string | null }[] };
   environment: { app: string; billing: "test" | "live" };

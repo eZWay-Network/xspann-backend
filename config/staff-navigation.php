@@ -1,6 +1,6 @@
 <?php
 
-// Add modules only when their actual browser workflows ship.
+// Navigation and command search share this permission-scoped catalog.
 return [
     [
         'label' => 'Workspace',
@@ -55,10 +55,31 @@ return [
         ]],
     ],
     [
+        'label' => 'Billing', 'placement' => 'main',
+        'items' => [[
+            'title' => 'Billing', 'icon' => 'activity',
+            'children' => [
+                ['title' => 'Subscriptions', 'route' => 'staff.billing.subscriptions.index', 'icon' => 'activity', 'ability' => 'billing.view'],
+                ['title' => 'Invoices', 'route' => 'staff.billing.invoices.index', 'icon' => 'activity', 'ability' => 'billing.view'],
+                ['title' => 'Checkouts', 'route' => 'staff.billing.checkouts.index', 'icon' => 'activity', 'ability' => 'billing.view'],
+                ['title' => 'Adjustments', 'route' => 'staff.billing.adjustments.index', 'icon' => 'activity', 'ability' => 'billing.view'],
+                ['title' => 'Webhooks', 'route' => 'staff.billing.webhooks.index', 'icon' => 'activity', 'ability' => 'billing.view'],
+                ['title' => 'Finance reports', 'route' => 'staff.billing.reports', 'icon' => 'activity', 'ability' => 'analytics.finance.view'],
+            ],
+        ]],
+    ],
+    [
         'label' => 'Operations', 'placement' => 'main',
         'items' => [[
             'title' => 'Operations', 'icon' => 'activity',
             'children' => [
+                ['title' => 'Operations overview', 'route' => 'staff.operations.overview', 'icon' => 'activity', 'ability' => 'operations.view'],
+                ['title' => 'Jobs & workers', 'route' => 'staff.operations.jobs', 'icon' => 'activity', 'ability' => 'operations.view'],
+                ['title' => 'Media processing', 'route' => 'staff.media', 'icon' => 'video', 'ability' => 'operations.view'],
+                ['title' => 'Releases', 'route' => 'staff.releases.index', 'icon' => 'clock', 'ability' => 'operations.view'],
+                ['title' => 'Communications', 'route' => 'staff.communications', 'icon' => 'bell', 'ability' => 'communications.view'],
+                ['title' => 'Audit history', 'route' => 'staff.audit', 'icon' => 'shield', 'ability' => 'audit.view'],
+                ['title' => 'My exports', 'route' => 'staff.exports.index', 'icon' => 'activity', 'ability' => 'exports.create'],
                 ['title' => 'Privacy requests', 'route' => 'staff.privacy.index', 'icon' => 'shield', 'ability' => 'privacy.view'],
             ],
         ]],
@@ -72,7 +93,14 @@ return [
                 'icon' => 'settings',
                 'children' => [
                     ['title' => 'My profile', 'route' => 'staff.profile', 'icon' => 'user'],
+                    ['title' => 'Preferences', 'route' => 'staff.preferences', 'icon' => 'settings'],
                     ['title' => 'Security & sessions', 'route' => 'staff.security', 'icon' => 'shield'],
+                    ['title' => 'Role permissions', 'route' => 'staff.settings.roles', 'icon' => 'shield', 'ability' => 'staff.view'],
+                    ['title' => 'General', 'route' => 'staff.settings.general', 'icon' => 'settings', 'ability' => 'settings.view'],
+                    ['title' => 'Catalog', 'route' => 'staff.settings.catalog', 'icon' => 'settings', 'ability' => 'settings.view'],
+                    ['title' => 'Policies', 'route' => 'staff.settings.policies', 'icon' => 'settings', 'ability' => 'settings.view'],
+                    ['title' => 'Taxonomy', 'route' => 'staff.settings.taxonomy', 'icon' => 'settings', 'ability' => 'settings.view'],
+                    ['title' => 'Integrations', 'route' => 'staff.settings.integrations', 'icon' => 'settings', 'ability' => 'settings.view'],
                     ['title' => 'Team & access', 'route' => 'staff.team', 'icon' => 'users', 'ability' => 'staff.view'],
                 ]
             ],

@@ -15,7 +15,7 @@ class ArtistController extends Controller
     public function taxonomy(): Response
     {
         return json(['data' => [
-            'genres' => ArtistGenre::orderBy('id')->get()->map(fn($genre) => [
+            'genres' => ArtistGenre::where('archived', false)->orderByRaw('position ASC, id ASC')->get()->map(fn($genre) => [
                 'id' => $genre->id,
                 'name' => $genre->name,
                 'slug' => $genre->slug,

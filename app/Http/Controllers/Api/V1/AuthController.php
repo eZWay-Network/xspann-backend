@@ -11,7 +11,6 @@ use App\Services\{MediaProcessor, PendingUploads, StorageService};
 use App\Services\Social\GoogleAuth;
 use Spark\Carbon;
 use Spark\Facades\Auth;
-use Spark\Facades\Cache;
 use Spark\Facades\DB;
 use Spark\Facades\Hash;
 use Spark\Foundation\Exceptions\ValidationException;
@@ -113,28 +112,7 @@ class AuthController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        Cache::lock('accounts.reset.' . hash('sha256', $input->email()), 10)->block(5, function () use ($input) {
-            DB::transaction(function () use ($input) {
-                $reset = query('password_reset_tokens')
-                    ->where('email', $input->email())
-                    ->first();
-
-                $user = User::where('email', $input->email())->first();
-                if (
-                    !$reset || !$user || !Hash::password($input->token, $reset->token)
-                    || Carbon::parse($reset->created_at)->addMinutes(config('app.password_reset_expiration_minutes', 60))->isPast()
-                ) {
-                    abort(422, 'This password reset token is invalid.');
-                }
-
-                $user->update(['password' => $input->password(), 'remember_token' => null]);
-
-                query('jwt_access_tokens')->where('user_id', $user->id)->delete();
-                query('password_reset_tokens')->where('email', $user->email)->delete();
-                query('account_action_tokens')->where('user_id', $user->id)->delete();
-                \App\Services\Staff\Sessions::revokeAll($user->id);
-            });
-        });
+        \App\Services\PasswordRecovery::reset($input->email(), $input->token, $input->password());
 
         return json(['data' => ['message' => 'Password reset successfully. Please log in again.']]);
     }

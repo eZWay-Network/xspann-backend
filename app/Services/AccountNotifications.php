@@ -12,11 +12,11 @@ use function is_string;
 
 class AccountNotifications
 {
-    public function reset(User $user): void
+    public function reset(User $user, bool $staff = false): void
     {
         $key = 'accounts.reset.' . hash('sha256', $user->email);
 
-        Cache::lock($key, 10)->block(5, function () use ($user) {
+        Cache::lock($key, 10)->block(5, function () use ($user, $staff) {
             $existing = query('password_reset_tokens')
                 ->where('email', $user->email)
                 ->first();
@@ -33,7 +33,8 @@ class AccountNotifications
                 'created_at' => now(),
             ], ['email'], ['token', 'created_at']);
 
-            $url = rtrim(config('app.frontend_url'), '/') . '/reset-password?' . http_build_query(['token' => $token, 'email' => $user->email]);
+            $destination = $staff ? (string) url('/reset-password') : rtrim(config('app.frontend_url'), '/') . '/reset-password';
+            $url = htmlspecialchars($destination . '?' . http_build_query(['token' => $token, 'email' => $user->email]), ENT_QUOTES, 'UTF-8');
 
             $body = "Reset your password using this link (valid for 60 minutes):<br/><br/>" .
                 "<a href=\"$url\">Reset Password</a> <br/><br/>or open the link in your browser. <br><small>$url</small>"

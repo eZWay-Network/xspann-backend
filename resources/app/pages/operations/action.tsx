@@ -12,22 +12,30 @@ export default function Operation(
   return (
     <DetailScreen
       {...props}
-      links={[{ label: "Open privacy request", url: props.target_url }]}
+      links={[{ label: "Open source record", url: props.target_url }]}
+      actions={
+        <Button
+          variant="secondary"
+          onClick={() =>
+            router.get(props.refresh_url, {}, { preserveScroll: true })
+          }
+        >
+          Refresh outcome
+        </Button>
+      }
     >
       {["queued", "running"].includes(props.status) && (
-        <Alert>
+        <Alert variant="info">
           The action is {props.status}. Completion will be shown after the
           worker records its outcome.
         </Alert>
       )}
-      <Button
-        variant="secondary"
-        onClick={() =>
-          router.get(props.refresh_url, {}, { preserveScroll: true })
-        }
-      >
-        Refresh outcome
-      </Button>
+      {props.status === "failed" && (
+        <Alert>
+          Recovery could not finish. Review the source record and resolve the
+          cause before requesting another attempt.
+        </Alert>
+      )}
     </DetailScreen>
   );
 }

@@ -183,7 +183,7 @@ class Reconciliation
         return $attempt;
     }
 
-    public function invoice(object $subscription, string $invoiceId, ?array $eventAdjustment = null): void
+    public function invoice(object $subscription, string $invoiceId, ?array $eventAdjustment = null, ?int $maxPages = null): void
     {
         $invoice = $this->provider->request('GET', '/invoices/' . rawurlencode($invoiceId));
         Billing::assertEnvironment($invoice);
@@ -239,7 +239,7 @@ class Reconciliation
         if ($paid) {
             $charge = app(Adjustments::class)->settlement($invoice, $customer->customer_id);
             foreach (['refund', 'dispute'] as $kind) {
-                $adjustments[$kind] = $this->chargeAdjustments($kind, $charge['id']);
+                $adjustments[$kind] = $this->chargeAdjustments($kind, $charge['id'], $maxPages);
             }
             if ($eventAdjustment) {
                 // The list was retrieved later; an earlier GET must not overwrite its newer status.
@@ -312,12 +312,14 @@ class Reconciliation
         });
     }
 
-    private function chargeAdjustments(string $kind, string $chargeId): array
+    private function chargeAdjustments(string $kind, string $chargeId, ?int $maxPages): array
     {
         $objects = [];
         $cursor = null;
         $seen = [];
+        $pages = 0;
         do {
+            abort_if($maxPages !== null && ++$pages > $maxPages, 503, 'Targeted recovery reached its page limit.');
             $page = $this->provider->request('GET', '/' . $kind . 's', array_filter([
                 'charge' => $chargeId,
                 'limit' => 100,
@@ -354,7 +356,7 @@ class Reconciliation
         return $current;
     }
 
-    public function recoverCheckout(object $attempt, bool $validateOffer = true): ?object
+    public function recoverCheckout(object $attempt, bool $validateOffer = true, ?int $maxPages = null): ?object
     {
         $attempt = $this->freshAttempt($attempt);
         if ($attempt->session_id) {
@@ -362,13 +364,15 @@ class Reconciliation
         }
         $customer = DB::table('billing_customers')->where('id', $attempt->customer_id)->first();
         if (!$customer->customer_id && $customer->request_started_at) {
-            $customer = $this->recoverCustomer($customer);
+            $customer = $this->recoverCustomer($customer, $maxPages);
         }
         if (!$customer->customer_id) {
             return null;
         }
         $cursor = null;
+        $pages = 0;
         do {
+            abort_if($maxPages !== null && ++$pages > $maxPages, 503, 'Targeted recovery reached its page limit.');
             $page = $this->provider->request('GET', '/checkout/sessions', array_filter([
                 'customer' => $customer->customer_id,
                 'limit' => 100,
@@ -388,10 +392,12 @@ class Reconciliation
         return null;
     }
 
-    public function recoverCustomer(object $customer): object
+    public function recoverCustomer(object $customer, ?int $maxPages = null): object
     {
         $cursor = null;
+        $pages = 0;
         do {
+            abort_if($maxPages !== null && ++$pages > $maxPages, 503, 'Targeted recovery reached its page limit.');
             $page = $this->provider->request('GET', '/customers', array_filter([
                 'created' => ['gte' => strtotime($customer->request_started_at . ' UTC') - 60],
                 'limit' => 100,
@@ -418,10 +424,12 @@ class Reconciliation
         return $customer;
     }
 
-    public function invoices(object $subscription): void
+    public function invoices(object $subscription, ?int $maxPages = null): void
     {
         $cursor = null;
+        $pages = 0;
         do {
+            abort_if($maxPages !== null && ++$pages > $maxPages, 503, 'Targeted recovery reached its page limit.');
             $page = $this->provider->request('GET', '/invoices', array_filter([
                 'subscription' => $subscription->subscription_id,
                 'limit' => 100,
@@ -429,7 +437,7 @@ class Reconciliation
             ]));
             abort_unless(is_array($page['data'] ?? null), 503, 'Invalid invoice recovery response.');
             foreach ($page['data'] as $invoice) {
-                $this->invoice($subscription, $invoice['id']);
+                $this->invoice($subscription, $invoice['id'], maxPages: $maxPages);
             }
             $next = $page['data'] ? end($page['data'])['id'] : null;
             abort_if(!empty($page['has_more']) && (!$next || $next === $cursor), 503, 'Invalid invoice recovery cursor.');

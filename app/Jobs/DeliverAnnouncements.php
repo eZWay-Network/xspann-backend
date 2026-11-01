@@ -13,6 +13,11 @@ class DeliverAnnouncements implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\Staff\Heartbeats::run('notifications', fn () => $this->maintain());
+    }
+
+    private function maintain(): void
+    {
         foreach (DB::table('announcements')->where('status', 'queued')->orderByRaw('updated_at ASC, id ASC')->limit(50)->pluck('id') as $id) {
             try {
                 Announcements::deliver((int) $id);

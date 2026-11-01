@@ -15,7 +15,7 @@ export function AppHeader({
   unreadCount: number;
   onLogout: () => void;
 }) {
-  const { pageTitle } = useApp();
+  const { pageTitle, workspace } = useApp();
   return (
     <header className="z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b bg-card px-4 sm:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-2">
@@ -60,6 +60,16 @@ export function AppHeader({
             </span>
           )}
         </Button>
+        {workspace?.support_url && (
+          <a
+            className="hidden text-xs text-muted-foreground hover:text-primary sm:inline"
+            href={workspace.support_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Support
+          </a>
+        )}
         <span className="mx-1 h-6 w-px bg-border sm:mx-2" />
         <AccountMenu onLogout={onLogout} />
       </div>

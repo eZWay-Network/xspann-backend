@@ -21,6 +21,10 @@ class ArtistPlaylists
                 $this->capabilities->deny('playlists');
             }
 
+            if (isset($input['genre_id'])) {
+                \App\Models\ArtistGenre::assertAssignable([(int) $input['genre_id']]);
+            }
+
             return ArtistPlaylist::create([
                 ...$input,
                 'title' => trim($input['title']),
@@ -63,6 +67,10 @@ class ArtistPlaylists
             $attributes = $items ? [] : array_diff_key($input, ['version' => true]);
             if (isset($attributes['title'])) {
                 $attributes['title'] = trim($attributes['title']);
+            }
+
+            if (isset($input['genre_id'])) {
+                \App\Models\ArtistGenre::assertAssignable([(int) $input['genre_id']], $playlist->genre_id ? [(int) $playlist->genre_id] : []);
             }
 
             $changed = ArtistPlaylist::whereKey($playlist->id)->where('version', (int) $input['version'])->update([

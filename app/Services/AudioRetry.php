@@ -29,7 +29,12 @@ class AudioRetry
                 continue;
             }
 
-            ProcessAudio::dispatch((int) $id)->send();
+            try {
+                ProcessAudio::dispatch((int) $id)->send();
+            } catch (\Throwable $exception) {
+                Audio::whereKey($id)->where('status', 'processing')->update(['status' => 'failed', 'updated_at' => now()]);
+                throw $exception;
+            }
             $queued = true;
         }
 

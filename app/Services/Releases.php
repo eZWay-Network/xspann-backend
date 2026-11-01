@@ -146,11 +146,12 @@ class Releases
         });
     }
 
-    public function runDue(): void
+    public function runDue(?int $videoId = null): void
     {
         $lastId = 0;
         do {
             $videos = Video::where('publication_state', 'scheduled')->where('status', '!=', Video::STATUS_DELETED)
+                ->when($videoId !== null, fn ($query) => $query->where('id', $videoId))
                 ->where('id', '>', $lastId)->orderBy('id')->limit(100)->get();
             foreach ($videos as $selected) {
                 $lastId = $selected->id;
@@ -244,7 +245,7 @@ class Releases
             User::increment('id', 0, where: ['id' => $selected->user_id]);
             Video::increment('version', 0, where: ['id' => $id]);
             $video = Video::whereKey($id)->whereIn('status', $from)->first();
-            if (!$video) {
+            if (!$video || ($state === Video::STATUS_PROCESSING && !self::eligible($video))) {
                 return false;
             }
             if ($video->status !== $state || $video->processing_state !== $state || $video->release_error !== $error) {

@@ -12,10 +12,20 @@ final class ProfileController
 {
     public function index(Request $request): Response
     {
+        return $this->page($request, 'settings/profile');
+    }
+
+    public function preferencesPage(Request $request): Response
+    {
+        return $this->page($request, 'settings/preferences');
+    }
+
+    private function page(Request $request, string $component): Response
+    {
         $context = Context::from($request);
         $preferences = DB::table('staff_preferences')->where('user_id', $context->user->id)->first();
 
-        return Inertia::render('settings/profile', [
+        return Inertia::render($component, [
             'profile' => ['name' => $context->user->name, 'username' => $context->user->username],
             'preferences' => [
                 'timezone' => $preferences->timezone ?? 'UTC', 'locale' => $preferences->locale ?? 'en',
@@ -25,7 +35,7 @@ final class ProfileController
             'timezones' => \DateTimeZone::listIdentifiers(),
             'profile_url' => (string) route('staff.profile.update'),
             'preferences_url' => (string) route('staff.preferences.update'),
-            'page' => ['title' => 'My profile', 'breadcrumbs' => []],
+            'page' => ['title' => $component === 'settings/preferences' ? 'Preferences' : 'My profile', 'breadcrumbs' => []],
         ]);
     }
 
@@ -50,6 +60,7 @@ final class ProfileController
         $context = Context::from($request);
         $data = $request->validated()->toArray();
         \App\Services\Staff\Team::locked(function () use ($context, $data): void {
+            Sessions::requireCurrent($context);
             $current = DB::table('staff_preferences')->where('user_id', $context->user->id)->first();
 
             if ((int) ($current->version ?? 0) !== (int) $data['version']) {
@@ -62,6 +73,6 @@ final class ProfileController
         });
         Inertia::flash('success', 'Your workspace preferences have been saved.');
 
-        return Inertia::redirect((string) route('staff.profile'), 303);
+        return Inertia::redirect((string) route(parse_url((string) $request->referer(), PHP_URL_PATH) === '/settings/preferences' ? 'staff.preferences' : 'staff.profile'), 303);
     }
 }

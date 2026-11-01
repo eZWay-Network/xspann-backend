@@ -27,13 +27,15 @@ php spark queue:work --sleep=1
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
 
-## Staff implementation — Step 2
+## Staff implementation — Step 3
 
 Community, content, moderation, promotions and privacy now use root-level browser routes in `routes/web.php`, with cookie authentication, fresh MFA, CSRF and per-action permissions. Reports support independent staff intake, triage, encrypted notes, explicit audited evidence and appeal review. Promotion tools reuse the existing credit, consent and proof rules. Privacy retries create durable, actor-authorized operations on the `staff` queue.
 
 The 15 legacy `/api/v1/admin/*` operations are removed. The customer API retains exactly **157 method/path pairs**; `purpose=staff` reauthentication is retired. See [Step 2 review and deployment](docs/ADMIN_STEP_2_REVIEW.md) and [browser request examples](docs/ADMIN_STEP_2_REVIEW.http). Apply `migration_2026_11_01_150000_staff_community_workflows.php` with `php spark migrate` during the coordinated code cutover, then restart existing workers and supervise `php spark queue:work --queue=staff --sleep=1`. This migration invalidates old JWT staff grants. Use the browser login/challenge flow for staff access.
 
-Finance, the remaining operations/settings pages and whole-panel acceptance remain Step 3. The implementation does not enable bookings, live sales or pilot capacity.
+Step 3 adds environment-scoped finance records/reports, reviewed adjustment allocation, typed recovery jobs, worker observations, controlled settings/taxonomy, and private expiring report exports. Password recovery, membership re-enablement and preferences use the established browser perimeter. All 112 named staff routes remain in `routes/web.php`; the existing Inertia/React/Base UI stack and pinned dependencies are unchanged.
+
+Apply `migration_2026_11_01_160000_staff_finance_operations.php` with the coordinated backend/assets deployment and restart all named workers. It adds staff settings/exports, heartbeat duration and taxonomy archive/order/version metadata. See [Step 3 delivery and operating runbook](docs/ADMIN_STEP_3_REVIEW.md) and the [complete route/permission matrix](docs/ADMIN_STEP_3_ROUTES.md). The handoff package includes ignored documentation, screenshots, test evidence and pinned manifests/locks. The implementation does not enable bookings, live sales or pilot capacity.
 
 ## Step 6 integration and web handoff
 

@@ -13,6 +13,11 @@ class BillingMaintenance implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\Staff\Heartbeats::run('billing', fn () => $this->maintain());
+    }
+
+    private function maintain(): void
+    {
         foreach (Billing::table('webhooks')->where(function ($query): void {
             $query->where(fn($query) => $query->whereIn('status', ['pending', 'failed'])
                 ->where('updated_at', '<', Billing::timestamp(time() - 60)))

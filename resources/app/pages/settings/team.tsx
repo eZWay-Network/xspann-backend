@@ -38,6 +38,7 @@ type Member = {
   enabled: boolean;
   version: number;
   action_url: string;
+  show_url: string;
   can_change_role: boolean;
 };
 type Invitation = {
@@ -157,7 +158,12 @@ export default function Team({
                   <div className="flex items-center gap-3">
                     <Avatar name={member.name} />
                     <div>
-                      <span className="font-medium">{member.name}</span>
+                      <Link
+                        href={member.show_url}
+                        className="font-medium hover:text-primary"
+                      >
+                        {member.name}
+                      </Link>
                       <span className="mt-0.5 block text-[11px] text-muted-foreground">
                         @{member.username}
                       </span>
@@ -276,8 +282,9 @@ export default function Team({
             Confirm identity
           </Link>
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            The final enabled administrator is protected. A disabled account
-            needs a new invitation to enroll again.
+            The final enabled administrator is protected. A disabled account can
+            be enabled with its retained factor, or invited to enroll a new
+            factor.
           </p>
         </div>
       </SettingsSection>
@@ -462,7 +469,7 @@ function MemberForm({
               : []),
             ...(member.enabled
               ? [{ value: "disable", label: "Disable staff access" }]
-              : []),
+              : [{ value: "enable", label: "Enable retained staff access" }]),
           ]}
           className="w-full"
         />

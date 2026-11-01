@@ -2,6 +2,7 @@
 
 namespace App\Services\Billing;
 
+use App\Services\Staff\{Context, Sessions};
 use Spark\Facades\DB;
 use function in_array;
 use function is_int;
@@ -145,7 +146,15 @@ class Adjustments
         }
     }
 
-    public static function allocate(int $id, string $allocation, string $reason): void
+    public static function version(object $record): string
+    {
+        return hash('sha256', json_encode([
+            $record->id, $record->invoice_id, $record->environment, $record->kind, $record->status,
+            $record->amount, $record->currency, $record->allocation, $record->reviewed_at, $record->review_note,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    public static function allocate(int $id, string $allocation, string $reason, Context|int|null $actor = null, ?string $version = null): void
     {
         abort_unless(
             in_array($allocation, ['full_period', 'no_service_change', 'released'], true) && mb_strlen(trim($reason)) >= 10,
@@ -162,12 +171,21 @@ class Adjustments
 
         $invoice = DB::table('billing_invoices')->where('id', $record->invoice_id)->first();
         $subscription = DB::table('billing_subscriptions')->where('id', $invoice->subscription_id)->first();
-        Billing::locked($subscription->user_id ?? -$subscription->customer_id, fn() => DB::transaction(function () use ($id, $allocation, $reason, $invoice, $subscription): void {
+        Billing::locked($subscription->user_id ?? -$subscription->customer_id, fn() => DB::transaction(function () use ($id, $allocation, $reason, $invoice, $subscription, $actor, $version): void {
+            // Take the billing mutex before locking browser identity rows, as provider recovery does.
+            if ($actor instanceof Context) {
+                $current = Sessions::requireCurrent($actor);
+                $current->authorize('billing.adjustments.allocate');
+                abort_unless($current->recent((int) config('staff.confirmation_seconds')), 409, 'Confirm your credentials and MFA before allocating this adjustment.');
+            }
+            $actorId = $actor instanceof Context ? (int) $actor->user->id : $actor;
             if ($subscription->user_id) {
                 \App\Models\User::increment('id', 0, where: ['id' => $subscription->user_id]);
             }
 
-            $record = Billing::table('adjustments')->where('id', $id)->first();
+            $record = Billing::table('adjustments')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($record !== null, 404);
+            abort_unless($version === null || hash_equals(self::version($record), $version), 409, 'The adjustment changed. Reload and review it again.');
             abort_unless(($record->kind === 'refund' && $record->status === 'succeeded' && $allocation !== 'released')
                 || ($record->kind === 'dispute' && $allocation === 'released'), 422, 'Allocation does not apply to this adjustment.');
 
@@ -180,7 +198,7 @@ class Adjustments
 
             self::refreshPeriod($invoice);
 
-            \App\Services\AuditTrail::record('billing.adjustment.allocated', ['adjustment_id' => $id, 'allocation' => $allocation], null, 'console');
+            \App\Services\AuditTrail::record('billing.adjustment.allocated', ['adjustment_id' => $id, 'allocation' => $allocation, 'previous_allocation' => $record->allocation, 'reason' => trim($reason)], $actorId, $actorId === null ? 'console' : 'staff');
         }));
     }
 }

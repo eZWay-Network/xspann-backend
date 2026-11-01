@@ -204,6 +204,7 @@ class PrivacyRequests
         DB::transaction(function () use ($user, $record): void {
             Communications::lock();
             CommunicationPrivacy::deleting($user->id);
+            \App\Services\Staff\Exports::deleting($user->id);
 
             // Remove personal activity snapshots retained in other users' notification lists.
             $lastId = 0;
@@ -275,6 +276,8 @@ class PrivacyRequests
             'follows' => ['follower_id', ['following_id', 'created_at']],
             'blocks' => ['blocker_id', ['blocked_id', 'created_at']],
             'reports' => ['user_id', ['id', 'target_type', 'target_id', 'reason', 'details', 'status', 'created_at']],
+            'staff_exports' => ['actor_id', ['type', 'environment', 'status', 'row_count', 'created_at', 'expires_at']],
+            'staff_operations' => ['actor_id', ['type', 'status', 'result_code', 'created_at', 'completed_at']],
             'staff_preferences' => ['user_id', ['timezone', 'locale', 'page_size', 'attention_enabled', 'created_at', 'updated_at']],
             'staff_accounts' => ['user_id', ['role', 'enabled', 'created_at', 'updated_at']],
             'moderation_appeals' => ['user_id', ['id', 'decision_id', 'explanation', 'status', 'resolution', 'created_at']],

@@ -16,6 +16,8 @@ final class DashboardController
         return Inertia::render('overview', [
             'overview' => fn() => Overview::read(Context::from($request), $range),
             'filters' => $range,
+            'finance' => Context::from($request)->can('analytics.finance.view') ? \App\Queries\Staff\Finance::read(Context::from($request), $range) : null,
+            'export_url' => Context::from($request)->can('exports.create') && Context::from($request)->can('analytics.platform.view') ? (string) route('staff.exports.store') : null,
             'filter_url' => (string) route('staff.dashboard'),
             'page' => ['title' => 'Overview', 'breadcrumbs' => []],
         ]);

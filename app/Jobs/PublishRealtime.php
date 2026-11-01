@@ -12,6 +12,11 @@ class PublishRealtime implements JobInterface
 
     public function handle(): void
     {
+        \App\Services\Staff\Heartbeats::run('realtime', fn () => $this->maintain());
+    }
+
+    private function maintain(): void
+    {
         Realtime::drain();
     }
 }
