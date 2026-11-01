@@ -56,8 +56,8 @@ command('audios:retry', function (Prompt $prompt, array $args): void {
 command('staff:enroll', function (Prompt $prompt, array $args): void {
     $id = filter_var($args['user'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     $role = $args['role'] ?? 'moderator';
-    if (!$id || !in_array($role, ['moderator', 'admin'], true)) {
-        throw new InvalidArgumentException('Use --user=<id> and --role=moderator|admin.');
+    if (!$id || !in_array($role, \App\Services\Staff\Permissions::roles(), true)) {
+        throw new InvalidArgumentException('Use --user=<id> and --role=' . implode('|', \App\Services\Staff\Permissions::roles()) . '.');
     }
     $user = \App\Models\User::findOrFail($id);
     $secret = \App\Services\Totp::secret();

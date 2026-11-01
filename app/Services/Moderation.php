@@ -207,7 +207,7 @@ class Moderation
         $restricted = DB::table('moderation_restrictions')->where('target_type', $type)->where('target_id', $id)->exists();
         if ($type === 'user') {
             User::whereKey($id)->whereIn('status', ['active', 'suspended'])->update(['status' => $restricted ? 'suspended' : 'active']);
-            DB::table('staff_sessions')->where('user_id', $id)->delete();
+            \App\Services\Staff\Sessions::revokeAll($id);
             if ($restricted) {
                 Realtime::retire($id);
             }

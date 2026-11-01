@@ -16,9 +16,9 @@ class FoundationMaintenance implements JobInterface
     {
         \App\Services\CommunicationPrivacy::maintain();
 
-        foreach (['account_action_tokens', 'staff_sessions'] as $table) {
-            DB::table($table)->where('expires_at', '<=', now()->toDateTimeString())->delete();
-        }
+        DB::table('account_action_tokens')->where('expires_at', '<=', now()->toDateTimeString())->delete();
+
+        \App\Services\Staff\Sessions::maintain();
 
         foreach (DB::table('privacy_requests')->whereIn('status', ['pending', 'processing', 'failed'])
             ->where('attempts', '<', 5)->where('updated_at', '<', now()->subMinutes(5)->toDateTimeString())->orderBy('id')->limit(100)->get() as $record) {

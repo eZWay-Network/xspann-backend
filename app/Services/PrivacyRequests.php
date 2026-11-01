@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\{DeleteAudio, DeleteUnusedMedia, DeleteVideo, ProcessPrivacyRequest};
 use App\Models\{Artist, Audio, Notification, User, Video};
+use App\Services\Staff\{StaffException, Team};
 use Spark\Facades\{Cache, DB, Hash};
 use function in_array;
 
@@ -11,11 +12,15 @@ class PrivacyRequests
 {
     public static function request(User $user, string $kind, string $proof): object
     {
-        $record = Cache::lock("accounts.privacy.$user->id", 30)->block(5, fn() => DB::transaction(function () use ($user, $kind, $proof): object {
-            AccountSecurity::consume($proof, $kind === 'deletion' ? 'delete_account' : 'export_data', $user->id, AccountSecurity::session());
+        $record = Cache::lock("accounts.privacy.$user->id", 30)->block(5, function () use ($user, $kind, $proof): object {
+            $accept = function () use ($user, $kind, $proof): object {
+                AccountSecurity::consume($proof, $kind === 'deletion' ? 'delete_account' : 'export_data', $user->id, AccountSecurity::session());
 
-            return self::create($user, $kind);
-        }));
+                return self::create($user, $kind);
+            };
+
+            return $kind === 'deletion' ? Team::locked($accept) : DB::transaction($accept);
+        });
 
         self::dispatch((int) $record->id);
 
@@ -24,7 +29,7 @@ class PrivacyRequests
 
     public static function confirmDeletion(string $token): object
     {
-        $record = DB::transaction(function () use ($token): object {
+        $record = Team::locked(function () use ($token): object {
             $userId = AccountSecurity::consume($token, 'email_deletion');
 
             return self::create(User::findOrFail($userId), 'deletion');
@@ -53,6 +58,17 @@ class PrivacyRequests
             'This account is not available.'
         );
 
+        if ($kind === 'deletion') {
+            $member = DB::table('staff_accounts')->where('user_id', $user->id)->lockForUpdate()->first();
+            if ($member) {
+                try {
+                    Team::protectLastAdmin($member, $member->role, false);
+                } catch (StaffException $exception) {
+                    abort($exception->status, $exception->getMessage());
+                }
+            }
+        }
+
         $id = DB::table('privacy_requests')->insert([
             'reference' => bin2hex(random_bytes(20)),
             'user_id' => $user->id,
@@ -73,10 +89,13 @@ class PrivacyRequests
             \App\Services\Promotions\Invalidations::record('user', $user->id);
             Realtime::retire($user->id);
             DB::table('billing_subscriptions')->where('user_id', $user->id)->update(['deletion_requested_at' => \App\Services\Billing\Billing::timestamp()]);
-            foreach (['jwt_access_tokens', 'staff_sessions', 'account_action_tokens'] as $table) {
+            \App\Services\Staff\Sessions::revokeAll($user->id);
+            foreach (['jwt_access_tokens', 'account_action_tokens'] as $table) {
                 DB::table($table)->where('user_id', $user->id)->delete();
             }
-            DB::table('staff_accounts')->where('user_id', $user->id)->update(['enabled' => false]);
+            DB::table('staff_accounts')->where('user_id', $user->id)->update([
+                'enabled' => false, 'version' => (int) ($member->version ?? 0) + 1,
+            ]);
         }
 
         AuditTrail::record("privacy.$kind.requested", ['request_id' => $id], $user->id);
@@ -238,6 +257,8 @@ class PrivacyRequests
             'follows' => ['follower_id', ['following_id', 'created_at']],
             'blocks' => ['blocker_id', ['blocked_id', 'created_at']],
             'reports' => ['user_id', ['id', 'target_type', 'target_id', 'reason', 'details', 'status', 'created_at']],
+            'staff_preferences' => ['user_id', ['timezone', 'locale', 'page_size', 'attention_enabled', 'created_at', 'updated_at']],
+            'staff_accounts' => ['user_id', ['role', 'enabled', 'created_at', 'updated_at']],
             'moderation_appeals' => ['user_id', ['id', 'decision_id', 'explanation', 'status', 'resolution', 'created_at']],
         ] as $table => [$owner, $columns]) {
             $data[$table] = DB::table($table)->select($columns)->where($owner, $user->id)->get()->toArray();

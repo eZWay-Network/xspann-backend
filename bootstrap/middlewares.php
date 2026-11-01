@@ -10,6 +10,11 @@
  *   An associative array of middleware keys and their corresponding class names.
  */
 return [
+    'staff.perimeter' => \App\Http\Middlewares\StaffPerimeter::class,
+    'staff.web' => \App\Http\Middlewares\StaffWeb::class,
+    'staff.mfa' => \App\Http\Middlewares\StaffMfa::class,
+    'staff.can' => \App\Http\Middlewares\StaffCan::class,
+    'staff.inertia' => \App\Http\Middlewares\StaffInertia::class,
     'restricted' => \App\Http\Middlewares\RestrictedAuthMiddleware::class,
     'staff' => \App\Http\Middlewares\StaffMiddleware::class,
     'auth' => \App\Http\Middlewares\AuthMiddleware::class,

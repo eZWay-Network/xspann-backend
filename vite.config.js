@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import path from "path";
+import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import fullReload from "vite-plugin-full-reload";
 
@@ -19,7 +20,11 @@ const viteAppUrl = (mode) => {
 };
 
 export default defineConfig(({ mode }) => ({
-  plugins: [tailwindcss(), fullReload(["./resources/views/**/*.blade.php"])],
+  plugins: [
+    react(),
+    tailwindcss(),
+    fullReload(["./resources/views/**/*.blade.php"]),
+  ],
   root: resolvePath("./resources/app"),
   server: {
     strictPort: true,
@@ -32,10 +37,16 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: true,
     manifest: true,
     rollupOptions: {
-      input: [
-        resolvePath("./resources/app/app.js"),
-        resolvePath("./resources/app/app.css"),
-      ],
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes("node_modules/@base-ui/") ||
+            id.includes("node_modules/@floating-ui/")
+          )
+            return "controls";
+        },
+      },
+      input: resolvePath("./resources/app/app.tsx"),
     },
   },
   resolve: {

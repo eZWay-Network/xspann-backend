@@ -194,13 +194,13 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($actual);
         $this->assertSame($expected, $actual);
-        $this->get('/')->assertOk()->assertSee('XPN Social API')->assertSee('/api/v1/uploads/videos/complete');
+        $this->get('/api/docs')->assertOk()->assertSee('XPN Social API')->assertSee('/api/v1/uploads/videos/complete');
     }
 
     public function testBladeDocsContainEveryRouteAndEscapeConfiguration(): void
     {
         $this->app->mergeConfig(['app' => ['url' => 'https://example.com/<script>alert(1)</script>']]);
-        $response = $this->get('/')->assertOk();
+        $response = $this->get('/api/docs')->assertOk();
         $html = $response->content();
         foreach (self::ROUTES as $route) {
             $response->assertSee(explode(' ', $route, 2)[1]);
@@ -216,7 +216,7 @@ class ApiContractTest extends TestCase
 
     public function testDocumentationContractsCoverAllRegisteredOperations(): void
     {
-        $html = $this->get('/')->assertOk()->content();
+        $html = $this->get('/api/docs')->assertOk()->content();
         preg_match('/<script id="reference-data" type="application\/json">(.*?)<\/script>/s', $html, $matches);
         $docs = json_decode($matches[1], true, flags: JSON_THROW_ON_ERROR);
         $operations = [];

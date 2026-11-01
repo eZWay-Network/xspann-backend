@@ -17,4 +17,5 @@ return [
     \Spark\Relay\RelayServiceProvider::class,
     // Application service provider for registering and bootstrapping services
     \App\Providers\AppServiceProvider::class,
+    \Inertia\InertiaServiceProvider::class,
 ];

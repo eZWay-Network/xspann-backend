@@ -58,9 +58,8 @@ class AccountSecurity
         return (int) $record->user_id;
     }
 
-    public static function reauthenticate(User $user, array $input): array
+    public static function verifyCredential(User $user, array $input): void
     {
-        $purpose = $input['purpose'];
         $password = $input['password'] ?? null;
         $google = $input['google_token'] ?? null;
         abort_unless((bool) $password !== (bool) $google, 422, 'Supply exactly one credential.');
@@ -72,16 +71,28 @@ class AccountSecurity
             abort_unless($claims['iat'] >= time() - 300 && AuthIdentity::where('user_id', $user->id)
                 ->where('provider', 'google')->where('provider_id', $claims['sub'])->exists(), 422, 'Use a fresh credential from your linked Google account.');
         }
+    }
+
+    /** Caller holds the account security lock and database transaction. */
+    public static function consumeStaffTotp(object $staff, string $code): void
+    {
+        $counter = Totp::counter(Hash::decrypt($staff->mfa_secret), $code, (int) $staff->last_counter);
+        abort_unless($counter !== null, 422, 'A fresh authenticator code is required.');
+        abort_unless(DB::table('staff_accounts')->where('id', $staff->id)->where('last_counter', $staff->last_counter)
+            ->update(['last_counter' => $counter, 'updated_at' => now()->toDateTimeString()]) === 1, 409, 'Retry with a fresh authenticator code.');
+    }
+
+    public static function reauthenticate(User $user, array $input): array
+    {
+        $purpose = $input['purpose'];
+        self::verifyCredential($user, $input);
 
         return Cache::lock("accounts.security.$user->id", 10)->block(5, fn() => DB::transaction(function () use ($user, $input, $purpose): array {
             $staff = DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->lockForUpdate()->first();
             abort_if($purpose === 'staff' && !$staff, 403, 'Staff access is required.');
 
             if ($staff) {
-                $counter = Totp::counter(Hash::decrypt($staff->mfa_secret), $input['mfa_code'] ?? '', (int) $staff->last_counter);
-                abort_unless($counter !== null, 422, 'A fresh authenticator code is required.');
-                abort_unless(DB::table('staff_accounts')->where('id', $staff->id)->where('last_counter', $staff->last_counter)
-                    ->update(['last_counter' => $counter, 'updated_at' => now()->toDateTimeString()]) === 1, 409, 'Retry with a fresh authenticator code.');
+                self::consumeStaffTotp($staff, $input['mfa_code'] ?? '');
             }
 
             if ($purpose === 'staff') {
@@ -107,31 +118,40 @@ class AccountSecurity
 
     public static function enrollStaff(User $user, string $role, string $secret, string $code): void
     {
-        abort_unless(in_array($role, ['moderator', 'admin'], true), 422, 'Invalid staff role.');
+        abort_unless(in_array($role, \App\Services\Staff\Permissions::roles(), true), 422, 'Invalid staff role.');
         abort_unless($user->status === 'active' && $user->hasVerifiedEmail() && $user->onboarded_at, 422, 'Staff must have an active verified adult account.');
         $counter = Totp::counter($secret, $code);
         abort_unless($counter !== null, 422, 'Authenticator enrollment failed.');
 
-        DB::transaction(function () use ($user, $role, $secret, $counter): void {
+        \App\Services\Staff\Team::locked(function () use ($user, $role, $secret, $counter): void {
+            $existing = DB::table('staff_accounts')->where('user_id', $user->id)->lockForUpdate()->first();
+            if ($existing) {
+                \App\Services\Staff\Team::protectLastAdmin($existing, $role, true);
+            }
             DB::table('staff_accounts')->upsert([
                 'user_id' => $user->id,
                 'role' => $role,
                 'mfa_secret' => Hash::encrypt($secret),
+                'version' => (int) ($existing->version ?? 0) + 1,
                 'last_counter' => $counter,
                 'enabled' => true,
                 'created_at' => now()->toDateTimeString(),
                 'updated_at' => now()->toDateTimeString(),
-            ], ['user_id'], ['role', 'mfa_secret', 'last_counter', 'enabled', 'updated_at']);
-            DB::table('staff_sessions')->where('user_id', $user->id)->delete();
+            ], ['user_id'], ['role', 'mfa_secret', 'last_counter', 'enabled', 'version', 'updated_at']);
+            \App\Services\Staff\Sessions::revokeAll($user->id);
             AuditTrail::record('staff.enrolled', ['user_id' => $user->id, 'role' => $role], null, 'console');
         });
     }
 
     public static function revokeStaff(int $userId): void
     {
-        DB::transaction(function () use ($userId): void {
-            DB::table('staff_accounts')->where('user_id', $userId)->update(['enabled' => false, 'updated_at' => now()->toDateTimeString()]);
-            DB::table('staff_sessions')->where('user_id', $userId)->delete();
+        \App\Services\Staff\Team::locked(function () use ($userId): void {
+            $existing = DB::table('staff_accounts')->where('user_id', $userId)->lockForUpdate()->first();
+            if ($existing) {
+                \App\Services\Staff\Team::protectLastAdmin($existing, $existing->role, false);
+            }
+            DB::table('staff_accounts')->where('user_id', $userId)->update(['enabled' => false, 'version' => (int) ($existing->version ?? 0) + 1, 'updated_at' => now()->toDateTimeString()]);
+            \App\Services\Staff\Sessions::revokeAll($userId);
             AuditTrail::record('staff.revoked', ['user_id' => $userId], null, 'console');
         });
     }

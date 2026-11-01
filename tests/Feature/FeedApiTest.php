@@ -190,7 +190,7 @@ class FeedApiTest extends TestCase
 
     public function testDocsExportBothFeedPaginationContracts(): void
     {
-        $html = $this->get('/')->assertOk()->content();
+        $html = $this->get('/api/docs')->assertOk()->content();
         preg_match('/<script id="reference-data" type="application\/json">(.*?)<\/script>/s', $html, $matches);
         $docs = json_decode($matches[1], true, flags: JSON_THROW_ON_ERROR);
         foreach ($docs['groups']['Feed'] as $entry) {

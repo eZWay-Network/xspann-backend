@@ -132,7 +132,7 @@ class AuthController extends Controller
                 query('jwt_access_tokens')->where('user_id', $user->id)->delete();
                 query('password_reset_tokens')->where('email', $user->email)->delete();
                 query('account_action_tokens')->where('user_id', $user->id)->delete();
-                query('staff_sessions')->where('user_id', $user->id)->delete();
+                \App\Services\Staff\Sessions::revokeAll($user->id);
             });
         });
 
@@ -156,7 +156,7 @@ class AuthController extends Controller
             $request->user()->update(['password' => $request->validated('password'), 'remember_token' => null]);
             query('password_reset_tokens')->where('email', $request->user('email'))->delete();
             query('account_action_tokens')->where('user_id', $request->user('id'))->delete();
-            query('staff_sessions')->where('user_id', $request->user('id'))->delete();
+            \App\Services\Staff\Sessions::revokeAll($request->user('id'));
 
             query('jwt_access_tokens')
                 ->where('user_id', $request->user('id'))

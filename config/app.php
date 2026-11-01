@@ -7,7 +7,7 @@ return [
     'name' => env('APP_NAME', 'XPN Social'), // Xspann is the owner's brand.
     'timezone' => env('APP_TIMEZONE', 'UTC'), // Application timezone
     'locale' => env('APP_LOCALE', 'en'), // Default language
-    'url' => env('APP_URL', 'http://localhost:8080'), // Application URL
+    'url' => env('APP_URL', 'http://localhost:8080'), // Staff browser app and REST API origin
 
     // Directory paths
     'storage_dir' => dirname(__DIR__) . '/storage', // Storage directory
@@ -31,7 +31,7 @@ return [
     'trusted_proxy_header' => env('TRUSTED_PROXY_HEADER', 'x-forwarded-for'),
 
     // Other settings
-    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:3000')),
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
     'google_client_id' => env('GOOGLE_CLIENT_ID'),
     // Additional trusted clients requesting tokens for the Web/server audience.
     'google_allowed_presenter_ids' => array_values(array_filter(array_map(

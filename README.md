@@ -1,17 +1,21 @@
-# XPN Social API
+# XPN Social — Staff workspace and API
 
-A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses the installed TinyCore 4.2.13.
+The staff browser application lives at `/`, built with React, Inertia and Spark. The separately hosted customer frontend and native apps connect to `/api/v1` using REST and bearer authentication. Uses the installed TinyCore 4.2.13.
 
 Requires PHP 8.2+. Enable PDO and your selected database driver, `pdo_sqlite` for the isolated regression suite, `fileinfo`, `mbstring`, `openssl`, and `curl`. Database cache/queue/locks use the configured database connection. Install FFmpeg with libx264/AAC encoding and FFprobe for video compression, audio extraction, and cover generation. GD is used by the avatar upload test fixture.
 
 ```sh
 composer install
+npm ci
+npm run build
 php -d upload_max_filesize=512M -d post_max_size=520M -S 127.0.0.1:8080 -t public
 ```
 
 For a new installation, copy `.env.example` to `.env` and run `php spark key:generate`. For an existing installation, keep `APP_KEY` stable and configure the existing database. The tables are already supplied; `composer setup` is the skeleton's fresh-install command and runs migrations/seeders. Tests use disposable databases.
 
-Open `/` for the Blade route reference and `/up` for the health response. The docs group registered endpoints and show their controllers, middleware, storage disk, and queue driver. No frontend asset build is needed for this page.
+Open `/` for the staff dashboard; guests are sent to `/login`. Browser routes live directly in `routes/web.php`, and `resources/app/app.tsx` imports the single `app.css` stylesheet. See [staff setup and review](docs/ADMIN_STEP_1_REVIEW.md) for first-admin enrollment and verification.
+
+The standalone API reference remains at `/api/docs` and the health response at `/up`. Documentation assets are independent of the React app.
 
 Run a queue worker under your process supervisor:
 
@@ -39,7 +43,7 @@ Apply the new forward migration with `php spark migrate` and supervise `php spar
 
 ## Step 4 messaging and artist updates
 
-Step 4 adds free one-to-one text conversations for eligible mutual followers, independent in-app artist consent, Pro announcements, message/announcement reporting, privacy cleanup, and Relay update hints with durable REST recovery. The generated reference at `/` covers **172 versioned operations**. Native application code is unchanged; live sales stay disabled pending web integration and the sales-readiness review.
+Step 4 adds free one-to-one text conversations for eligible mutual followers, independent in-app artist consent, Pro announcements, message/announcement reporting, privacy cleanup, and Relay update hints with durable REST recovery. The generated reference at `/api/docs` covers **172 versioned operations**. Native application code is unchanged; live sales stay disabled pending web integration and the sales-readiness review.
 
 Apply the new communications migration with `php spark migrate`, keeping the current database and APP_KEY. **The working database was not migrated or reset.** Conversation/message uniqueness, monotonic read cursors and per-user limits are enforced in the database. Announcements atomically reserve four accepted broadcasts per verified Pro paid period and reject audiences above 1,000 before quota use. Recipient snapshots record consent revisions; opting back in never revives old campaigns. Retries cannot duplicate messages, quota reservations, or announcement deliveries.
 
@@ -141,11 +145,11 @@ Feed indexes are folded into the Step 1 migration baseline. No separate historic
 
 | Setting | Purpose |
 | --- | --- |
-| `APP_URL` | Canonical API origin, including scheme and port. Used for media URLs and verification links. |
+| `APP_URL` | Canonical origin of this backend and staff app, including scheme and port. Staff pages live at its root; REST lives at `/api/v1`. Also used for media URLs and verification links. |
 | `APP_KEY` | Stable application signing key; changing it invalidates issued tokens and verification links. |
 | `APP_DEBUG` | Keep `false` in production. |
 | `APP_TIMEZONE` | Use `UTC`; response timestamps use ISO 8601 UTC. |
-| `FRONTEND_URL` | Frontend origin for CORS, password reset links, and share URLs. |
+| `FRONTEND_URL` | Separately hosted customer frontend origin, used for API CORS, password reset links and share URLs. |
 | `DB_CONNECTION` | `sqlite`, `mysql`, or the driver supported by the installed Spark version. |
 | `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Connection values for a server database. SQLite uses `database/sqlite.db`; its path is in `config/database.php`. |
 | `GOOGLE_CLIENT_ID` | Google OAuth Web/server client ID; required token audience for web and native sign-in. No client secret is needed. |
@@ -341,7 +345,7 @@ Point `public/uploads` (or the server alias) only at the configured public disk 
 
 ## Endpoints
 
-The table below lists the original social/media routes. The generated reference at `/` and its JSON export are the complete inventory of all 172 versioned operations, including account lifecycle, moderation, artists, playlists, billing, releases, messaging, announcements realtime, promotions and monthly placements. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
+The table below lists the original social/media routes. The generated reference at `/api/docs` and its JSON export are the complete inventory of all 172 versioned operations, including account lifecycle, moderation, artists, playlists, billing, releases, messaging, announcements realtime, promotions and monthly placements. Versioned paths use `/api/v1`; signed email verification remains unversioned. Public reads, shares, and views accept an optional bearer token for viewer/visibility state. Register, login, onboarding, forgot/reset, verification resend, signed email verification and email-based account deletion recovery are public. Other writes, `/auth/me`, `/feed/following`, `/me/*`, and uploads require authentication. `{user}` means a numeric user ID for follows and blocks; `{username}` means a username for profile routes.
 
 | Method | Path |
 | --- | --- |

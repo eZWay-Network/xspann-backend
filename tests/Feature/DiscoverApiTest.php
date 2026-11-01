@@ -231,7 +231,7 @@ class DiscoverApiTest extends TestCase
 
     public function testDiscoverDocumentationExportsQueryParametersAndBothResourceTypes(): void
     {
-        $html = $this->get('/')->assertOk()->content();
+        $html = $this->get('/api/docs')->assertOk()->content();
         preg_match('/<script id="reference-data" type="application\/json">(.*?)<\/script>/s', $html, $matches);
         $reference = json_decode($matches[1], true, flags: JSON_THROW_ON_ERROR);
         $entries = $reference['groups']['Discover'];

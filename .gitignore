@@ -5,7 +5,7 @@
 .idea
 .DS_Store
 vendor
-docs
+docs/*
 node_modules
-composer.lock
-package-lock.json
+playwright-report/
+test-results/

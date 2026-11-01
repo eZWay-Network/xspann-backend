@@ -45,7 +45,7 @@ class StudioProcessingTest extends TestCase
                 'audio_settings' => $invalid,
             ])->assertStatus(422);
         }
-        $this->get('/')->assertOk()->assertSee('audio_settings.original_volume')->assertSee('Library audio loops');
+        $this->get('/api/docs')->assertOk()->assertSee('audio_settings.original_volume')->assertSee('Library audio loops');
     }
 
     public function testRenderedAudioFlagIsValidatedAndCannotBeChanged(): void
@@ -69,7 +69,7 @@ class StudioProcessingTest extends TestCase
             'audio_id' => 999,
             'audio_settings' => ['rendered' => true],
         ])->assertStatus(422);
-        $this->get('/')->assertOk()->assertSee('audio_settings.rendered=true');
+        $this->get('/api/docs')->assertOk()->assertSee('audio_settings.rendered=true');
     }
 
     public function testRenderedMixKeepsUploadedAudioAndLibraryAttribution(): void

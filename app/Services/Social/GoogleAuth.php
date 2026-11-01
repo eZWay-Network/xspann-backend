@@ -91,7 +91,7 @@ class GoogleAuth
 
                     DB::table('policy_acceptances')->where('user_id', $user->id)->delete();
                     DB::table('account_action_tokens')->where('user_id', $user->id)->delete();
-                    DB::table('staff_sessions')->where('user_id', $user->id)->delete();
+                    \App\Services\Staff\Sessions::revokeAll($user->id);
                     DB::table('jwt_access_tokens')->where('user_id', $user->id)->delete();
                     DB::table('password_reset_tokens')->where('email', $user->email)->delete();
                 }

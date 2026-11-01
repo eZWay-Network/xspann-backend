@@ -26,7 +26,7 @@ return Application::create(path: dirname(__DIR__))
      */
     ->withMiddleware(
         load: __DIR__ . '/middlewares.php',
-        queue: ['cors', 'csrf']
+        queue: ['staff.perimeter', 'cors', 'csrf']
     )
 
     /**
