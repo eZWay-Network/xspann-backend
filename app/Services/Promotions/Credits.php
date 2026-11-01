@@ -155,9 +155,14 @@ class Credits
     }
 
     /** Target is cumulative, rounded upward once; retries and late incidents cannot over-return. */
+    public static function unusedTarget(object $boost, int $delivered): int
+    {
+        return min((int) $boost->price_cents, intdiv((int) $boost->price_cents * max(0, $boost->duration_seconds - $delivered) + $boost->duration_seconds - 1, (int) $boost->duration_seconds));
+    }
+
     public static function remedy(object $boost, int $delivered): int
     {
-        $target = min((int) $boost->price_cents, intdiv((int) $boost->price_cents * max(0, $boost->duration_seconds - $delivered) + $boost->duration_seconds - 1, (int) $boost->duration_seconds));
+        $target = self::unusedTarget($boost, $delivered);
         $rows = DB::table('promotion_reservations')->where('boost_id', $boost->id)->where('status', 'charged')->orderBy('id')->get();
         $returned = 0;
         foreach ($rows as $row) {

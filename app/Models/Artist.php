@@ -61,7 +61,7 @@ class Artist extends Model
             ->whereIn('artists.user_id', User::select('users.id')->visibleTo($viewer));
     }
 
-    public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
+    public function scopeWithBillingPlan(QueryBuilder $query): QueryBuilder
     {
         $plan = \Spark\Facades\DB::table('billing_paid_periods as bp')
             ->join('billing_subscriptions as bs', 'bs.id', '=', 'bp.subscription_id')
@@ -72,7 +72,12 @@ class Artist extends Model
             ->where('bp.ends_at', '>', \App\Services\Billing\Billing::timestamp())
             ->orderByRaw('bp.ends_at DESC, bp.id DESC')->limit(1);
 
-        return $query->select('artists.*')->selectSub($plan, 'billing_plan')->with([
+        return $query->selectSub($plan, 'billing_plan');
+    }
+
+    public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
+    {
+        return $query->select('artists.*')->withBillingPlan()->with([
             'user' => fn($query) => $query->withApiData($viewer),
             'genres' => fn($query) => $query->orderBy('artist_genres.id'),
             'links' => fn($query) => $query->orderBy('position'),

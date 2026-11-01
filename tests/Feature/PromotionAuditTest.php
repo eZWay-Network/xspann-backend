@@ -124,11 +124,11 @@ class PromotionAuditTest extends TestCase
         $this->assertSame(0, query('promotion_ledger')->where('kind', 'reversal')->count());
         $this->assertDatabaseCount('billing_paid_periods', 1);
         $this->assertDatabaseCount('promotion_boosts', 1);
-        $this->postJson("/api/v1/admin/boosts/$boost->id/remedy", [
+        $this->assertBrowserRejected($this->browserWrite("/promotions/boosts/$boost->id/remedy", [
             'version' => Boosts::find($boost->id)->version,
             'action' => 'credit',
             'reason' => 'Disputed credit remains held.'
-        ], ['Idempotency-Key' => 'orphan-dispute-remedy'])->assertStatus(409);
+        ], ['Idempotency-Key' => 'orphan-dispute-remedy']));
         $held = Boosts::decide($staff, $boost->id, [
             'version' => Boosts::find($boost->id)->version,
             'decision' => 'hold',
@@ -314,13 +314,13 @@ class PromotionAuditTest extends TestCase
         Promotion::transaction(fn() => Placements::tick(Placements::find($row->id)));
         $row = Placements::find($row->id);
         $this->assertSame('awaiting_evidence', $row->status);
-        $this->postJson("/api/v1/admin/placements/$row->id/evidence", [
+        $this->browserWrite("/promotions/placements/$row->id/evidence", [
             'version' => $row->version,
             'actual_starts_at' => gmdate('Y-m-d\TH:i:s\Z', $end - 604800),
             'actual_ends_at' => gmdate('Y-m-d\TH:i:s\Z', $end),
             'proof' => 'evidence:archive/completed-before-change',
             'note' => 'Full window completed before the profile change.'
-        ])->assertOk();
+        ])->assertStatus(303);
     }
 
     public function testInvalidationDuringFeatureCannotBeErasedByDelayedWorkerOrEvidence(): void
@@ -338,13 +338,13 @@ class PromotionAuditTest extends TestCase
         ]);
         Invalidations::record('artist', $artist->id);
         query('promotion_invalidations')->where('target_type', 'artist')->update(['created_at' => Billing::timestamp($end - 60)]);
-        $this->postJson("/api/v1/admin/placements/$row->id/evidence", [
+        $this->assertBrowserRejected($this->browserWrite("/promotions/placements/$row->id/evidence", [
             'version' => $row->version,
             'actual_starts_at' => gmdate('Y-m-d\TH:i:s\Z', $end - 604800),
             'actual_ends_at' => gmdate('Y-m-d\TH:i:s\Z', $end),
             'proof' => 'evidence:archive/interrupted-window',
             'note' => 'This window was interrupted.'
-        ])->assertStatus(409);
+        ]));
         Promotion::transaction(fn() => Placements::tick(Placements::find($row->id)));
         $this->assertSame('interrupted', Placements::find($row->id)->status);
         $this->assertDatabaseCount('promotion_evidence', 0);
@@ -397,27 +397,27 @@ class PromotionAuditTest extends TestCase
             'actual_ends_at' => gmdate('Y-m-d\TH:i:s\Z', $end),
             'note' => 'Operator verified this proof.'
         ];
-        $this->postJson("/api/v1/admin/placements/$first->id/evidence", [...$evidence, 'proof' => 'https://www.youtube.com/watch?v=first'])->assertOk();
+        $this->browserWrite("/promotions/placements/$first->id/evidence", [...$evidence, 'proof' => 'https://www.youtube.com/watch?v=first'])->assertStatus(303);
         // Simulate the immutable path-only hash written by the original Step 5 release.
         query('promotion_evidence')->where('placement_id', $first->id)->update(['proof_hash' => hash('sha256', 'https://www.youtube.com/watch')]);
-        $this->postJson("/api/v1/admin/placements/$second->id/evidence", [
+        $this->assertBrowserRejected($this->browserWrite("/promotions/placements/$second->id/evidence", [
             ...$evidence,
             'proof' => 'https://www.youtube.com/watch?utm_source=mail&v=first#view'
-        ])->assertStatus(409);
-        $this->postJson("/api/v1/admin/placements/$second->id/evidence", [
+        ]));
+        $this->browserWrite("/promotions/placements/$second->id/evidence", [
             ...$evidence,
             'proof' => 'https://www.youtube.com/watch?v=second'
-        ])->assertOk();
+        ])->assertStatus(303);
         $third = $this->pilot($staff, $this->makeArtist($this->makeUser('third'))->id);
         query('promotion_placements')->where('id', $third->id)->update([
             'status' => 'awaiting_evidence',
             'starts_at' => Billing::timestamp($end - 604800),
             'ends_at' => Billing::timestamp($end)
         ]);
-        $this->postJson("/api/v1/admin/placements/$third->id/evidence", [
+        $this->assertBrowserRejected($this->browserWrite("/promotions/placements/$third->id/evidence", [
             ...$evidence,
             'proof' => 'https://WWW.youtube.com:443/watch/?v=second&utm_source=mail'
-        ])->assertStatus(409);
+        ]));
         $this->assertDatabaseCount('promotion_evidence', 2);
     }
 

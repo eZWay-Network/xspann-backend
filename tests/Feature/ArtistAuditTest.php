@@ -10,6 +10,8 @@ use Tests\TestCase;
 
 class ArtistAuditTest extends TestCase
 {
+    use \Tests\Support\StaffBrowser;
+
     use ArtistFixtures;
 
     public function testPlaylistDetailRechecksVisibilityWhenLoadingItsResponse(): void
@@ -103,9 +105,10 @@ class ArtistAuditTest extends TestCase
             ->assertStatus(201)->json('data.id');
         $reviewer = $this->staffToken('reviewer');
         $appealReviewer = $this->staffToken('appealreviewer');
-        $decision = $this->withToken($reviewer)->postJson("/api/v1/admin/reports/$report/decision", [
+        $this->browserAs($reviewer)->browserWrite("/moderation/reports/$report/decision", [
             'action' => 'restrict', 'reason' => 'Rights review pending', 'version' => 1,
-        ])->assertOk()->json('data.decision_id');
+        ])->assertStatus(303);
+        $decision = (int) query('moderation_decisions')->orderBy('id', 'desc')->value('id');
         $this->asUser($fan)->getJson($artistPath)->assertOk()->assertJsonPath('data.featured_release', null);
         $this->getJson($playlistPath)->assertOk()->assertJsonPath('data.videos_count', 0)
             ->assertJsonPath('data.cover_url', null)->assertJsonPath('data.videos', []);
@@ -117,9 +120,9 @@ class ArtistAuditTest extends TestCase
         $appeal = $this->postJson('/api/v1/me/moderation-appeals', [
             'decision_id' => $decision, 'explanation' => 'License supplied',
         ])->assertStatus(201)->json('data.id');
-        $this->withToken($appealReviewer)->postJson("/api/v1/admin/moderation-appeals/$appeal/decision", [
+        $this->browserAs($appealReviewer)->browserWrite("/moderation/appeals/$appeal/decision", [
             'outcome' => 'overturn', 'reason' => 'License confirmed', 'version' => 1,
-        ])->assertOk();
+        ])->assertStatus(303);
         $this->asUser($fan)->getJson($artistPath)->assertOk()->assertJsonPath('data.featured_release.id', $videoId);
         $this->getJson($playlistPath)->assertOk()->assertJsonPath('data.videos.0.id', $videoId);
 
@@ -139,20 +142,15 @@ class ArtistAuditTest extends TestCase
         $this->asUser($owner)->getJson('/api/v1/me/artist/analytics')->assertOk()
             ->assertJsonPath('data.totals.videos', 0)->assertJsonPath('data.totals.views', 0)
             ->assertJsonPath('data.totals.followers', 1);
-        $this->withToken($reviewer)->getJson('/api/v1/admin/reports/' . $report)->assertOk()
-            ->assertJsonPath('data.evidence.caption', 'First release');
+        $this->browserAs($reviewer)->browserEvidence('/moderation/reports/' . $report)->assertOk()
+            ->assertJsonPath('snapshot.caption', 'First release');
     }
 
-    private function staffToken(string $name): string
+    private function staffToken(string $name): \App\Models\User
     {
         $user = $this->makeUser($name);
-        $secret = Totp::secret();
-        AccountSecurity::enrollStaff($user, 'moderator', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
-        $token = $this->token($user);
-        $this->withToken($token)->postJson('/api/v1/auth/reauthenticate', [
-            'purpose' => 'staff', 'password' => 'password123', 'mfa_code' => Totp::code($secret, intdiv(time(), 30)),
-        ])->assertOk();
+        $this->browserLogin($user, 'moderator');
 
-        return $token;
+        return $user;
     }
 }

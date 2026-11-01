@@ -8,6 +8,33 @@ use Spark\Facades\Schema;
 
 trait ReleaseUpgrades
 {
+    public function testStaffCommunityCutoverPreservesEvidenceAndRetiresOnlyLegacyGrants(): void
+    {
+        $owner = $this->makeUser('cutoverowner');
+        $reporter = $this->makeUser('cutoverreporter');
+        $report = \App\Services\Moderation::report($reporter, ['reported_user_id' => $owner->id, 'reason' => 'Preserved report context']);
+        $before = query('reports')->where('id', $report->id)->first();
+        $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_150000_staff_community_workflows.php';
+        $migration->down();
+        foreach (['legacy' => null, 'browser' => 1] as $name => $version) {
+            query('staff_sessions')->insert([
+                'user_id' => $reporter->id, 'session_hash' => hash('sha256', 'cutover-' . $name),
+                'membership_version' => $version, 'expires_at' => now()->addMinutes(15), 'created_at' => now(),
+            ]);
+        }
+        $migration->up();
+        $migration->up();
+        $this->assertSame($before->evidence, query('reports')->where('id', $report->id)->value('evidence'));
+        $this->assertDatabaseHas('reports', ['id' => $report->id, 'source' => 'customer', 'initiator_id' => null]);
+        $this->assertDatabaseCount('staff_sessions', 1);
+        $this->assertDatabaseHas('staff_sessions', ['session_hash' => hash('sha256', 'cutover-browser'), 'membership_version' => 1]);
+        query('reports')->where('id', $report->id)->update(['source' => 'staff', 'initiator_id' => $reporter->id]);
+        $this->assertThrows(\PDOException::class, fn () => query('reports')->where('id', $report->id)->update(['initiator_id' => 999999]));
+        $migration->down();
+        $migration->up();
+        $this->assertSame($before->evidence, query('reports')->where('id', $report->id)->value('evidence'));
+    }
+
     public function testStaffBrowserMigrationPreservesMembershipAndLegacyHistory(): void
     {
         $user = $this->makeUser('staff');

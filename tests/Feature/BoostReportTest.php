@@ -38,11 +38,12 @@ class BoostReportTest extends TestCase
         $this->assertSame('Artist', $evidence['sponsor']['stage_name']);
         $this->assertFalse(str_contains(query('reports')->where('id', $id)->value('evidence'), 'Sponsored'));
         $this->getJson("/api/v1/me/reports/$id")->assertOk()->assertJsonPath('data.status', 'open');
-        $this->getJson("/api/v1/admin/reports/$id")->assertForbidden();
+        \Spark\Facades\Session::flush();
+        $this->browserPage("/moderation/reports/$id")->assertStatus(409);
 
         $this->promotionStaff('reviewer');
-        $this->getJson('/api/v1/admin/reports?type=boost')->assertOk()->assertJsonCount(1, 'data');
-        $this->getJson("/api/v1/admin/reports/$id")->assertOk()->assertJsonPath('data.evidence.video_id', $boost->video_id);
+        $this->browserPage('/moderation/reports?type=boost')->assertOk()->assertJsonCount(1, 'props.rows');
+        $this->browserEvidence("/moderation/reports/$id")->assertOk()->assertJsonPath('snapshot.video_id', $boost->video_id);
         $this->assertSame(1, query('audit_events')->where('action', 'moderation.evidence_viewed')->count());
     }
 

@@ -26,6 +26,7 @@ class Placements
     {
         return Promotion::transaction(function () use ($staff, $input): object {
             $artist = Artist::findOrFail((int) $input['artist_id']);
+            abort_if((int) $artist->user_id === (int) $staff->id, 403, 'An independent operator must enroll this artist.');
             abort_unless(Promotion::artistEligible($artist->id), 422, 'Artist is not publicly eligible.');
             abort_unless($input['capacity_confirmed'] === true, 422, 'Confirm capacity for both monthly obligations.');
             $month = $input['month'];
@@ -117,6 +118,7 @@ class Placements
     {
         return Promotion::transaction(function () use ($staff, $id, $input): object {
             $row = self::find($id);
+            abort_if((int) $row->user_id === (int) $staff->id, 403, 'An independent operator must handle this promotion.');
             Promotion::version($row, (int) $input['version']);
             abort_if($row->type === 'boost', 409, 'Use boost review and remedy endpoints.');
             abort_if(in_array($row->status, ['completed', 'cancelled'], true), 409, 'This obligation is terminal.');
@@ -194,6 +196,7 @@ class Placements
     {
         return Promotion::transaction(function () use ($staff, $id, $input): object {
             $row = self::find($id);
+            abort_if((int) $row->user_id === (int) $staff->id, 403, 'An independent operator must handle this promotion.');
             abort_if($row->type === 'boost', 422, 'Boost fulfillment comes from availability records.');
             $hash = Promotion::hash($input);
             $existing = DB::table('promotion_evidence')->where('placement_id', $id)->first();

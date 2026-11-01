@@ -48,10 +48,10 @@ class FoundationApiReference
             'AccountController@reauthenticate',
             'Account safety',
             'Confirm a sensitive action',
-            'Use exactly one credential: password or a Google ID token issued within five minutes for the already linked identity. Enabled staff must also supply a fresh six-digit TOTP. Proof expires in five minutes, is bound to the current bearer session and purpose, and can be consumed once. purpose=staff additionally grants that bearer session fifteen minutes of operator access. Suspended verified users may request privacy proofs.',
+            'Use exactly one credential: password or a Google ID token issued within five minutes for the already linked identity. Enabled staff must also supply a fresh six-digit TOTP. Proof expires in five minutes, is bound to the current bearer session and purpose, and can be consumed once. Staff access uses browser login and challenge; purpose=staff is rejected here. Suspended verified users may request privacy proofs.',
             ['proof' => '<single-use-proof>', 'purpose' => 'export_data', 'expires_at' => '2026-10-29T12:05:00Z', 'staff_access_expires_at' => null],
             '200',
-            ['purpose' => ['required', ['in' => ['delete_account', 'export_data', 'staff']]], 'password' => ['nullable', 'string', 'max:1024'], 'google_token' => ['nullable', 'string', 'max:8192'], 'mfa_code' => ['nullable', 'string', 'max:6']],
+            ['purpose' => ['required', ['in' => ['delete_account', 'export_data']]], 'password' => ['nullable', 'string', 'max:1024'], 'google_token' => ['nullable', 'string', 'max:8192'], 'mfa_code' => ['nullable', 'string', 'max:6']],
             ['purpose' => 'export_data', 'password' => '<password>']
         );
         $add(
@@ -122,26 +122,6 @@ class FoundationApiReference
         );
         $add('AudioController@destroy', 'Audio library', 'Remove your sound', 'Owner only. Stops new selection immediately and queues idempotent file cleanup. Existing rendered videos keep embedded audio; their audio_id is cleared when cleanup removes the audio row. Rights restrictions use moderation and propagate separately.', ['message' => 'Audio deleted'], '202');
         $report = ['id' => 1, 'target_type' => 'video', 'target_id' => 2, 'reason' => 'Copyright concern', 'status' => 'open', 'version' => 1, 'created_at' => '2026-10-29T12:00:00Z'];
-        $add('ModerationController@reports', 'Moderation', 'Review report queue', 'Staff role plus recent MFA required. Optional status=open|resolved and type=' . implode('|', array_values(\App\Services\Moderation::TARGETS)) . ' filters. Bounded pagination, oldest first. Queue access is audited. No evidence is included in the listing.', $report, '200', [], [], 20);
-        $add(
-            'ModerationController@report',
-            'Moderation',
-            'Read reported evidence',
-            'Staff role plus recent MFA required; every evidence read is audited. The encrypted snapshot contains only reported public content metadata and a media reference, not account credentials. The snapshot survives target deletion; the original media file may no longer exist.',
-            ['id' => 1, 'target_type' => 'video', 'target_id' => 2, 'reason' => 'Copyright concern', 'details' => 'Please review', 'status' => 'open', 'version' => 1, 'evidence' => ['type' => 'video', 'id' => 2, 'caption' => 'Reported content'], 'decisions' => []]
-        );
-        $add(
-            'ModerationController@decide',
-            'Moderation',
-            'Resolve a report',
-            'Staff with recent MFA; cannot review reports they filed or content they own. action=dismiss closes without restriction; restrict hides the target and affected audio/video/comment derivatives. A boost restriction immediately stops serving/events; promotion maintenance settles unused credit and releases inventory. The underlying organic video is unaffected unless separately restricted. action=restore releases this report’s active restriction after later review, unless an appeal is open (use its independent reviewer). Restoring a boost does not restart settled advertising; create and submit a new campaign. Requires the displayed version. Records an immutable reason and decision, notifies the subject and resolves the report atomically.',
-            ['decision_id' => 1, 'status' => 'resolved', 'version' => 2],
-            '200',
-            ['action' => ['required', ['in' => ['dismiss', 'restrict', 'restore']]]] + $reason + $version,
-            ['action' => 'restrict', 'reason' => 'Rights could not be confirmed.', 'version' => 1],
-            null,
-            $conflict
-        );
         $add('ModerationController@ownReport', 'Moderation', 'Read your report status', 'Only the reporter can read this status. No other private evidence, reviewer identity or internal notes are returned. Available to verified restricted accounts.', ['id' => 1, 'status' => 'resolved', 'version' => 2]);
         $add(
             'ModerationController@ownDecisions',
@@ -168,19 +148,6 @@ class FoundationApiReference
         );
         $appeal = ['id' => 1, 'decision_id' => 1, 'explanation' => 'Please review my license.', 'status' => 'open', 'resolution' => null, 'version' => 1, 'created_at' => '2026-10-29T12:00:00Z', 'updated_at' => '2026-10-29T12:00:00Z'];
         $add('ModerationController@ownAppeals', 'Moderation', 'Read your appeal outcomes', 'Only your own appeals, explanations and decisions. Available to restricted verified accounts. States are open, upheld and overturned; pagination is bounded.', $appeal, '200', [], [], 20);
-        $add('ModerationController@appeals', 'Moderation', 'Review appeal queue', 'Staff role plus recent MFA required. status=open by default; also accepts upheld or overturned. Includes explanation, resolution and report_id for opening the original evidence/decision history; listing access is audited.', $appeal + ['user_id' => 1, 'reviewer_id' => null, 'report_id' => 1], '200', [], [], 20);
-        $add(
-            'ModerationController@decideAppeal',
-            'Moderation',
-            'Decide an appeal',
-            'Requires recent staff MFA, a reason and the displayed version. The reviewer must differ from the original decision maker, reporter and subject. Overturn removes only restrictions from this decision; independent restrictions and account deletion remain effective.',
-            ['id' => 1, 'outcome' => 'overturn', 'version' => 2],
-            '200',
-            ['outcome' => ['required', ['in' => ['uphold', 'overturn']]]] + $reason + $version,
-            ['outcome' => 'overturn', 'reason' => 'The submitted license permits this use.', 'version' => 1],
-            null,
-            $conflict
-        );
 
         return $result;
     }

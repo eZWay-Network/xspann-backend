@@ -99,14 +99,14 @@ class PromotionApiTest extends TestCase
         [$owner] = $this->paidArtist();
         $this->promotionSetup();
         $boost = $this->submittedBoost($owner);
-        $this->getJson('/api/v1/admin/boosts')->assertForbidden();
+        $this->browserPage('/promotions/boosts')->assertStatus(409);
         $this->promotionStaff();
-        $this->getJson('/api/v1/admin/boosts')->assertOk()->assertHeader('Cache-Control', 'no-store');
-        $this->postJson("/api/v1/admin/boosts/$boost->id/decision", ['version' => 1, 'decision' => 'approve', 'reason' => 'Reviewed'])->assertStatus(409);
-        $this->postJson("/api/v1/admin/boosts/$boost->id/decision", ['version' => 2, 'decision' => 'reject', 'reason' => 'Advertising license is insufficient.'])->assertOk();
+        $this->browserPage('/promotions/boosts')->assertOk()->assertHeader('Cache-Control', 'no-store, private, max-age=0');
+        $this->assertBrowserRejected($this->browserWrite("/promotions/boosts/$boost->id/decision", ['version' => 1, 'decision' => 'approve', 'reason' => 'Reviewed']));
+        $this->browserWrite("/promotions/boosts/$boost->id/decision", ['version' => 2, 'decision' => 'reject', 'reason' => 'Advertising license is insufficient.'])->assertStatus(303);
         $this->assertSame(500, Credits::balance($owner->id)['available_cents']);
         query('staff_sessions')->where('id', '>', 0)->delete();
-        $this->getJson('/api/v1/admin/boosts')->assertForbidden();
+        $this->browserPage('/promotions/boosts')->assertStatus(409);
     }
 
     public function testActivationChargesOnceAndFetchesDoNotCreateDelivery(): void

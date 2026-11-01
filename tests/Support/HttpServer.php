@@ -10,9 +10,11 @@ final class HttpServer
 {
     public readonly string $url;
     private mixed $process = null;
+    private string $browserCookies;
 
     public function __construct(string $router, string $directory, array $environment = [], ?string $documentRoot = null)
     {
+        $this->browserCookies = $directory . '/staff-browser-cookies.txt';
         $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
         if (!$socket) {
             throw new \RuntimeException($error);
@@ -43,10 +45,14 @@ final class HttpServer
         throw new \RuntimeException('HTTP fixture failed: ' . file_get_contents($log));
     }
 
-    public function request(string $method, string $path, array|string|null $body = null, array $headers = []): TestResponse
+    public function request(string $method, string $path, array|string|null $body = null, array $headers = [], bool $browser = false): TestResponse
     {
         $curl = curl_init($this->url . $path);
         $responseHeaders = [];
+        if ($browser) {
+            curl_setopt($curl, CURLOPT_COOKIEFILE, $this->browserCookies);
+            curl_setopt($curl, CURLOPT_COOKIEJAR, $this->browserCookies);
+        }
         curl_setopt_array($curl, [
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_RETURNTRANSFER => true,
@@ -66,6 +72,7 @@ final class HttpServer
         $content = curl_exec($curl);
         $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         $error = curl_error($curl);
+        curl_close($curl);
 
         if ($content === false) {
             throw new \RuntimeException($error);

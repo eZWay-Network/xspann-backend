@@ -313,14 +313,14 @@ class StaffFoundationTest extends TestCase
 
     public function testRootLoginDestinationsOnlyAcceptProtectedBrowserGets(): void
     {
-        foreach (['/', '/?period=30', '/attention', '/settings/profile', '/settings/security?source=menu'] as $path) {
+        foreach (['/', '/users/12', '/moderation/reports/42', '/promotions/placements/7', '/?period=30', '/attention', '/settings/profile', '/settings/security?source=menu'] as $path) {
             $this->assertSame($path, Sessions::destination($path));
         }
 
         foreach ([null, '', 'https://example.com/settings/profile', '//example.com/settings/profile',
             '/%2fexample.com', '/%5cexample.com', '/settings/../login', '/settings/profile%0a',
             '/login', '/challenge', '/enroll/secret', '/logout', '/api/v1/auth/me', '/up',
-            '/settings/security/password', '/xpn-admin', '/unknown'] as $path) {
+            '/moderation/reports/42/evidence', '/promotions/boosts/7/preview', '/users/invalid', '/settings/security/password', '/xpn-admin', '/unknown'] as $path) {
             $this->assertSame('/', Sessions::destination($path));
         }
     }

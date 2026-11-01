@@ -9,6 +9,8 @@ use Tests\TestCase;
 
 class AccountFoundationTest extends TestCase
 {
+    use \Tests\Support\StaffBrowser;
+
     public function testPublicProfilesNeverExposePrivateAccountFields(): void
     {
         $user = $this->makeUser();
@@ -73,19 +75,17 @@ class AccountFoundationTest extends TestCase
         $secret = Totp::secret();
         AccountSecurity::enrollStaff($staff, 'moderator', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
         $this->assertFalse(query('staff_accounts')->first()->mfa_secret === $secret);
-        $token = $this->token($staff);
-        $this->withToken($token)->getJson('/api/v1/admin/reports')->assertStatus(403);
-        $input = ['purpose' => 'staff', 'password' => 'password123', 'mfa_code' => Totp::code($secret, intdiv(time(), 30))];
-        $this->postJson('/api/v1/auth/reauthenticate', [...$input, 'password' => 'wrong'])->assertStatus(422);
-        $this->postJson('/api/v1/auth/reauthenticate', $input)->assertOk();
-        $this->postJson('/api/v1/auth/reauthenticate', $input)->assertStatus(422);
-        $this->getJson('/api/v1/admin/reports')->assertOk();
-        $this->asUser($staff)->getJson('/api/v1/admin/reports')->assertStatus(403);
-        $this->withToken($token)->getJson('/api/v1/admin/reports')->assertOk();
-        query('staff_sessions')->where('user_id', $staff->id)->update(['expires_at' => now()->subSeconds(1)->toDateTimeString()]);
-        $this->getJson('/api/v1/admin/reports')->assertStatus(403);
+        $this->asUser($staff)->getJson('/api/v1/admin/reports')->assertNotFound();
+        $this->postJson('/api/v1/auth/reauthenticate', ['purpose' => 'staff', 'password' => 'password123'])->assertStatus(422);
+        $this->browserPage('/moderation/reports')->assertStatus(409);
+        $this->browserLogin($staff, 'moderator');
+        $this->browserPage('/moderation/reports')->assertOk();
+        $this->browserWrite('/challenge', ['password' => 'password123', 'mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertStatus(303);
+        $this->browserPage('/challenge')->assertJsonPath('props.errors.mfa_code', 'Enter a fresh six-digit authenticator code.');
+        query('staff_sessions')->where('user_id', $staff->id)->update(['mfa_expires_at' => \App\Services\Staff\Sessions::timestamp(-1)]);
+        $this->browserPage('/moderation/reports')->assertStatus(409);
         AccountSecurity::revokeStaff($staff->id);
-        $this->assertDatabaseCount('staff_sessions', 0);
+        $this->browserPage('/moderation/reports')->assertStatus(409);
         $this->assertDatabaseHas('audit_events', ['action' => 'staff.enrolled', 'actor_type' => 'console']);
         $this->assertDatabaseHas('audit_events', ['action' => 'staff.revoked']);
     }
@@ -94,8 +94,8 @@ class AccountFoundationTest extends TestCase
     {
         $user = $this->makeUser();
         $this->asUser($user)->putJson('/api/v1/auth/profile', ['name' => 'Updated', 'role' => 'admin', 'status' => 'active'])->assertOk();
-        $this->postJson('/api/v1/auth/reauthenticate', ['purpose' => 'staff', 'password' => 'password123'])->assertStatus(403);
-        $this->getJson('/api/v1/admin/reports')->assertStatus(403);
+        $this->postJson('/api/v1/auth/reauthenticate', ['purpose' => 'staff', 'password' => 'password123'])->assertStatus(422);
+        $this->getJson('/api/v1/admin/reports')->assertStatus(404);
         $this->assertDatabaseCount('staff_accounts', 0);
     }
 }

@@ -117,6 +117,7 @@ class Boosts
     {
         return Promotion::transaction(function () use ($staff, $id, $input): object {
             $boost = self::find($id);
+            abort_if((int) $boost->user_id === (int) $staff->id, 403, 'An independent operator must handle this promotion.');
             Promotion::version($boost, (int) $input['version']);
             switch ($input['decision']) {
                 case 'approve':
@@ -281,6 +282,7 @@ class Boosts
     {
         return Promotion::transaction(fn() => Promotion::once($staff->id, 'boost.remedy', $key, ['id' => $id, ...$input], function () use ($staff, $id, $input): array {
             $boost = self::find($id);
+            abort_if((int) $boost->user_id === (int) $staff->id, 403, 'An independent operator must handle this promotion.');
             Promotion::version($boost, (int) $input['version']);
             abort_unless($boost->status === 'interrupted' && $boost->activated_at, 409, 'Only an interrupted, activated campaign needs this remedy.');
             abort_if(Credits::heldForBoost($boost), 409, 'Resolve the recorded spending hold first.');

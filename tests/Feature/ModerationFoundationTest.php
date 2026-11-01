@@ -8,17 +8,14 @@ use Tests\TestCase;
 
 class ModerationFoundationTest extends TestCase
 {
-    private function staff(string $name): string
+    use \Tests\Support\StaffBrowser;
+
+    private function staff(string $name): \App\Models\User
     {
         $user = $this->makeUser($name);
-        $secret = Totp::secret();
-        AccountSecurity::enrollStaff($user, 'moderator', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
-        $token = $this->token($user);
-        $this->withToken($token)->postJson('/api/v1/auth/reauthenticate', [
-            'purpose' => 'staff', 'password' => 'password123', 'mfa_code' => Totp::code($secret, intdiv(time(), 30)),
-        ])->assertOk();
+        $this->browserLogin($user, 'moderator');
 
-        return $token;
+        return $user;
     }
 
     public function testRightsRestrictionPropagatesAndIndependentAppealRestoresOnlyItsDecision(): void
@@ -33,9 +30,10 @@ class ModerationFoundationTest extends TestCase
         $this->asUser($owner)->getJson('/api/v1/me/reports/' . $report)->assertStatus(404);
         $reviewer = $this->staff('reviewer');
         $appealReviewer = $this->staff('appealreviewer');
-        $this->withToken($reviewer)->getJson('/api/v1/admin/reports/' . $report)->assertOk()->assertJsonPath('data.evidence.caption', 'Hello #world');
-        $decision = $this->postJson('/api/v1/admin/reports/' . $report . '/decision', ['action' => 'restrict', 'reason' => 'License missing.', 'version' => 1])->assertOk()->json('data.decision_id');
-        $this->postJson('/api/v1/admin/reports/' . $report . '/decision', ['action' => 'dismiss', 'reason' => 'Changed.', 'version' => 1])->assertStatus(409);
+        $this->browserAs($reviewer)->browserEvidence('/moderation/reports/' . $report)->assertOk()->assertJsonPath('snapshot.caption', 'Hello #world');
+        $this->browserWrite('/moderation/reports/' . $report . '/decision', ['action' => 'restrict', 'reason' => 'License missing.', 'version' => 1])->assertStatus(303);
+        $decision = (int) query('moderation_decisions')->orderBy('id', 'desc')->value('id');
+        $this->assertBrowserRejected($this->browserWrite('/moderation/reports/' . $report . '/decision', ['action' => 'dismiss', 'reason' => 'Changed.', 'version' => 1]));
         foreach ([$source, $remix] as $video) {
             $this->getJson('/api/v1/videos/' . $video->id)->assertStatus(404);
         }
@@ -43,11 +41,11 @@ class ModerationFoundationTest extends TestCase
         $appeal = $this->asUser($owner)->postJson('/api/v1/me/moderation-appeals', ['decision_id' => $decision, 'explanation' => 'Here is the license.'])->assertStatus(201)->json('data.id');
         $this->postJson('/api/v1/me/moderation-appeals', ['decision_id' => $decision, 'explanation' => 'Again'])->assertStatus(409);
         $this->asUser($fan)->postJson('/api/v1/me/moderation-appeals', ['decision_id' => $decision, 'explanation' => 'Not mine'])->assertStatus(404);
-        $this->withToken($appealReviewer)->getJson('/api/v1/admin/moderation-appeals')->assertOk()->assertJsonPath('data.0.report_id', $report);
-        $this->getJson('/api/v1/admin/reports/' . $report)->assertOk()->assertJsonPath('data.decisions.0.id', $decision);
+        $this->browserAs($appealReviewer)->browserPage('/moderation/appeals')->assertOk()->assertJsonPath('props.rows.0.id', $appeal);
+        $this->browserPage('/moderation/reports/' . $report)->assertOk()->assertJsonPath('props.decisions.0.id', $decision);
         $input = ['outcome' => 'overturn', 'reason' => 'License confirmed.', 'version' => 1];
-        $this->withToken($reviewer)->postJson('/api/v1/admin/moderation-appeals/' . $appeal . '/decision', $input)->assertStatus(403);
-        $this->withToken($appealReviewer)->postJson('/api/v1/admin/moderation-appeals/' . $appeal . '/decision', $input)->assertOk();
+        $this->browserAs($reviewer)->browserWrite('/moderation/appeals/' . $appeal . '/decision', $input)->assertStatus(403);
+        $this->browserAs($appealReviewer)->browserWrite('/moderation/appeals/' . $appeal . '/decision', $input)->assertStatus(303);
         $this->flushHeaders()->getJson('/api/v1/videos/' . $remix->id)->assertOk();
         $this->assertDatabaseHas('audit_events', ['action' => 'moderation.evidence_viewed']);
         $this->assertDatabaseHas('audit_events', ['action' => 'moderation.appeal_decided']);
@@ -63,18 +61,19 @@ class ModerationFoundationTest extends TestCase
         $second = Moderation::report($fan, ['video_id' => $video->id, 'reason' => 'Second']);
         $reviewer = $this->staff('reviewer');
         $other = $this->staff('otherreviewer');
-        $this->withToken($reviewer);
+        $this->browserAs($reviewer);
         foreach ([$first, $second] as $report) {
-            $decisions[] = $this->postJson('/api/v1/admin/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Restricted.', 'version' => 1])->assertOk()->json('data.decision_id');
+            $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Restricted.', 'version' => 1])->assertStatus(303);
+        $decisions[] = (int) query('moderation_decisions')->orderBy('id', 'desc')->value('id');
         }
         $appeal = $this->asUser($owner)->postJson('/api/v1/me/moderation-appeals', ['decision_id' => $decisions[0], 'explanation' => 'Review please.'])->assertStatus(201)->json('data.id');
-        $this->withToken($other)->postJson('/api/v1/admin/moderation-appeals/' . $appeal . '/decision', ['outcome' => 'overturn', 'reason' => 'First resolved.', 'version' => 1])->assertOk();
+        $this->browserAs($other)->browserWrite('/moderation/appeals/' . $appeal . '/decision', ['outcome' => 'overturn', 'reason' => 'First resolved.', 'version' => 1])->assertStatus(303);
         $this->assertSame('restricted', $video->refresh()->moderation_status);
-        $this->postJson('/api/v1/admin/reports/' . $second->id . '/decision', ['action' => 'restore', 'reason' => 'Second case resolved after review.', 'version' => 2])->assertOk();
+        $this->browserWrite('/moderation/reports/' . $second->id . '/decision', ['action' => 'restore', 'reason' => 'Second case resolved after review.', 'version' => 2])->assertStatus(303);
         $this->assertSame('approved', $video->refresh()->moderation_status);
         $video->remove();
         $this->assertSame(null, $first->refresh()->video_id);
-        $this->getJson('/api/v1/admin/reports/' . $first->id)->assertOk()->assertJsonPath('data.evidence.caption', 'Hello #world');
+        $this->browserEvidence('/moderation/reports/' . $first->id)->assertOk()->assertJsonPath('snapshot.caption', 'Hello #world');
     }
 
     public function testReportTargetsRespectVisibilityBlocksAndParentCommentRestrictions(): void
@@ -89,7 +88,7 @@ class ModerationFoundationTest extends TestCase
         $this->postJson('/api/v1/reports', ['video_id' => $video->id, 'comment_id' => $parent->id, 'reason' => 'Ambiguous'])->assertStatus(422);
         $report = $this->postJson('/api/v1/reports', ['comment_id' => $parent->id, 'reason' => 'Abuse'])->assertStatus(201)->json('data.id');
         $this->staff('reviewer');
-        $this->postJson('/api/v1/admin/reports/' . $report . '/decision', ['action' => 'restrict', 'reason' => 'Abusive thread.', 'version' => 1])->assertOk();
+        $this->browserWrite('/moderation/reports/' . $report . '/decision', ['action' => 'restrict', 'reason' => 'Abusive thread.', 'version' => 1])->assertStatus(303);
         $this->getJson('/api/v1/comments/' . $parent->id . '/replies')->assertStatus(404);
         $this->assertSame('restricted', $reply->refresh()->moderation_status);
         $this->getJson('/api/v1/videos/' . $video->id . '/comments')->assertJsonCount(0, 'data');
@@ -102,7 +101,8 @@ class ModerationFoundationTest extends TestCase
         $source = $this->makeVideo($owner);
         $report = Moderation::report($fan, ['reported_user_id' => $owner->id, 'reason' => 'Account concern']);
         $this->staff('reviewer');
-        $decision = $this->postJson('/api/v1/admin/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Suspended pending review.', 'version' => 1])->assertOk()->json('data.decision_id');
+        $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Suspended pending review.', 'version' => 1])->assertStatus(303);
+        $decision = (int) query('moderation_decisions')->orderBy('id', 'desc')->value('id');
         $this->assertSame('suspended', $owner->refresh()->status);
         $this->asUser($owner)->getJson('/api/v1/auth/me')->assertStatus(403);
         $this->getJson('/api/v1/me/moderation-decisions')->assertOk()->assertJsonPath('data.0.id', $decision);

@@ -167,9 +167,14 @@ final class Sessions
 
         // Return only to a registered, protected GET page, never an API or auth action.
         foreach (app(\Spark\Http\Routing\Router::class)->getRoutes() as $name => $route) {
+            if (in_array($name, ['staff.reports.evidence', 'staff.reports.media', 'staff.boosts.preview'], true)) {
+                continue;
+            }
+            $segments = array_map(fn ($segment) => str_starts_with($segment, '{')
+                ? '[1-9][0-9]{0,14}' : preg_quote($segment, '~'), explode('/', rtrim($route['path'], '/') ?: '/'));
             if (is_string($name) && str_starts_with($name, 'staff.')
                 && $route['method'] === Request::METHOD_GET && in_array('staff.web', (array) $route['middleware'], true)
-                && (rtrim($route['path'], '/') ?: '/') === $path) {
+                && preg_match('~^' . implode('/', $segments) . '$~D', $path)) {
                 return $value;
             }
         }

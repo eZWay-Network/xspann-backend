@@ -87,12 +87,7 @@ command('accounts:retry', function (Prompt $prompt, array $args): void {
     if (!$id) {
         throw new InvalidArgumentException('Use --request=<privacy-request-id>.');
     }
-    $updated = query('privacy_requests')->where('id', $id)->where('status', 'failed')
-        ->update(['status' => 'pending', 'attempts' => 0, 'error_code' => null, 'updated_at' => now()]);
-    if ($updated) {
-        \App\Services\AuditTrail::record('privacy.retry_requested', ['request_id' => $id], null, 'console');
-        \App\Services\PrivacyRequests::dispatch($id);
-    }
+    $updated = \App\Services\PrivacyRequests::retry($id);
     $prompt->message($updated ? 'Privacy request queued again.' : 'No failed request found.');
 })->description('Retry a failed privacy request after correcting its underlying storage or database problem');
 

@@ -29,8 +29,8 @@ class DocsController extends Controller
             $entry['uri'] = preg_replace('/\{user:username\}/', '{username}', $route['path']);
             $entry['route'] = $route['path'];
             $entry['id'] = strtolower(str_replace('@', '-', $key));
-            $entry['auth'] = (bool) array_intersect(['auth', 'restricted', 'staff'], $route['middleware']);
-            $entry['access'] = in_array('staff', $route['middleware'], true) ? 'staff_recent_mfa' : (in_array('restricted', $route['middleware'], true) ? 'verified_recovery' : ($entry['auth'] ? 'active_verified_adult' : 'public'));
+            $entry['auth'] = (bool) array_intersect(['auth', 'restricted'], $route['middleware']);
+            $entry['access'] = (in_array('restricted', $route['middleware'], true) ? 'verified_recovery' : ($entry['auth'] ? 'active_verified_adult' : 'public'));
             $entry['rate'] = null;
             foreach ($route['middleware'] as $middleware) {
                 if (str_starts_with($middleware, 'throttle:')) {
@@ -42,7 +42,7 @@ class DocsController extends Controller
                 'PrivacyController@export' => ['X-Reauth-Proof' => '<export-proof>'],
                 'PrivacyController@deleteAccount' => ['X-Reauth-Proof' => '<delete-account-proof>'],
                 'BillingController@checkout' => ['Idempotency-Key' => '<unique-purchase-key>'],
-                'PromotionController@submit', 'PromotionAdminController@remedy' => ['Idempotency-Key' => '<unique-promotion-operation-key>'],
+                'PromotionController@submit' => ['Idempotency-Key' => '<unique-promotion-operation-key>'],
                 'AnnouncementController@send' => ['Idempotency-Key' => '<unique-broadcast-key>'],
                 'BillingController@webhook' => ['Stripe-Signature' => '<signature-over-exact-raw-body>'],
                 default => [],

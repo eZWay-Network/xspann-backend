@@ -142,7 +142,7 @@ class PromotionDeliveryTest extends TestCase
         $placement = query('promotion_placements')->where('boost_id', $boost->id)->first();
         $boost = Boosts::find($boost->id);
         $this->assertSame(43200, Promotion::seconds($placement->extension_ends_at) - Promotion::seconds($placement->extension_starts_at));
-        $this->postJson("/api/v1/admin/boosts/$boost->id/remedy", ['version' => $boost->version, 'action' => 'extend', 'placement_version' => $placement->version, 'reason' => 'Consent missing.'], ['Idempotency-Key' => 'extension-no-consent'])->assertStatus(409);
+        $this->assertBrowserRejected($this->browserWrite("/promotions/boosts/$boost->id/remedy", ['version' => $boost->version, 'action' => 'extend', 'placement_version' => $placement->version, 'reason' => 'Consent missing.'], ['Idempotency-Key' => 'extension-no-consent']));
         $other = $this->makeUser('foreign');
         $this->asUser($other)->postJson("/api/v1/me/artist/placements/$placement->id/extension-consent", ['version' => $placement->version, 'accepted' => true])->assertNotFound();
         $placement = Placements::consent($owner, $placement->id, $placement->version, true);
@@ -178,10 +178,12 @@ class PromotionDeliveryTest extends TestCase
         $this->promotionSetup();
         $this->promotionStaff();
         $input = ['available' => true, 'reference' => 'one-monitor-observation', 'note' => 'Verified the real rendered placement surface.'];
-        $first = $this->postJson('/api/v1/admin/promotion-surface/availability', $input)->assertOk()->json('data');
-        $this->postJson('/api/v1/admin/promotion-surface/availability', $input)->assertOk()->assertJsonPath('data', $first);
-        $this->postJson('/api/v1/admin/promotion-surface/availability', [...$input, 'note' => 'Changed evidence'])->assertStatus(409);
-        $this->postJson('/api/v1/admin/promotion-surface/availability', [...$input, 'reference' => 'backdate-attempt', 'starts_at' => '2026-10-01T00:00:00Z'])->assertStatus(422);
+        $this->browserWrite('/promotions/surface/observations', $input)->assertStatus(303);
+        $first = query('promotion_availability')->where('reference', $input['reference'])->first();
+        $this->browserWrite('/promotions/surface/observations', $input)->assertStatus(303);
+        $this->assertSame((array) $first, (array) query('promotion_availability')->where('reference', $input['reference'])->first());
+        $this->assertBrowserRejected($this->browserWrite('/promotions/surface/observations', [...$input, 'note' => 'Changed evidence']));
+        $this->assertBrowserRejected($this->browserWrite('/promotions/surface/observations', [...$input, 'reference' => 'backdate-attempt', 'starts_at' => '2026-10-01T00:00:00Z']));
         $this->assertDatabaseCount('promotion_availability', 2);
     }
 

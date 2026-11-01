@@ -66,7 +66,7 @@ trait ReleaseJourneys
         $this->stripeState = $this->storagePath . '/stripe-state.json';
         $this->saveStripeState();
         $config = [];
-        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists', 'billing', 'promotions', 'communications', 'relay'] as $key) {
+        foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists', 'billing', 'promotions', 'communications', 'relay', 'staff', 'staff-navigation', 'inertia'] as $key) {
             $config[$key] = config($key);
         }
         $config['testing'] = ['fake_stripe' => true, 'stripe_state' => $this->stripeState];
@@ -97,6 +97,29 @@ trait ReleaseJourneys
         }
 
         return $this->journeyServer->request($method, '/api/v1' . $path, $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR), $headers);
+    }
+
+    private string $staffWireCsrf = '';
+    private string $staffWireVersion = '';
+
+    private function staffWire(string $method, string $path, ?array $body = null, bool $evidence = false): TestResponse
+    {
+        $origin = parse_url(config('app.url'));
+        $headers = ['Host' => $origin['host'] . (isset($origin['port']) ? ':' . $origin['port'] : ''),
+            'Accept' => $evidence ? 'application/json' : 'text/html'];
+        if (!$evidence) {
+            $headers += ['X-Inertia' => 'true', 'X-Inertia-Version' => $this->staffWireVersion];
+        }
+        if ($body !== null) {
+            $headers += ['Content-Type' => 'application/json', 'X-CSRF-TOKEN' => $this->staffWireCsrf];
+        }
+        $response = $this->journeyServer->request($method, $path, $body === null ? null : json_encode($body), $headers, true);
+        if ($response->response->getStatusCode() === 200 && !$evidence) {
+            $this->staffWireCsrf = $response->json('props.csrf_token');
+            $this->staffWireVersion = $response->json('version');
+        }
+
+        return $response;
     }
 
     private function saveStripeState(): void
@@ -312,17 +335,21 @@ trait ReleaseJourneys
 
             $boost = $this->wire('POST', '/me/artist/boosts', $artistToken, $this->boostInput($video))->assertCreated()->json('data.id');
             $this->wire('POST', "/me/artist/boosts/$boost/submit", $artistToken, ['version' => 1], ['Idempotency-Key' => 'journey-boost-key'])->assertAccepted();
-            $this->wire('GET', '/admin/boosts', $fanToken)->assertForbidden();
-            $this->wire('GET', '/admin/boosts', $staffToken)->assertForbidden();
-            $this->wire('POST', '/auth/reauthenticate', $staffToken, ['purpose' => 'staff', 'password' => 'password123', 'mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertOk();
-            $this->wire('POST', "/admin/boosts/$boost/decision", $staffToken, ['version' => 2, 'decision' => 'approve', 'reason' => 'Reviewed original creative and rights.'])->assertOk();
+            $this->wire('GET', '/admin/boosts', $fanToken)->assertNotFound();
+            $this->wire('GET', '/admin/boosts', $staffToken)->assertNotFound();
+            $this->staffWire('GET', '/login')->assertOk();
+            $this->staffWire('POST', '/login', ['email' => $staff->email, 'password' => 'password123'])->assertStatus(303);
+            $this->staffWire('GET', '/challenge')->assertOk();
+            $this->staffWire('POST', '/challenge', ['mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertStatus(303);
+            $this->staffWire('GET', '/promotions/boosts')->assertOk();
+            $this->staffWire('POST', "/promotions/boosts/$boost/decision", ['version' => 2, 'decision' => 'approve', 'reason' => 'Reviewed original creative and rights.'])->assertStatus(303);
             query('promotion_boosts')->where('id', $boost)->update(['starts_at' => Billing::timestamp(time() - 1), 'ends_at' => Billing::timestamp(time() + 86399)]);
             (new PromotionMaintenance())->handle();
             $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertOk()->assertJsonCount(1, 'data');
             $report = $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Review sponsored claim.'])->assertCreated()->json('data.id');
-            $this->wire('GET', "/admin/reports/$report", $fanToken)->assertForbidden();
-            $this->wire('GET', "/admin/reports/$report", $staffToken)->assertOk()->assertJsonPath('data.evidence.video_id', $video);
-            $this->wire('POST', "/admin/reports/$report/decision", $staffToken, ['action' => 'dismiss', 'version' => 1, 'reason' => 'Verified the advertising claim.'])->assertOk();
+            $this->wire('GET', "/admin/reports/$report", $fanToken)->assertNotFound();
+            $this->staffWire('GET', "/moderation/reports/$report/evidence", evidence: true)->assertOk()->assertJsonPath('snapshot.video_id', $video);
+            $this->staffWire('POST', "/moderation/reports/$report/decision", ['action' => 'dismiss', 'version' => 1, 'reason' => 'Verified the advertising claim.'])->assertStatus(303);
             $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertJsonCount(1, 'data');
             $this->wire('POST', "/users/$owner->id/block", $fanToken)->assertCreated();
             $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Hidden sponsored claim.'])->assertNotFound();

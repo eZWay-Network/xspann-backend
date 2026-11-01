@@ -12,7 +12,7 @@ try {
     $app = require dirname(__DIR__) . '/bootstrap/app.php';
     $app->mergeConfig(require dirname(__DIR__) . '/tests/config.php');
     $app->withQueue();
-    $response = $app->handle(new \Nyholm\Psr7\ServerRequest('GET', 'http://localhost:8080/'));
+    $response = $app->handle(new \Nyholm\Psr7\ServerRequest('GET', 'http://localhost:8080/api/docs'));
     if ($response->getStatusCode() !== 200 || !preg_match('/<script id="reference-data" type="application\/json">(.*?)<\/script>/s', $response->getContent(), $match)) {
         throw new \RuntimeException('The API reference did not render.');
     }

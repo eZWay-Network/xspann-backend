@@ -27,6 +27,10 @@ abstract class StaffRequest extends FormRequest
                 $errors[$field] = ['Give a reason of at least five characters.'];
             }
 
+            if (in_array($field, ['note', 'reference'], true) && is_string($value) && trim($value) === '') {
+                $errors[$field] = ['Enter a meaningful value.'];
+            }
+
             if (is_string($value) && (!mb_check_encoding($value, 'UTF-8') || str_contains($value, "\0"))) {
                 $errors[$field] = ['Enter valid text.'];
             }

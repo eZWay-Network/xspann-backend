@@ -52,6 +52,11 @@ final class StaffPerimeter
             ) {
                 return $this->error(404);
             }
+            if (preg_match('~^(?:users|artists|content/(?:videos|audios|playlists)|moderation/(?:reports|appeals)|promotions/(?:boosts|placements)|operations/(?:privacy|actions))/([^/]+)(?:/|$)~D', trim($request->getPath(), '/'), $match)
+                && trim($request->getPath(), '/') !== 'promotions/placements/create'
+                && !preg_match('/^[1-9][0-9]{0,14}$/D', $match[1])) {
+                return $this->error(404);
+            }
             $response = $next($request);
 
             if ($response instanceof Response && $response->getStatusCode() >= 400 && !$this->isProtocolResponse($response)) {
@@ -60,6 +65,10 @@ final class StaffPerimeter
 
             return $response;
         } catch (ValidationException $exception) {
+            if ($request->attributes['staff_disclosure'] ?? false) {
+                return json(['errors' => $exception->getErrors()], 422);
+            }
+
             // Never put credentials, codes, invitation tokens, or old input in flash.
             return Inertia::redirect($this->returnUrl($request), 303)->withErrors($exception->getErrors());
         } catch (StaffException $exception) {
@@ -74,6 +83,15 @@ final class StaffPerimeter
         } catch (ThrottleException) {
             return $this->error(429);
         } catch (ResponseException $exception) {
+            $status = $exception->response->getStatusCode();
+            if ($request->isPostBack() && $request->header('X-Inertia') && in_array($status, [409, 422], true)) {
+                return Inertia::redirect($this->returnUrl($request), 303)->withErrors([
+                    'form' => [$status === 409
+                        ? 'This record changed or is no longer eligible. Review the refreshed record before submitting again.'
+                        : 'The action could not be applied. Check the values, dates and current eligibility before trying again.'],
+                ]);
+            }
+
             return $exception->response->getStatusCode() >= 400 && !$this->isProtocolResponse($exception->response)
                 ? $this->error($exception->response->getStatusCode())
                 : $exception->response;
@@ -91,7 +109,8 @@ final class StaffPerimeter
 
     private function isProtocolResponse(Response $response): bool
     {
-        return $response->hasHeader('X-Inertia') || $response->hasHeader('X-Inertia-Location') || $response->hasHeader('X-Inertia-Redirect');
+        return $response->hasHeader('X-Inertia') || $response->hasHeader('X-Inertia-Location') || $response->hasHeader('X-Inertia-Redirect')
+            || ($response->getStatusCode() === 416 && $response->hasHeader('Content-Range'));
     }
 
     private function returnUrl(Request $request): string

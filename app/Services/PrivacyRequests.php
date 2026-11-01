@@ -112,6 +112,24 @@ class PrivacyRequests
         }
     }
 
+    public static function retry(int $id, ?int $actor = null, bool $dispatch = true): bool
+    {
+        $updated = Cache::lock("privacy.process.$id", 3600)->block(5, function () use ($id, $actor): bool {
+            $updated = DB::table('privacy_requests')->where('id', $id)->where('status', 'failed')
+                ->update(['status' => 'pending', 'attempts' => 0, 'error_code' => null, 'updated_at' => now()->toDateTimeString()]);
+            if ($updated) {
+                AuditTrail::record('privacy.retry_requested', ['request_id' => $id], $actor, $actor ? 'staff' : 'console');
+            }
+
+            return $updated > 0;
+        });
+        if ($updated && $dispatch) {
+            self::dispatch($id);
+        }
+
+        return $updated;
+    }
+
     public static function process(int $id): void
     {
         Cache::lock("privacy.process.$id", 3600)->block(5, function () use ($id): void {

@@ -59,7 +59,7 @@ class AccountController extends Controller
     public function reauthenticate(Request $request): Response
     {
         $input = $request->validate([
-            'purpose' => ['required', ['in' => ['delete_account', 'export_data', 'staff']]],
+            'purpose' => ['required', ['in' => ['delete_account', 'export_data']]],
             'password' => ['nullable', 'string', 'max:1024'],
             'google_token' => ['nullable', 'string', 'max:8192'],
             'mfa_code' => ['nullable', 'string', 'max:6'],

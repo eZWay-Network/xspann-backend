@@ -17,7 +17,15 @@ class Moderation
         return Communications::transaction(fn() => self::captureReport($reporter, $input));
     }
 
-    private static function captureReport(User $reporter, array $input): Report
+    public static function staffCase(User $staff, array $input): Report
+    {
+        abort_unless(in_array($input['target_type'], ['user', 'video', 'audio', 'comment', 'playlist', 'boost'], true), 422, 'Select public account or content metadata.');
+        $field = array_search($input['target_type'], self::TARGETS, true);
+
+        return Communications::transaction(fn () => self::captureReport($staff, [$field => $input['target_id'], 'reason' => $input['reason'], 'details' => $input['details'] ?? null], true));
+    }
+
+    private static function captureReport(User $reporter, array $input, bool $staffOrigin = false): Report
     {
         $targets = array_filter(array_intersect_key($input, self::TARGETS), fn($id) => $id !== null);
 
@@ -27,19 +35,20 @@ class Moderation
         $id = (int) $targets[$field];
         $type = self::TARGETS[$field];
 
+        $viewer = $staffOrigin ? null : $reporter;
         $target = match ($type) {
-            'user' => User::visibleTo($reporter)->findOrFail($id),
-            'video' => Video::published()->visibleTo($reporter)->findOrFail($id),
-            'audio' => Audio::availableTo($reporter)->findOrFail($id),
-            'comment' => Comment::visibleTo($reporter)->findOrFail($id),
-            'playlist' => ArtistPlaylist::visibleTo($reporter)->findOrFail($id),
+            'user' => User::visibleTo($viewer)->findOrFail($id),
+            'video' => Video::published()->visibleTo($viewer)->findOrFail($id),
+            'audio' => Audio::availableTo($viewer)->findOrFail($id),
+            'comment' => Comment::visibleTo($viewer)->findOrFail($id),
+            'playlist' => ArtistPlaylist::visibleTo($viewer)->findOrFail($id),
             'message' => Conversations::reportedMessage($id, $reporter->id),
             'announcement' => Announcements::delivered($id, $reporter->id, true),
             'boost' => \App\Services\Promotions\Delivery::reportedBoost($id, $reporter),
         };
 
         if ($type === 'comment') {
-            Video::published()->visibleTo($reporter)->findOrFail($target->video_id);
+            Video::published()->visibleTo($viewer)->findOrFail($target->video_id);
         }
 
         $subject = match ($type) {
@@ -73,7 +82,9 @@ class Moderation
         }
 
         return Report::create([
-            'user_id' => $reporter->id,
+            'user_id' => $staffOrigin ? null : $reporter->id,
+            'source' => $staffOrigin ? 'staff' : 'customer',
+            'initiator_id' => $staffOrigin ? $reporter->id : null,
             'subject_user_id' => $subject,
             $field => $id,
             'target_type' => $type,
@@ -99,7 +110,7 @@ class Moderation
             );
 
             abort_if(
-                in_array($staff->id, [$report->user_id, $report->subject_user_id], true),
+                in_array($staff->id, [$report->user_id, $report->subject_user_id, $report->initiator_id], true),
                 403,
                 'Another staff member must review this report.'
             );
@@ -310,7 +321,7 @@ class Moderation
             $report = Report::findOrFail($decision->report_id);
 
             abort_if(
-                in_array($staff->id, [(int) $decision->staff_id, (int) $appeal->user_id, (int) $report->user_id], true),
+                in_array($staff->id, [(int) $decision->staff_id, (int) $appeal->user_id, (int) $report->user_id, (int) $report->initiator_id], true),
                 403,
                 'An independent staff member must review this appeal.'
             );

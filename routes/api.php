@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Api\V1\{PromotionController, PromotionAdminController};
+use App\Http\Controllers\Api\V1\PromotionController;
 
 use App\Http\Controllers\Api\V1\{
     CommunicationController,
@@ -71,24 +71,6 @@ Route::prefix('v1')->group(function () {
         Route::get('/me/moderation-appeals', [ModerationController::class, 'ownAppeals']);
         Route::post('/me/moderation-appeals', [ModerationController::class, 'appeal'])->middleware('throttle:10');
         Route::post('/auth/logout', [AuthController::class, 'logout']);
-    });
-
-    Route::middleware('staff')->group(function (): void {
-        Route::get('/admin/boosts', [PromotionAdminController::class, 'index']);
-        Route::get('/admin/boosts/{boost}', [PromotionAdminController::class, 'show']);
-        Route::post('/admin/boosts/{boost}/decision', [PromotionAdminController::class, 'decision'])->middleware('throttle:30');
-        Route::post('/admin/boosts/{boost}/remedy', [PromotionAdminController::class, 'remedy'])->middleware('throttle:30');
-        Route::get('/admin/placements', [PromotionAdminController::class, 'placements']);
-        Route::post('/admin/placements', [PromotionAdminController::class, 'storePlacement'])->middleware('throttle:30');
-        Route::patch('/admin/placements/{placement}', [PromotionAdminController::class, 'updatePlacement'])->middleware('throttle:30');
-        Route::post('/admin/placements/{placement}/evidence', [PromotionAdminController::class, 'evidence'])->middleware('throttle:30');
-        Route::get('/admin/promotion-surface', [PromotionAdminController::class, 'surface']);
-        Route::post('/admin/promotion-surface/availability', [PromotionAdminController::class, 'observe'])->middleware('throttle:60');
-        Route::get('/admin/reports', [ModerationController::class, 'reports']);
-        Route::get('/admin/reports/{report}', [ModerationController::class, 'report']);
-        Route::post('/admin/reports/{report}/decision', [ModerationController::class, 'decide'])->middleware('throttle:30');
-        Route::get('/admin/moderation-appeals', [ModerationController::class, 'appeals']);
-        Route::post('/admin/moderation-appeals/{appeal}/decision', [ModerationController::class, 'decideAppeal'])->middleware('throttle:30');
     });
 
     Route::get('/promotion-offers', [PromotionController::class, 'offers']);

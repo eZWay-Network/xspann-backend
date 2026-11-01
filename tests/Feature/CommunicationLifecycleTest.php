@@ -13,6 +13,8 @@ use Tests\TestCase;
 
 class CommunicationLifecycleTest extends TestCase
 {
+    use \Tests\Support\StaffBrowser;
+
     use CommunicationFixtures;
 
     public function testPopulatedStepThreeUpgradePreservesAccountsFollowsNotificationsAndDefaults(): void
@@ -110,14 +112,14 @@ class CommunicationLifecycleTest extends TestCase
         $report = Moderation::report($b, ['message_id' => $message->id, 'reason' => 'Review']);
         $secret = Totp::secret();
         AccountSecurity::enrollStaff($staff, 'moderator', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
-        $this->asUser($staff)->getJson('/api/v1/admin/reports/' . $report->id)->assertForbidden();
-        $this->postJson('/api/v1/auth/reauthenticate', ['purpose' => 'staff', 'password' => 'password123', 'mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertOk();
-        $response = $this->getJson('/api/v1/admin/reports/' . $report->id)->assertOk()
-            ->assertHeader('Cache-Control', 'no-store')->assertJsonPath('data.evidence.body', 'Reported content');
+        $this->asUser($staff)->browserPage('/moderation/reports/' . $report->id)->assertStatus(409);
+        $this->browserLogin($staff, 'moderator');
+        $response = $this->browserEvidence('/moderation/reports/' . $report->id)->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private, max-age=0')->assertJsonPath('snapshot.body', 'Reported content');
         $this->assertFalse(str_contains($response->content(), 'Unreported private content'));
-        $this->getJson("/api/v1/conversations/$conversation->id/messages")->assertNotFound();
+        $this->asUser($staff)->getJson("/api/v1/conversations/$conversation->id/messages")->assertNotFound();
         $this->assertDatabaseHas('audit_events', ['action' => 'moderation.evidence_viewed']);
-        $this->postJson('/api/v1/admin/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Restricted message', 'version' => 1])->assertOk();
+        $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Restricted message', 'version' => 1])->assertStatus(303);
         $this->asUser($b)->getJson("/api/v1/conversations/$conversation->id/messages?after_id=0")->assertOk()
             ->assertJsonPath('data.0.body', null)->assertJsonPath('data.0.unavailable', true)
             ->assertJsonPath('data.1.body', 'Unreported private content');

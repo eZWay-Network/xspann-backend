@@ -9,6 +9,8 @@ class Report extends Model
 {
     protected array $fillable = [
         'user_id',
+        'source',
+        'initiator_id',
         'subject_user_id',
         'video_id',
         'reported_user_id',

@@ -25,11 +25,12 @@ class PromotionPlacementTest extends TestCase
         $this->promotionSetup();
         $this->promotionStaff();
         $input = $this->enrollmentInput($artist->id);
-        $this->postJson('/api/v1/admin/placements', $input)->assertCreated()->assertJsonPath('data.type', 'feature');
+        $this->browserWrite('/promotions/placements', $input)->assertStatus(303);
+        $this->assertDatabaseHas('promotion_placements', ['type' => 'feature']);
         $this->assertDatabaseCount('promotion_enrollments', 1);
         $this->assertDatabaseCount('promotion_placements', 2);
-        $this->postJson('/api/v1/admin/placements', $input)->assertStatus(409);
-        $this->postJson('/api/v1/admin/placements', [...$input, 'type' => 'network_post'])->assertStatus(409);
+        $this->assertBrowserRejected($this->browserWrite('/promotions/placements', $input));
+        $this->assertBrowserRejected($this->browserWrite('/promotions/placements', [...$input, 'type' => 'network_post']));
         $this->asUser($owner)->getJson('/api/v1/me/artist/placements')->assertOk()->assertJsonCount(2, 'data');
         $this->assertSame(['feature', 'network_post'], query('promotion_placements')->orderBy('id')->pluck('type'));
         $other = $this->makeUser('outside');
@@ -44,17 +45,17 @@ class PromotionPlacementTest extends TestCase
         $this->promotionSetup();
         $this->promotionStaff();
         $input = $this->enrollmentInput($artist->id);
-        $this->postJson('/api/v1/admin/placements', [...$input, 'capacity_confirmed' => false])->assertStatus(422);
-        $this->postJson('/api/v1/admin/placements', [...$input, 'network_account' => 'not-confirmed'])->assertStatus(503);
+        $this->assertBrowserRejected($this->browserWrite('/promotions/placements', [...$input, 'capacity_confirmed' => false]));
+        $this->browserWrite('/promotions/placements', [...$input, 'network_account' => 'not-confirmed'])->assertStatus(503);
         $month = $input['month'];
         $schedule = ['starts_at' => "$month-02" . 'T00:00:00Z', 'ends_at' => "$month-09" . 'T00:00:00Z'];
-        $this->postJson('/api/v1/admin/placements', [...$input, ...$schedule])->assertCreated();
+        $this->browserWrite('/promotions/placements', [...$input, ...$schedule])->assertStatus(303);
         $second = $this->makeArtist($this->makeUser('second'));
-        $this->postJson('/api/v1/admin/placements', [...$input, ...$schedule, 'artist_id' => $second->id])->assertStatus(409);
+        $this->assertBrowserRejected($this->browserWrite('/promotions/placements', [...$input, ...$schedule, 'artist_id' => $second->id]));
         $this->assertDatabaseCount('promotion_enrollments', 1);
         $this->assertDatabaseCount('promotion_placements', 2);
-        $this->postJson('/api/v1/admin/placements', [...$input, 'artist_id' => $second->id,
-            'starts_at' => "$month-09" . 'T00:00:00Z', 'ends_at' => "$month-16" . 'T00:00:00Z'])->assertCreated();
+        $this->browserWrite('/promotions/placements', [...$input, 'artist_id' => $second->id,
+            'starts_at' => "$month-09" . 'T00:00:00Z', 'ends_at' => "$month-16" . 'T00:00:00Z'])->assertStatus(303);
     }
 
     public function testEvidenceMustBePastDistinctAndImmutableAndCannotInventSevenDays(): void
@@ -72,17 +73,18 @@ class PromotionPlacementTest extends TestCase
             'ends_at' => Billing::timestamp($end), 'status' => 'awaiting_evidence']);
         $input = ['version' => 1, 'actual_starts_at' => gmdate('Y-m-d\TH:i:s\Z', $end - 604800),
             'actual_ends_at' => gmdate('Y-m-d\TH:i:s\Z', $end), 'proof' => 'evidence:archive/seven-day-feature', 'note' => 'Actual seven-day operator archive.'];
-        $this->postJson("/api/v1/admin/placements/$feature->id/evidence", [...$input, 'actual_starts_at' => gmdate('Y-m-d\TH:i:s\Z', $end - 600)])->assertStatus(422);
-        $this->postJson("/api/v1/admin/placements/$feature->id/evidence", [...$input, 'proof' => 'http://unapproved.example/proof'])->assertStatus(422);
-        $this->postJson("/api/v1/admin/placements/$feature->id/evidence", $input)->assertOk()->assertJsonPath('data.status', 'completed');
-        $this->postJson("/api/v1/admin/placements/$feature->id/evidence", $input)->assertOk();
-        $this->postJson("/api/v1/admin/placements/$feature->id/evidence", [...$input, 'note' => 'Different record.'])->assertStatus(409);
+        $this->assertBrowserRejected($this->browserWrite("/promotions/placements/$feature->id/evidence", [...$input, 'actual_starts_at' => gmdate('Y-m-d\TH:i:s\Z', $end - 600)]));
+        $this->assertBrowserRejected($this->browserWrite("/promotions/placements/$feature->id/evidence", [...$input, 'proof' => 'http://unapproved.example/proof']));
+        $this->browserWrite("/promotions/placements/$feature->id/evidence", $input)->assertStatus(303);
+        $this->assertDatabaseHas('promotion_placements', ['id' => $feature->id, 'status' => 'completed']);
+        $this->browserWrite("/promotions/placements/$feature->id/evidence", $input)->assertStatus(303);
+        $this->assertBrowserRejected($this->browserWrite("/promotions/placements/$feature->id/evidence", [...$input, 'note' => 'Different record.']));
         $this->assertSame('planned', query('promotion_placements')->where('id', $social->id)->value('status'));
         query('promotion_placements')->where('id', $social->id)->update(['starts_at' => Billing::timestamp($end - 3600),
             'ends_at' => Billing::timestamp($end), 'status' => 'awaiting_evidence']);
         $socialInput = [...$input, 'actual_starts_at' => gmdate('Y-m-d\TH:i:s\Z', $end - 60), 'actual_ends_at' => gmdate('Y-m-d\TH:i:s\Z', $end - 60)];
-        $this->postJson("/api/v1/admin/placements/$social->id/evidence", $socialInput)->assertStatus(409);
-        $this->postJson("/api/v1/admin/placements/$social->id/evidence", [...$socialInput, 'proof' => 'https://www.instagram.com/p/unique-post/'])->assertOk();
+        $this->assertBrowserRejected($this->browserWrite("/promotions/placements/$social->id/evidence", $socialInput));
+        $this->browserWrite("/promotions/placements/$social->id/evidence", [...$socialInput, 'proof' => 'https://www.instagram.com/p/unique-post/'])->assertStatus(303);
         $this->assertDatabaseCount('promotion_evidence', 2);
         $this->assertSame(2, query('audit_events')->where('action', 'promotion.placement.delivered')->count());
         $this->assertSame(0, query('promotion_placements')->where('type', 'tv')->count());

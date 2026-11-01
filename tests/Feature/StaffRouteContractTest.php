@@ -7,10 +7,10 @@ use Tests\TestCase;
 
 class StaffRouteContractTest extends TestCase
 {
-    public function testStepOnePreservesAllCustomerAndLegacyStaffMethodPathPairs(): void
+    public function testStepTwoRetiresStaffApiAndPreservesEveryCustomerMethodPathPair(): void
     {
         $fixture = json_decode(file_get_contents(dirname(__DIR__) . '/Fixtures/staff/api-route-baseline.json'), true, flags: JSON_THROW_ON_ERROR);
-        $expected = [...$fixture['customer_routes'], ...array_column($fixture['step_2_migration'], 'legacy')];
+        $expected = $fixture['customer_routes'];
         $actual = [];
 
         foreach (app(Router::class)->getRoutes() as $name => $route) {
@@ -49,6 +49,6 @@ class StaffRouteContractTest extends TestCase
                 $this->assertSame('staff.inertia', $middleware[3]);
             }
         }
-        $this->assertSame(25, count($names));
+        $this->assertSame(66, count($names));
     }
 }

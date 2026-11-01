@@ -3,13 +3,13 @@
 namespace Tests\Support;
 
 use App\Models\User;
-use App\Services\{AccountSecurity, Totp};
 use App\Services\Billing\Billing;
 use App\Services\Promotions\{Availability, Boosts, Promotion};
 
 trait PromotionFixtures
 {
     use CommunicationFixtures;
+    use StaffBrowser;
 
     protected function promotionSetup(): void
     {
@@ -23,10 +23,7 @@ trait PromotionFixtures
     protected function promotionStaff(string $name = 'operator'): User
     {
         $staff = $this->makeUser($name);
-        $secret = Totp::secret();
-        AccountSecurity::enrollStaff($staff, 'admin', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
-        $this->asUser($staff)->postJson('/api/v1/auth/reauthenticate', ['purpose' => 'staff', 'password' => 'password123',
-            'mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertOk();
+        $this->browserLogin($staff);
 
         return $staff;
     }

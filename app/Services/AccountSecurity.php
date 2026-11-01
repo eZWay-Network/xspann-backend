@@ -85,24 +85,14 @@ class AccountSecurity
     public static function reauthenticate(User $user, array $input): array
     {
         $purpose = $input['purpose'];
+        abort_unless(in_array($purpose, ['export_data', 'delete_account'], true), 422, 'Use browser authentication for staff access.');
         self::verifyCredential($user, $input);
 
         return Cache::lock("accounts.security.$user->id", 10)->block(5, fn() => DB::transaction(function () use ($user, $input, $purpose): array {
             $staff = DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->lockForUpdate()->first();
-            abort_if($purpose === 'staff' && !$staff, 403, 'Staff access is required.');
 
             if ($staff) {
                 self::consumeStaffTotp($staff, $input['mfa_code'] ?? '');
-            }
-
-            if ($purpose === 'staff') {
-                abort_unless($user->status === 'active' && $user->onboarded_at, 403, 'This account cannot access staff tools.');
-                DB::table('staff_sessions')->upsert([
-                    'user_id' => $user->id,
-                    'session_hash' => self::session(),
-                    'expires_at' => now()->addMinutes(15)->toDateTimeString(),
-                    'created_at' => now()->toDateTimeString(),
-                ], ['session_hash'], ['expires_at']);
             }
 
             AuditTrail::record('account.reauthenticated', ['purpose' => $purpose], $user->id);
@@ -111,7 +101,7 @@ class AccountSecurity
                 'proof' => self::issue($user->id, $purpose, 300, self::session()),
                 'purpose' => $purpose,
                 'expires_at' => now()->addMinutes(5),
-                'staff_access_expires_at' => $purpose === 'staff' ? now()->addMinutes(15) : null,
+                'staff_access_expires_at' => null,
             ];
         }));
     }

@@ -9,16 +9,6 @@ class ApiContractTest extends TestCase
 {
     private const ROUTES = [
         'GET /api/v1/artists/featured',
-        'GET /api/v1/admin/boosts',
-        'GET /api/v1/admin/boosts/{boost}',
-        'POST /api/v1/admin/boosts/{boost}/decision',
-        'POST /api/v1/admin/boosts/{boost}/remedy',
-        'GET /api/v1/admin/placements',
-        'POST /api/v1/admin/placements',
-        'PATCH /api/v1/admin/placements/{placement}',
-        'POST /api/v1/admin/placements/{placement}/evidence',
-        'GET /api/v1/admin/promotion-surface',
-        'POST /api/v1/admin/promotion-surface/availability',
         'GET /api/v1/promotion-offers',
         'GET /api/v1/promotions/placements',
         'POST /api/v1/promotions/events',
@@ -110,11 +100,6 @@ class ApiContractTest extends TestCase
         'GET /api/v1/me/moderation-decisions',
         'GET /api/v1/me/moderation-appeals',
         'POST /api/v1/me/moderation-appeals',
-        'GET /api/v1/admin/reports',
-        'GET /api/v1/admin/reports/{report}',
-        'POST /api/v1/admin/reports/{report}/decision',
-        'GET /api/v1/admin/moderation-appeals',
-        'POST /api/v1/admin/moderation-appeals/{appeal}/decision',
         'PATCH /api/v1/audios/{audio}',
         'DELETE /api/v1/audios/{audio}',
         'GET /api/v1/me/saved-audios',
@@ -240,14 +225,12 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(172, count($entries));
+        $this->assertSame(157, count($entries));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
         $reportParameters = array_column($entries['reportcontroller-store']['parameters'], null, 'name');
-        $queueParameters = array_column($entries['moderationcontroller-reports']['parameters'], null, 'name');
         foreach (\App\Services\Moderation::TARGETS as $field => $type) {
             $this->assertSame('body', $reportParameters[$field]['in']);
             $this->assertFalse($reportParameters[$field]['required']);
-            $this->assertTrue(str_contains($queueParameters['type']['description'], $type));
         }
         foreach (['privacycontroller-export', 'privacycontroller-deleteaccount'] as $operation) {
             $parameters = array_column($entries[$operation]['parameters'], null, 'name');

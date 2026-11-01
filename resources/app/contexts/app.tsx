@@ -67,10 +67,10 @@ export function useApp() {
   const settingsNavigation = menuLinks.filter(
     (item) => item.parent === "Settings",
   );
-  const formatDateTime = (value: string) =>
+  const formatDateTime = (value: string, seconds = false) =>
     new Intl.DateTimeFormat(props.preferences.locale, {
       dateStyle: "medium",
-      timeStyle: "short",
+      timeStyle: seconds ? "medium" : "short",
       timeZone: props.preferences.timezone,
     }).format(new Date(value));
 

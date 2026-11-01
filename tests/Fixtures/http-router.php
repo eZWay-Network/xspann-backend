@@ -19,7 +19,7 @@ if ($mediaRoot && $file && str_starts_with($file, $mediaRoot . DIRECTORY_SEPARAT
     exit;
 }
 $app = \Spark\Foundation\Application::create(dirname($configuration), config: $config, providers: require "$root/bootstrap/providers.php")
-    ->withMiddleware(load: "$root/bootstrap/middlewares.php", queue: ['cors'])
+    ->withMiddleware(load: "$root/bootstrap/middlewares.php", queue: ['staff.perimeter', 'cors', 'csrf'])
     ->withRouting(api: "$root/routes/api.php", web: "$root/routes/web.php");
 if (!empty($config['testing']['fake_stripe'])) {
     $stripe = new \Tests\Support\FakeStripe();
