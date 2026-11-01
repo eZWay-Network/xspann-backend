@@ -3,7 +3,7 @@
 namespace App\Services\Promotions;
 
 use App\Models\{Artist, User, Video};
-use App\Services\{Artists, Releases};
+use App\Services\{Artists, Realtime, Releases};
 use App\Services\Billing\Billing;
 use Spark\Database\QueryBuilder;
 use Spark\Facades\DB;
@@ -25,6 +25,19 @@ class Promotion
 
             return $callback();
         });
+    }
+
+    /** Called inside the domain transaction; publish only after the write commits. */
+    public static function notify(string $kind, int $id): void
+    {
+        $table = match ($kind) {
+            'boost' => 'promotion_boosts',
+            'placement' => 'promotion_placements',
+        };
+        $row = DB::table($table)->where('id', $id)->first();
+        if ($row?->user_id) {
+            Realtime::record((int) $row->user_id, "$kind.updated", $id, (int) $row->version);
+        }
     }
 
     public static function at(string $value): string

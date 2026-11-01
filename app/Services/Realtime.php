@@ -123,6 +123,12 @@ class Realtime
         if ($event->type === 'release.updated') {
             return DB::table('videos')->where('id', $event->resource_id)->where('user_id', $event->user_id)->where('status', '!=', 'deleted')->exists();
         }
+        if (in_array($event->type, ['boost.updated', 'placement.updated'], true)) {
+            $table = $event->type === 'boost.updated' ? 'promotion_boosts' : 'promotion_placements';
+
+            return DB::table($table)->where('id', $event->resource_id)->where('user_id', $event->user_id)
+                ->where('environment', config('billing.environment'))->exists();
+        }
 
         return in_array($event->type, ['notifications.updated', 'entitlements.updated'], true);
     }

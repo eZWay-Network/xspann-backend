@@ -39,6 +39,8 @@ class Boosts
                 'updated_at' => Billing::timestamp(),
             ]);
 
+            Promotion::notify('boost', $id);
+
             return self::find($id);
         });
     }
@@ -91,7 +93,7 @@ class Boosts
             Credits::reserve($boost);
             Promotion::reserveSlot($boost, $boost->starts_at, $boost->ends_at);
             self::update($boost, ['status' => 'pending_review']);
-            DB::table('promotion_placements')->insert([
+            $placementId = DB::table('promotion_placements')->insert([
                 'boost_id' => $id,
                 'user_id' => $user->id,
                 'artist_id' => $boost->artist_id,
@@ -104,6 +106,7 @@ class Boosts
                 'created_at' => Billing::timestamp(),
                 'updated_at' => Billing::timestamp(),
             ]);
+            Promotion::notify('placement', $placementId);
             AuditTrail::record('promotion.boost.submitted', ['boost_id' => $id], $user->id);
 
             return ['id' => $id, 'status' => 'pending_review', 'version' => $version + 1, 'reserved_cents' => (int) $boost->price_cents];
@@ -145,7 +148,10 @@ class Boosts
                     self::settle(self::find($id));
                     break;
             }
-            DB::table('promotion_placements')->where('boost_id', $id)->update(['reason' => $input['reason']]);
+            $placement = DB::table('promotion_placements')->where('boost_id', $id)->first();
+            if ($placement) {
+                Placements::write($placement, ['reason' => $input['reason']]);
+            }
             AuditTrail::record('promotion.boost.' . $input['decision'], ['boost_id' => $id, 'reason' => $input['reason']], $staff->id, 'staff');
 
             return self::find($id);
@@ -306,7 +312,7 @@ class Boosts
                         'settle_after' => null,
                         'stop_reason' => null
                     ]);
-                    DB::table('promotion_placements')->where('id', $placement->id)->update(['extension_consent' => 'applied', 'version' => DB::raw('version + 1')]);
+                    Placements::write(Placements::find($placement->id), ['extension_consent' => 'applied']);
                 }
             }
             AuditTrail::record('promotion.boost.remedy', ['boost_id' => $id, 'action' => $input['action'], 'reason' => $input['reason']], $staff->id, 'staff');
@@ -322,13 +328,12 @@ class Boosts
             'version' => $boost->version + 1,
             'updated_at' => Billing::timestamp(),
         ]);
+        Promotion::notify('boost', $boost->id);
         $placement = array_intersect_key($data, array_flip(['status', 'starts_at', 'ends_at']));
         if ($placement) {
-            DB::table('promotion_placements')->where('boost_id', $boost->id)->update([
-                ...$placement,
-                'version' => DB::raw('version + 1'),
-                'updated_at' => Billing::timestamp(),
-            ]);
+            foreach (DB::table('promotion_placements')->where('boost_id', $boost->id)->get() as $row) {
+                Placements::write($row, $placement);
+            }
         }
     }
 }

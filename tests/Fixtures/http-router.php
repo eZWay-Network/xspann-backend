@@ -22,7 +22,17 @@ $app = \Spark\Foundation\Application::create(dirname($configuration), config: $c
     ->withMiddleware(load: "$root/bootstrap/middlewares.php", queue: ['cors'])
     ->withRouting(api: "$root/routes/api.php", web: "$root/routes/web.php");
 if (!empty($config['testing']['fake_stripe'])) {
-    $app->instance(\App\Services\Billing\PaymentProvider::class, new \Tests\Support\FakeStripe());
+    $stripe = new \Tests\Support\FakeStripe();
+    // Sequential release journeys persist only synthetic provider objects across HTTP restarts.
+    if ($stateFile = $config['testing']['stripe_state'] ?? null) {
+        $state = json_decode(file_get_contents($stateFile), true, flags: JSON_THROW_ON_ERROR);
+        $stripe->objects = $state['objects'];
+        $stripe->keys = $state['keys'];
+        register_shutdown_function(static function () use ($stripe, $stateFile): void {
+            file_put_contents($stateFile, json_encode(['objects' => $stripe->objects, 'keys' => $stripe->keys], JSON_THROW_ON_ERROR));
+        });
+    }
+    $app->instance(\App\Services\Billing\PaymentProvider::class, $stripe);
 }
 try {
     $app->run();

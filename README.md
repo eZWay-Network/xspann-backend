@@ -2,7 +2,7 @@
 
 A Spark API using native ORM models, JSON resources, query builder, validation, bearer authentication, queues, and Blade documentation. Uses the installed TinyCore 4.2.13.
 
-Requires PHP 8.2+. Enable PDO and your database driver, `pdo_sqlite` for the default cache/queue/locks, `fileinfo`, `mbstring`, `openssl`, and `curl`. Install FFmpeg with libx264/AAC encoding and FFprobe for video compression, audio extraction, and cover generation. GD is used by the avatar upload test fixture.
+Requires PHP 8.2+. Enable PDO and your selected database driver, `pdo_sqlite` for the isolated regression suite, `fileinfo`, `mbstring`, `openssl`, and `curl`. Database cache/queue/locks use the configured database connection. Install FFmpeg with libx264/AAC encoding and FFprobe for video compression, audio extraction, and cover generation. GD is used by the avatar upload test fixture.
 
 ```sh
 composer install
@@ -20,6 +20,16 @@ php spark queue:work --sleep=1
 ```
 
 The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service files handle the returned bearer token, `data`, `meta`, and validation errors. Its image configuration allows `/uploads/**` on that API origin; add the S3 storage origin to `images.remotePatterns` for signed media, or the CDN origin for public media. Registration now requires email verification before login; the frontend must show the verification message instead of treating registration as an authenticated session.
+
+## Step 6 integration and web handoff
+
+Backend integration and handoff are ready for review; production acceptance and public sales remain on hold. Final verification: **391 tests / 6,195 assertions**, no failures or skips, including the opt-in MySQL checks. The added full HTTP journey covers fan/artist/operator actions, real FFmpeg, database workers, restart recovery, blocking, downgrade and deletion. Populated forward upgrades, concurrent spending and cross-module rights pass on SQLite and disposable MySQL 9.7.1. A separate probe verified signed transfers/Range and anonymous denial on the configured S3 service, then removed the temporary object.
+
+Promotion changes now emit committed owner-only `boost.updated` and `placement.updated` hints, with current ownership/environment/session checks before delivery. No new endpoint or schema migration is required. Keep the existing database and deploy with `php spark migrate` plus worker restarts. Do not use historical baseline rollback as a recovery procedure; the tested forward upgrade and the recorded MySQL rollback limitation are explained in [Step 6 review](docs/STEP_6_REVIEW.md).
+
+Use the [web handoff/runbook](docs/STEP_6_WEB_HANDOFF.md), [combined HTTP collection](docs/STEP_6_REVIEW.http) and [API reference snapshot](docs/STEP_6_API_REFERENCE.json). Regenerate the 172-operation reference and eight event contracts with `php scripts/export-api-reference.php > docs/STEP_6_API_REFERENCE.json`. Run `php test --filter=ReleaseJourneyTest` for isolated fixtures. To include MySQL, set `XPN_TEST_MYSQL_CONFIG` to the private JSON connection file described in the review; only randomly named test databases are created/migrated/dropped. Without that opt-in the four MySQL tests report skips.
+
+Real Stripe test-account configuration/rehearsal, deployed web flows, production WSS/proxy/supervision, monitoring/backup restore and operator ownership still require evidence. Live sales, boost bookings and unconfirmed pilot capacity remain closed. Your working database, native app and vendor files were unchanged. Handoff documents under `docs/` remain subject to this repository's existing ignore rule and must be included explicitly in a delivery package.
 
 ## Step 5 promotions and placements
 

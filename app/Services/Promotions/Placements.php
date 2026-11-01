@@ -64,6 +64,7 @@ class Placements
                     'created_at' => Billing::timestamp(),
                     'updated_at' => Billing::timestamp(),
                 ]);
+                Promotion::notify('placement', $id);
                 if ($type === $input['type']) {
                     $selected = self::find($id);
                 }
@@ -262,13 +263,15 @@ class Placements
         }
     }
 
-    private static function write(object $row, array $data): void
+    /** Caller holds the promotion transaction. */
+    public static function write(object $row, array $data): void
     {
         DB::table('promotion_placements')->where('id', $row->id)->update([
             ...$data,
             'version' => $row->version + 1,
             'updated_at' => Billing::timestamp(),
         ]);
+        Promotion::notify('placement', $row->id);
     }
 
     private static function proofIdentity(string $proof): string
