@@ -73,8 +73,6 @@ export default function Login({
         </Button>
         <p className="text-center text-xs leading-5 text-muted-foreground">
           You’ll verify an authenticator code next.
-          <br />
-          Need access or account recovery? Contact your trusted operator.
         </p>
       </form>
     </AuthLayout>

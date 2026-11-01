@@ -44,23 +44,23 @@
   --foreground: #24272e;
   --card: #ffffff;
   --muted: #f2f4f6;
-  --muted-foreground: #727985;
-  --primary: #105dad;
+  --muted-foreground: #656d7a;
+  --primary: #7545e8;
   --primary-foreground: #ffffff;
-  --accent: #eef5fd;
-  --accent-foreground: #105dad;
+  --accent: #f3effd;
+  --accent-foreground: var(--primary);
   --border: #e7e9ed;
   --input: #d9dde3;
-  --ring: #105dad;
+  --ring: var(--primary);
   --success: #277651;
   --success-soft: #eef7f1;
   --warning: #936315;
   --warning-soft: #fff7e7;
   --destructive: #b9443c;
   --destructive-soft: #fff1ef;
-  --chart-1: #105dad;
-  --chart-2: #739fcd;
-  --chart-3: #cfdfef;
+  --chart-1: var(--primary);
+  --chart-2: #a184db;
+  --chart-3: #e3d9fa;
 }
 
 @layer base {

@@ -14,6 +14,13 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Inertia boots Blade eagerly. Concurrent workers can create this directory together.
+        $views = storage_dir('framework/views');
+
+        if (!is_dir($views) && !@mkdir($views, 0755, true) && !is_dir($views)) {
+            throw new \RuntimeException('The view cache directory could not be created.');
+        }
+
         Gate::define('model.update', fn($model) => user('id') === $model->user_id);
         Gate::define('model.delete', fn($model) => user('id') === $model->user_id);
     }

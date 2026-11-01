@@ -149,6 +149,9 @@ class StaffFoundationTest extends TestCase
 
             if ($role !== 'admin') {
                 $this->assertFalse(str_contains(json_encode($response->json('props.navigation')), 'Team & access'));
+                $this->submit('/settings/team/invitations')->assertStatus(403)->assertJsonPath('props.auth', null);
+                $this->submit('/settings/team/1', [], 'PATCH')->assertStatus(403);
+                $this->submit('/settings/team/invitations/1/cancel')->assertStatus(403);
             }
         }
     }
@@ -322,4 +325,47 @@ class StaffFoundationTest extends TestCase
         }
     }
 
+    public function testCsrfProtectsEveryStaffMutationFamily(): void
+    {
+        $this->signIn($this->staff());
+
+        foreach ([
+            ['PATCH', '/settings/profile'],
+            ['PATCH', '/settings/preferences'],
+            ['POST', '/settings/security/password'],
+            ['POST', '/settings/security/factor'],
+            ['POST', '/settings/security/factor/complete'],
+            ['POST', '/settings/team/invitations'],
+            ['POST', '/settings/team/invitations/1/cancel'],
+            ['PATCH', '/settings/team/1'],
+            ['POST', '/settings/sessions/1/revoke'],
+            ['POST', '/settings/sessions/revoke-all'],
+        ] as [$method, $path]) {
+            $this->request($method, $path, [], self::headers())
+                ->assertStatus(419)
+                ->assertJsonPath('component', 'error')
+                ->assertJsonPath('props.auth', null);
+        }
+
+        $this->assertDatabaseCount('staff_sessions', 1);
+        $this->assertDatabaseCount('staff_invitations', 0);
+    }
+
+    public function testOwnSessionControlsCannotReadOrRevokeAnotherStaffSession(): void
+    {
+        $other = $this->staff('other');
+        $this->signIn($other);
+        $otherSession = DB::table('staff_sessions')->where('user_id', $other->id)->value('id');
+        Session::flush();
+        $this->signIn($this->staff());
+
+        $response = $this->page('/settings/security')->assertOk();
+        $this->assertCount(1, $response->json('props.sessions'));
+        $this->assertTrue($response->json('props.sessions.0.current'));
+        $this->submit('/settings/sessions/' . $otherSession . '/revoke')->assertStatus(404);
+        $this->assertDatabaseHas('staff_sessions', ['id' => $otherSession, 'revoked_at' => null]);
+
+        Session::put('staff_session_binding', hash('sha256', 'another-session'));
+        $this->page()->assertStatus(409)->assertHeader('X-Inertia-Location', 'http://localhost/login');
+    }
 }

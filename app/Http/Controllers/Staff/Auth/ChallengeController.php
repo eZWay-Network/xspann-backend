@@ -6,6 +6,7 @@ use App\Http\Requests\Staff\ChallengeRequest;
 use App\Services\Staff\{BrowserAuth, Sessions};
 use Inertia\Facades\Inertia;
 use Spark\Http\{Request, Response};
+use function is_string;
 
 final class ChallengeController
 {
@@ -16,6 +17,13 @@ final class ChallengeController
         if (!$context && !BrowserAuth::pending()) {
             return Inertia::redirect((string) route('staff.login'));
         }
+
+        $destination = $request->query('destination');
+
+        if ($context && is_string($destination)) {
+            session(['staff_destination' => Sessions::destination($destination)]);
+        }
+
         Inertia::withClearedHistory();
 
         return Inertia::render('auth/challenge', [

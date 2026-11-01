@@ -29,15 +29,14 @@ async function login(
   user = "admin",
   startPath = "/login",
   heading = "Workspace overview",
+  password = "StaffFixturePassword123!",
 ) {
   control("reset-replay", user);
   await page.goto(startPath);
   await page
     .getByLabel("Email address", { exact: true })
     .fill(`${user}@example.test`);
-  await page
-    .getByLabel("Password", { exact: true })
-    .fill("StaffFixturePassword123!");
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Continue securely" }).click();
   await expect(
     page.getByRole("heading", { name: "Verify it’s you" }),
@@ -60,6 +59,13 @@ test("cookie login, overview, keyboard search, date controls and responsive shel
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
+  const logo = page.getByRole("img", { name: "XPN Social", exact: true });
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveJSProperty("naturalWidth", 256);
+  await expect(page.getByRole("complementary")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Continue securely" }),
+  ).toHaveCSS("background-color", "rgb(117, 69, 232)");
   await page.screenshot({
     path: testInfo.outputPath("login.png"),
     fullPage: true,
@@ -134,6 +140,8 @@ test("profile preferences persist and expired MFA blocks page props", async ({
   ).toBeVisible();
   await page.getByRole("combobox", { name: "Rows per page" }).click();
   await page.getByRole("option", { name: "10 rows" }).click();
+  await page.getByRole("combobox", { name: "Display timezone" }).click();
+  await page.getByRole("option", { name: "Asia/Dhaka", exact: true }).click();
   await page.getByRole("button", { name: "Save preferences" }).click();
   await expect(
     page.getByText("Your workspace preferences have been saved.", {
@@ -144,6 +152,21 @@ test("profile preferences persist and expired MFA blocks page props", async ({
   await expect(
     page.getByRole("combobox", { name: "Rows per page" }),
   ).toContainText("10 rows");
+  await page.goto("/settings/security");
+  const lastActive = page.locator("time").first();
+  const timestamp = await lastActive.getAttribute("datetime");
+  await expect(lastActive).toHaveAttribute("title", "Asia/Dhaka");
+  await expect(lastActive).toHaveText(
+    await page.evaluate(
+      (value) =>
+        new Intl.DateTimeFormat("en", {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "Asia/Dhaka",
+        }).format(new Date(value!)),
+      timestamp,
+    ),
+  );
   control("expire-mfa", "moderator");
   await page.goto("/");
   await expect(
@@ -218,4 +241,131 @@ test("protected root-level deep link survives sign-in", async ({ page }) => {
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
+});
+
+test("staff settings, attention and dialogs fit the shared responsive shell", async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await login(page);
+
+  for (const [path, name] of [
+    ["/settings/profile", "profile"],
+    ["/settings/security", "security"],
+    ["/settings/team", "team"],
+    ["/attention", "attention"],
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole("main")).toBeVisible();
+    expect(
+      await page.evaluate(() => {
+        const main = document.querySelector("main")!;
+        return (
+          document.documentElement.scrollWidth <= window.innerWidth &&
+          main.scrollWidth <= main.clientWidth
+        );
+      }),
+    ).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
+  }
+
+  await page.goto("/settings/team");
+  await page.getByRole("button", { name: "Invite staff member" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Invite a staff member" }),
+  ).toBeVisible();
+  await expect(
+    page.locator("[data-base-ui-portal] .transition-opacity"),
+  ).toHaveCSS("opacity", "1");
+  await expect(
+    page.getByRole("button", { name: "Create invitation" }),
+  ).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("invitation-dialog.png") });
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Invite staff member" }),
+  ).toBeFocused();
+
+  if (testInfo.project.name === "desktop-chromium") {
+    await page.setViewportSize({ width: 820, height: 1180 });
+    await page.goto("/");
+    await expect(
+      page.getByRole("button", { name: "Open navigation" }),
+    ).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("tablet-overview.png") });
+  }
+  expect(errors).toEqual([]);
+});
+
+test("identity confirmation, authenticator replacement and password change revoke sessions", async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await login(page, "support");
+  const other = await browser.newContext();
+  const second = await other.newPage();
+
+  try {
+    await login(second, "support");
+    await page.goto("/settings/security");
+    await page.getByRole("link", { name: "Confirm identity" }).click();
+    control("reset-replay", "support");
+    await page
+      .getByLabel("Password", { exact: true })
+      .fill("StaffFixturePassword123!");
+    await page
+      .getByLabel("Authenticator code", { exact: true })
+      .fill(control("code", "support"));
+    await page.getByRole("button", { name: "Verify and continue" }).click();
+    await expect(page).toHaveURL(/\/settings\/security$/);
+
+    control("reset-replay", "support");
+    await page
+      .getByLabel("Password", { exact: true })
+      .fill("StaffFixturePassword123!");
+    await page
+      .getByLabel("Current authenticator code")
+      .fill(control("code", "support"));
+    await page.getByRole("button", { name: "Set up replacement" }).click();
+    const secret = await page.locator("code").textContent();
+    expect(secret).toBeTruthy();
+    await page.getByLabel("New authenticator code").fill(totp(secret!));
+    await page
+      .getByRole("button", { name: "Replace authenticator and sign out" })
+      .click();
+    await expect(page).toHaveURL(/\/login$/);
+    await second.goto("/");
+    await expect(second).toHaveURL(/\/login$/);
+
+    await login(page, "support", "/settings/security", "Active sessions");
+    control("reset-replay", "support");
+    await page
+      .getByLabel("Current password", { exact: true })
+      .fill("StaffFixturePassword123!");
+    await page
+      .getByLabel("New password", { exact: true })
+      .fill("UpdatedFixturePassword123!");
+    await page
+      .getByLabel("Fresh authenticator code")
+      .fill(control("code", "support"));
+    await page
+      .getByRole("button", { name: "Change password and sign out" })
+      .click();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.goBack();
+    await expect(
+      page.getByRole("heading", { name: "Active sessions" }),
+    ).toHaveCount(0);
+    await login(
+      page,
+      "support",
+      "/settings/security",
+      "Active sessions",
+      "UpdatedFixturePassword123!",
+    );
+  } finally {
+    await other.close();
+  }
 });

@@ -54,7 +54,7 @@ export function DialogContent({
                   ? "right-0 w-110 border-l"
                   : "left-0 w-72 border-r",
               )
-            : "top-[15vh] left-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-xl border overflow-y-auto max-h-[75vh] p-6",
+            : "top-1/2 left-1/2 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border p-5 sm:p-6",
           className,
         )}
         {...props}

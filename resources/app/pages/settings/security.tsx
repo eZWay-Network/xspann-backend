@@ -17,6 +17,7 @@ import {
 import { FormErrors } from "@/components/form-errors";
 import { CredentialFields } from "@/components/credential-fields";
 import { EnrollmentSecret } from "@/components/enrollment-secret";
+import { useApp } from "@/contexts/app";
 type Session = {
   id: number;
   device: string;
@@ -39,6 +40,7 @@ type Props = {
   google_client_id: string | null;
 };
 export default function Security(props: Props) {
+  const { preferences, formatDateTime } = useApp();
   const password = useForm({ password: "", new_password: "", mfa_code: "" });
   const factor = useForm({ password: "", google_token: "", mfa_code: "" });
   const complete = useForm({ mfa_code: "" });
@@ -97,7 +99,12 @@ export default function Security(props: Props) {
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Last active{" "}
-                        {new Date(session.last_activity_at).toLocaleString()}
+                        <time
+                          dateTime={session.last_activity_at}
+                          title={preferences.timezone}
+                        >
+                          {formatDateTime(session.last_activity_at)}
+                        </time>
                       </p>
                     </div>
                   </div>

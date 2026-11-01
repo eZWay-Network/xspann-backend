@@ -19,7 +19,7 @@ export default function Overview({
   filter_url: string;
 }) {
   const [loading, setLoading] = useState(false);
-  const { auth, environment, preferences } = useApp();
+  const { auth, environment, preferences, formatDateTime } = useApp();
   const apply = (data: { period: string; from?: string; to?: string }) =>
     router.get(filter_url, data, {
       preserveScroll: true,
@@ -69,13 +69,8 @@ export default function Overview({
       <div className="flex flex-wrap justify-between gap-2 text-[11px] leading-5 text-muted-foreground">
         <p>{overview.comparison_note}</p>
         <p>
-          Updated{" "}
-          {new Intl.DateTimeFormat("en", {
-            dateStyle: "medium",
-            timeStyle: "short",
-            timeZone: preferences.timezone,
-          }).format(new Date(overview.generated_at))}{" "}
-          · {preferences.timezone} · {environment.billing} billing environment
+          Updated {formatDateTime(overview.generated_at)} ·{" "}
+          {preferences.timezone} · {environment.billing} billing environment
         </p>
       </div>
     </div>

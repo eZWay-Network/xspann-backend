@@ -10,7 +10,7 @@ if (!$configuration || !is_file($configuration)) {
 $root = dirname(__DIR__, 2);
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
-if (str_starts_with($path, '/build/') && is_file($root . '/public' . $path)) {
+if ((str_starts_with($path, '/build/') || str_starts_with($path, '/assets/')) && is_file($root . '/public' . $path)) {
     return false;
 }
 require $root . '/vendor/autoload.php';

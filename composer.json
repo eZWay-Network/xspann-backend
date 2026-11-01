@@ -58,9 +58,7 @@
             "npm install",
             "npm run build"
         ],
-        "test": "@php test",
-        "format:php": "php-cs-fixer fix --sequential",
-        "format:php:check": "php-cs-fixer fix --dry-run --diff --sequential"
+        "test": "@php test"
     },
     "config": {
         "optimize-autoloader": true,

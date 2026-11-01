@@ -67,6 +67,13 @@ export function useApp() {
   const settingsNavigation = menuLinks.filter(
     (item) => item.parent === "Settings",
   );
+  const formatDateTime = (value: string) =>
+    new Intl.DateTimeFormat(props.preferences.locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: props.preferences.timezone,
+    }).format(new Date(value));
+
   return {
     ...props,
     pathname,
@@ -77,5 +84,6 @@ export function useApp() {
     menuLinks,
     settingsNavigation,
     isActive,
+    formatDateTime,
   };
 }

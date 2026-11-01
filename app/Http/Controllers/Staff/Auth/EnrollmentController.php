@@ -81,7 +81,7 @@ final class EnrollmentController
 
             throw new StaffException('Enrollment expired. Restart to set up a new authenticator.', 422);
         }
-        BrowserAuth::throttle('enroll:' . $enrollment['user_id'], $enrollment['credential_version']);
+        BrowserAuth::throttle('enroll:' . $enrollment['user_id']);
         $user = Team::accept(Session::get('staff_invitation_hash', ''), Hash::decrypt($enrollment['secret']), $request->validated('mfa_code'), $enrollment['user_id'], $enrollment['credential_version']);
         Session::forget('staff_invitation_hash');
         Session::forget('staff_enrollment_secret_once');

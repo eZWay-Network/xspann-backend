@@ -48,7 +48,9 @@ export function DateRange({
               onSelect={setRange}
               defaultMonth={range?.from}
               max={89}
-              disabled={{ after: new Date() }}
+              disabled={{
+                after: parseISO(new Date().toISOString().slice(0, 10)),
+              }}
             />
             <div className="flex items-center justify-between gap-4 border-t p-3">
               <span className="text-xs text-muted-foreground">

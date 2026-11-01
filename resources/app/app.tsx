@@ -63,5 +63,5 @@ void createInertiaApp<AppPageProps>({
       </ToastProvider>,
     );
   },
-  progress: { color: "#105dad", showSpinner: false },
+  progress: { color: "var(--primary)", showSpinner: false },
 });

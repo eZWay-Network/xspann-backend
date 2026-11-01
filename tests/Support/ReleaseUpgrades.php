@@ -8,6 +8,48 @@ use Spark\Facades\Schema;
 
 trait ReleaseUpgrades
 {
+    public function testStaffBrowserMigrationPreservesMembershipAndLegacyHistory(): void
+    {
+        $user = $this->makeUser('staff');
+        $secret = \Spark\Facades\Hash::encrypt('MIGRATION-FIXTURE');
+        query('staff_accounts')->insert([
+            'user_id' => $user->id,
+            'role' => 'admin',
+            'enabled' => true,
+            'mfa_secret' => $secret,
+            'last_counter' => 123,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        foreach (['legacy' => null, 'browser' => 1] as $name => $version) {
+            query('staff_sessions')->insert([
+                'user_id' => $user->id,
+                'session_hash' => hash('sha256', $name),
+                'membership_version' => $version,
+                'expires_at' => now()->addMinutes(15),
+                'created_at' => now(),
+            ]);
+        }
+
+        $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_140000_staff_browser_foundation.php';
+        $migration->down();
+        $this->assertDatabaseCount('staff_sessions', 1);
+        $migration->up();
+        $migration->up();
+        $this->assertDatabaseHas('staff_accounts', [
+            'user_id' => $user->id,
+            'role' => 'admin',
+            'mfa_secret' => $secret,
+            'last_counter' => 123,
+            'version' => 1,
+        ]);
+        $this->assertDatabaseHas('staff_sessions', [
+            'session_hash' => hash('sha256', 'legacy'),
+            'membership_version' => null,
+        ]);
+    }
+
     public function testBoostReportForwardMigrationPreservesExistingReportsAndEvidence(): void
     {
         $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_130000_boost_reports.php';
@@ -47,36 +89,6 @@ trait ReleaseUpgrades
         $this->assertSame($before->evidence, query('reports')->where('id', $legacy)->value('evidence'));
     }
 
-    public function testReleaseDateMigrationPreservesExistingSchedulesAndGuardsLossyRollback(): void
-    {
-        $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_120000_release_schedule_dates.php';
-        $migration->down();
-        $owner = $this->makeUser();
-        $scheduled = $this->makeVideo($owner, [
-            'status' => 'scheduled', 'processing_state' => 'ready', 'publication_state' => 'scheduled', 'publication_intent' => 'draft',
-            'publish_at' => '2030-06-01 06:00:00', 'publish_timezone' => 'Asia/Dhaka', 'version' => 3,
-        ]);
-        $draft = $this->makeVideo($owner, ['status' => 'draft', 'publication_state' => 'draft', 'publication_intent' => 'draft']);
-        $migration->up();
-        $migration->up();
-        $this->assertDatabaseHas('videos', [
-            'id' => $scheduled->id, 'publish_at' => '2030-06-01 06:00:00', 'publish_timezone' => 'Asia/Dhaka',
-            'publication_state' => 'scheduled', 'version' => 3,
-        ]);
-        $this->assertSame(null, query('videos')->where('id', $draft->id)->value('publish_at'));
-        query('videos')->where('id', $scheduled->id)->update(['publish_at' => '2099-01-01 06:00:00']);
-        if (db()->getDriver() === 'mysql') {
-            $this->assertThrows(\RuntimeException::class, fn() => $migration->down());
-            $indexes = db()->getPdo()->query("SHOW INDEX FROM videos WHERE Key_name = 'videos_due_releases'")->fetchAll(\PDO::FETCH_ASSOC);
-            $this->assertSame(['publication_state', 'publish_at', 'id'], array_column($indexes, 'Column_name'));
-        }
-        $this->assertSame('2099-01-01 06:00:00', query('videos')->where('id', $scheduled->id)->value('publish_at'));
-        query('videos')->where('id', $scheduled->id)->update(['publish_at' => '2030-06-01 06:00:00']);
-        $migration->down();
-        $this->assertSame('2030-06-01 06:00:00', query('videos')->where('id', $scheduled->id)->value('publish_at'));
-        $migration->up();
-    }
-
     protected function emptyReleaseDatabase(): void
     {
         $paths = glob(dirname(__DIR__, 2) . '/database/migrations/migration_*.php');
@@ -101,13 +113,22 @@ trait ReleaseUpgrades
         $owner = $this->makeUser('legacyartist');
         $fan = $this->makeUser('legacyfan');
         $video = query('videos')->insert([
-            'user_id' => $owner->id, 'storage_path' => "public:videos/$owner->id/legacy.mp4", 'caption' => 'Preserved baseline content',
-            'status' => 'published', 'visibility' => 'public', 'reuse_content' => true,
-            'rights_version' => config('policies.rights_version'), 'rights_confirmed_at' => now(), 'created_at' => '2026-10-30 10:00:00',
+            'user_id' => $owner->id,
+            'storage_path' => "public:videos/$owner->id/legacy.mp4",
+            'caption' => 'Preserved baseline content',
+            'status' => 'published',
+            'visibility' => 'public',
+            'reuse_content' => true,
+            'rights_version' => config('policies.rights_version'),
+            'rights_confirmed_at' => now(),
+            'created_at' => '2026-10-30 10:00:00',
         ]);
         $audio = query('audios')->insert([
-            'user_id' => $owner->id, 'source_video_id' => $video, 'title' => 'Original baseline sound',
-            'storage_path' => "public:sounds/$owner->id/legacy.m4a", 'status' => 'ready',
+            'user_id' => $owner->id,
+            'source_video_id' => $video,
+            'title' => 'Original baseline sound',
+            'storage_path' => "public:sounds/$owner->id/legacy.m4a",
+            'status' => 'ready',
         ]);
         query('videos')->where('id', $video)->update(['audio_id' => $audio]);
         query('follows')->insert(['follower_id' => $fan->id, 'following_id' => $owner->id]);

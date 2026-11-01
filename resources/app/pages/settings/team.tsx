@@ -28,6 +28,7 @@ import {
 import { FormErrors } from "@/components/form-errors";
 import { toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
+import { useApp } from "@/contexts/app";
 type Member = {
   id: number;
   user_id: number;
@@ -66,6 +67,7 @@ export default function Team({
   pagination: { members: PageMeta; invitations: PageMeta };
   list_url: string;
 }) {
+  const { preferences, formatDateTime } = useApp();
   const [busy, setBusy] = useState(false);
   const changePage = (key: "page" | "invitations_page", page: number) =>
     router.get(
@@ -231,7 +233,12 @@ export default function Team({
                     {invitation.role.replaceAll("_", " ")}
                   </TableCell>
                   <TableCell>
-                    {new Date(invitation.expires_at).toLocaleString()}
+                    <time
+                      dateTime={invitation.expires_at}
+                      title={preferences.timezone}
+                    >
+                      {formatDateTime(invitation.expires_at)}
+                    </time>
                   </TableCell>
                   <TableCell>
                     <Button

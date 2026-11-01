@@ -45,7 +45,7 @@ final class TeamController
             'list_url' => (string) route('staff.team'),
             'roles' => array_map(fn ($role) => ['value' => $role, 'label' => ucwords(str_replace('_', ' ', $role))], Permissions::roles()),
             'invite_url' => (string) route('staff.team.invite'),
-            'confirmation_url' => (string) route('staff.challenge'),
+            'confirmation_url' => (string) route('staff.challenge')->withQuery(['destination' => '/settings/team']),
             'page' => ['title' => 'Team & access', 'breadcrumbs' => []],
         ]);
     }

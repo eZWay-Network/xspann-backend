@@ -93,7 +93,7 @@ export function ActivityChart({ chart }: { chart: OverviewData["chart"] }) {
                       <div
                         tabIndex={0}
                         aria-label={`${row.date}: ${row.value} records`}
-                        className={`focus-ring group relative w-full max-w-10 rounded-t transition-colors hover:bg-chart-1 focus:bg-chart-1 ${index === chart.series.length - 1 ? "bg-chart-1" : "bg-chart-1/30"}`}
+                        className={`focus-ring relative w-full max-w-10 rounded-t transition-colors hover:bg-chart-1 focus:bg-chart-1 ${index === chart.series.length - 1 ? "bg-chart-1" : "bg-chart-2"}`}
                         style={{
                           height: `${(row.value / scale) * 100}%`,
                           minHeight: row.value > 0 ? "2px" : "0px",

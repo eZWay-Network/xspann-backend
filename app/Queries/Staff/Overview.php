@@ -20,15 +20,21 @@ final class Overview
             : ($period === 'custom' ? ($input['from'] ?? '') : $today->modify('-' . ((int) $period - 1) . ' days')->format('Y-m-d'));
         $to = $period === 'custom' ? ($input['to'] ?? '') : $today->format('Y-m-d');
 
+        $dates = [];
+
         foreach ([$from, $to] as $date) {
-            $parsed = is_string($date) ? \DateTimeImmutable::createFromFormat('!Y-m-d', $date, new \DateTimeZone('UTC')) : false;
+            $parsed = is_string($date) && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)
+                ? \DateTimeImmutable::createFromFormat('!Y-m-d', $date, new \DateTimeZone('UTC'))
+                : false;
 
             if (!$parsed || $parsed->format('Y-m-d') !== $date) {
                 throw new StaffException('Choose valid start and end dates.', 422, 'from');
             }
+
+            $dates[] = $parsed;
         }
 
-        if ($from > $to || $to > $today->format('Y-m-d') || (strtotime($to) - strtotime($from)) / 86400 >= 90) {
+        if ($from > $to || $to > $today->format('Y-m-d') || $dates[0]->diff($dates[1])->days >= 90) {
             throw new StaffException('Choose up to 90 days ending today or earlier.', 422, 'from');
         }
 
@@ -139,7 +145,12 @@ final class Overview
             'chart' => ['title' => $seriesTitle, 'definition' => $definition, 'series' => $series, 'total' => array_sum(array_column($series, 'value')), 'ceiling' => max(1, ...array_column($series, 'value')), 'availability' => 'available', 'comparison' => null, 'unit' => 'records'],
             'distribution' => ['title' => $distributionTitle, 'items' => $distribution, 'total' => $total],
             'generated_at' => Sessions::iso(Sessions::timestamp()),
-            'bounds' => ['from' => $range['from'] . 'T00:00:00Z', 'until' => gmdate('Y-m-d', strtotime($range['to'] . ' +1 day')) . 'T00:00:00Z'],
+            'bounds' => [
+                'from' => $range['from'] . 'T00:00:00Z',
+                'until' => (new \DateTimeImmutable($range['to'], new \DateTimeZone('UTC')))
+                    ->modify('+1 day')
+                    ->format('Y-m-d\T00:00:00\Z'),
+            ],
             'data_since' => null,
             'comparison_note' => 'Current counts are snapshots. No historical snapshot comparison is available.',
         ];

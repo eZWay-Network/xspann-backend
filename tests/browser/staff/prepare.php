@@ -30,7 +30,15 @@ foreach (glob(dirname(__DIR__, 3) . '/database/migrations/migration_*.php') as $
 }
 $secret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
-foreach (['admin' => 'Alex Morgan', 'moderator' => 'Jamie Rivera', 'analyst' => 'Sam Chen'] as $role => $name) {
+foreach ([
+    'admin' => 'Alex Morgan',
+    'moderator' => 'Jamie Rivera',
+    'analyst' => 'Sam Chen',
+    'support' => 'Casey Jordan',
+    'finance' => 'Drew Taylor',
+    'operations' => 'Robin Lee',
+    'promotion_operator' => 'Morgan Blake',
+] as $role => $name) {
     $user = \App\Models\User::create([
         'name' => $name, 'username' => $role, 'email' => "$role@example.test", 'password' => 'StaffFixturePassword123!',
         'email_verified_at' => now(), 'onboarded_at' => now(), 'date_of_birth' => '1990-01-01',

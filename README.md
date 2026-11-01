@@ -15,6 +15,8 @@ For a new installation, copy `.env.example` to `.env` and run `php spark key:gen
 
 Open `/` for the staff dashboard; guests are sent to `/login`. Browser routes live directly in `routes/web.php`, and `resources/app/app.tsx` imports the single `app.css` stylesheet. See [staff setup and review](docs/ADMIN_STEP_1_REVIEW.md) for first-admin enrollment and verification.
 
+The shared theme uses `public/assets/xpn-logo.webp` and primary purple `#7545e8`. PHP code is formatted manually; there is no PHP formatter dependency or Composer formatter command.
+
 The standalone API reference remains at `/api/docs` and the health response at `/up`. Documentation assets are independent of the React app.
 
 Run a queue worker under your process supervisor:
@@ -29,7 +31,7 @@ The frontend's `NEXT_PUBLIC_API_URL` must point to `APP_URL/api/v1`. Its service
 
 Backend integration and handoff are ready for review; production acceptance and public sales remain on hold. Latest in-depth audit: **406 tests / 6,396 assertions**, no failures or skips, including seven opt-in MySQL checks. The full HTTP journey covers fan/artist/operator actions, real FFmpeg, database workers, restart recovery, reporting, blocking, downgrade and deletion. Populated forward upgrades, concurrent spending and cross-module rights pass on SQLite and disposable MySQL 9.7.1. The latest audit completes sponsored-boost reporting and prevents unchanged audio updates from failing or interrupting approved promotions; see [DEPTH_BACKEND_AUDIT.md](docs/DEPTH_BACKEND_AUDIT.md). The earlier privacy-proof, future-scheduling and notification fixes remain documented in [FINAL_BACKEND_AUDIT.md](docs/FINAL_BACKEND_AUDIT.md). The initial Step 6 S3 probe is historical transport evidence, not part of this audit's local fixture run.
 
-Promotion changes emit committed owner-only `boost.updated` and `placement.updated` hints, with current ownership/environment/session checks before delivery. The latest forward migration, `migration_2026_11_01_130000_boost_reports.php`, adds nullable campaign references to reports while preserving evidence. Apply it before the updated report API serves traffic. The preceding `migration_2026_11_01_120000_release_schedule_dates.php` widens MySQL `videos.publish_at` to `DATETIME` while preserving existing schedules/indexes. Keep the existing database and deploy with `php spark migrate` during a maintenance window, then restart workers. The working database has not been migrated/reset. Do not use historical baseline rollback as a recovery procedure; the tested forward upgrade and recorded MySQL rollback limitation are explained in [Step 6 review](docs/STEP_6_REVIEW.md).
+Promotion changes emit committed owner-only `boost.updated` and `placement.updated` hints, with current ownership/environment/session checks before delivery. The latest forward migration, `migration_2026_11_01_130000_boost_reports.php`, adds nullable campaign references to reports while preserving evidence. Apply it before the updated report API serves traffic. Keep the existing database and deploy with `php spark migrate` during a maintenance window, then restart workers. The working database has not been migrated/reset. Do not use historical baseline rollback as a recovery procedure; the tested forward upgrade and recorded MySQL rollback limitation are explained in [Step 6 review](docs/STEP_6_REVIEW.md).
 
 Use the [web handoff/runbook](docs/STEP_6_WEB_HANDOFF.md), [combined HTTP collection](docs/STEP_6_REVIEW.http) and [API reference snapshot](docs/STEP_6_API_REFERENCE.json). Regenerate the 172-operation reference and eight event contracts with `php scripts/export-api-reference.php > docs/STEP_6_API_REFERENCE.json`. Run `php test --filter=ReleaseJourneyTest` for isolated fixtures. To include MySQL, set `XPN_TEST_MYSQL_CONFIG` to the private JSON connection file described in the review; only randomly named test databases are created/migrated/dropped. Without that opt-in the seven MySQL tests report skips.
 
@@ -78,7 +80,7 @@ Configure the Stripe test account, matching monthly prices, fixed return URLs, p
 
 ## Step 2 artists and playlists
 
-Step 2 implements the artist directory/profile, genres/HTTPS links, managed artist images, owned versioned playlists, account-follow aliases, and current statistics. It also extends playlist reporting, private exports and account/image deletion. All 22 Step 2 operations are documented at `/` (106 versioned operations at the Step 2 checkpoint).
+Step 2 implements the artist directory/profile, genres/HTTPS links, managed artist images, owned versioned playlists, account-follow aliases, and current statistics. It also extends playlist reporting, private exports and account/image deletion. All 22 Step 2 operations are documented at `/api/docs` (106 versioned operations at the Step 2 checkpoint).
 
 Apply the new migration with `php spark migrate` after establishing the frozen Step 1 baseline. **Do not reset the database for Step 2.** No working database migration or reset was performed during implementation. Restart existing workers after deployment; hourly statistics collection runs on the default queue. `php spark artists:statistics` collects current UTC snapshots manually.
 
@@ -116,7 +118,7 @@ curl -G 'https://dash-xspann.webermelon.dev/api/v1/discover/people' \
   -H 'Accept: application/json' --data-urlencode 'q=alex'
 ```
 
-The route-generated docs at `/` and their **Export JSON** action include both endpoints. No migration, dependency update, or email-verification change is required. Publish the controller, routes, and docs together before switching the mobile client from its current `/videos` and `/users/suggestions` implementation. The new endpoints use a 120-request throttle, matching the route's native middleware semantics.
+The route-generated docs at `/api/docs` and their **Export JSON** action include both endpoints. No migration, dependency update, or email-verification change is required. Publish the controller, routes, and docs together before switching the mobile client from its current `/videos` and `/users/suggestions` implementation. The new endpoints use a 120-request throttle, matching the route's native middleware semantics.
 
 Run `php test --filter=DiscoverApiTest` for isolated search, ranking, privacy, pagination, validation, docs-export and bounded-query checks. The pre-existing email-verification expectations are intentionally unchanged.
 

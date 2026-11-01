@@ -38,7 +38,7 @@ final class SecurityController
             'factor_pending' => $replacement !== null,
             'factor_secret' => Session::pull('staff_factor_secret_once'),
             'revoke_all_url' => (string) route('staff.sessions.revoke_all'),
-            'confirmation_url' => (string) route('staff.challenge'),
+            'confirmation_url' => (string) route('staff.challenge')->withQuery(['destination' => '/settings/security']),
             'google_client_id' => config('app.google_client_id'),
             'page' => ['title' => 'Security & sessions', 'breadcrumbs' => []],
         ]);

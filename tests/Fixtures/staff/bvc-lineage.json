@@ -1,7 +1,7 @@
 {
   "source_root": "/Users/shahin/Herd/bvc/resources/app",
   "source_commit": "35970d2aeef6959c5f123999325af7563aa00d69",
-  "note": "Actual BVC files copied and adapted for Inertia; source repository remains read-only. Drawer and DateRange are new shared compositions of copied primitives.",
+  "note": "Actual BVC files copied and adapted for Inertia; source repository remains read-only. Drawer and DateRange compose copied primitives. XPN uses the supplied logo, purple #7545e8 tokens, centered auth pages and responsive dialogs per the final Step 1 review.",
   "files": [
     {
       "source": "components/account-menu.tsx",
@@ -31,13 +31,13 @@
       "source": "components/auth-layout.tsx",
       "target": "components/auth-layout.tsx",
       "source_sha256": "e89fbcb30761078c104c8517bf8c9c91698ea709060ea1d98974eaff3d509724",
-      "adapted_sha256": "d7fe9b2032a481a80697998ca7dbc832452bc3634f62b04f65059b641b3fbf4f"
+      "adapted_sha256": "2030be7028992695f84e4d0715578a7312d493ad927d4c6a51b4f9acdb3ba4af"
     },
     {
       "source": "components/brand.tsx",
       "target": "components/brand.tsx",
       "source_sha256": "6f737b3a0555e5a4b328b04911c2ccfeb6e0eea5d36a00df1d4fb3b492eac644",
-      "adapted_sha256": "b671cded549c63c293469ccb522b7717412677f09f3ac7f549fa14d55b7653e5"
+      "adapted_sha256": "d6bf7e568d440d31030cf4786040555c54e227a876300146d0687b4c214f9fe0"
     },
     {
       "source": "components/empty-state.tsx",
@@ -121,7 +121,7 @@
       "source": "components/ui/button.tsx",
       "target": "components/ui/button.tsx",
       "source_sha256": "8139930cc5519fe00f92bfdf6c014d5bf2c9f174a5ba5dafbbc4c094d1c63e96",
-      "adapted_sha256": "8139930cc5519fe00f92bfdf6c014d5bf2c9f174a5ba5dafbbc4c094d1c63e96"
+      "adapted_sha256": "43ba4ddd7b61cc3161d3407d326b7ff13611c5df70e34a9f45c3489fc4e85d69"
     },
     {
       "source": "components/ui/calendar.tsx",
@@ -151,7 +151,7 @@
       "source": "components/ui/dialog.tsx",
       "target": "components/ui/dialog.tsx",
       "source_sha256": "df88ee4d6e81ff14b7a4ac30de15a6e177a1022b1e3de4648977e19504de749c",
-      "adapted_sha256": "df88ee4d6e81ff14b7a4ac30de15a6e177a1022b1e3de4648977e19504de749c"
+      "adapted_sha256": "3298c24e218b05661a47d4320778f961685eb0518394b140d2c98e7c6b7865e6"
     },
     {
       "source": "components/ui/dropdown-menu.tsx",
@@ -223,7 +223,7 @@
       "source": "contexts/app.tsx",
       "target": "contexts/app.tsx",
       "source_sha256": "d5e53edd9b339835708ef5fa18b66e9918955b8f1e59d69adc1e7d20c151f34f",
-      "adapted_sha256": "f28d806febbe04b50558d920a67d042ada90fceeb54f40206fbfb8ab44a960b8"
+      "adapted_sha256": "56ffe4b3c4c2f43e361271e16fa1b573a2f49f9c9636667a4d1c0fedbcf6460b"
     },
     {
       "source": "layouts/dashboard.tsx",
@@ -241,7 +241,7 @@
       "source": "app.css",
       "target": "app.css",
       "source_sha256": "7facb64160411b47491db6653a398ef46774b03bab63a835ac3f26771bfd5b65",
-      "adapted_sha256": "7facb64160411b47491db6653a398ef46774b03bab63a835ac3f26771bfd5b65"
+      "adapted_sha256": "e1775e0493ce412cc2519619080d6aa042533bbde25dd23154eebad6ef33e0ab"
     },
     {
       "source": "components/notification-drawer.tsx",
@@ -259,7 +259,7 @@
       "source": "components/donation-chart.tsx",
       "target": "components/dashboard/activity-chart.tsx",
       "source_sha256": "436213b774f971850ba282b8e49d3f99b912ccdb709b292c2b618f8b390f2259",
-      "adapted_sha256": "0530523d90cb5cba28ac07f5007bd41de953b2b8d3025b40058be626395177a8"
+      "adapted_sha256": "c1b76ea93ed6efac265b521208d61b9d5da58ea2d237df90a193efb2216b4475"
     },
     {
       "source": "components/giving-summary.tsx",
