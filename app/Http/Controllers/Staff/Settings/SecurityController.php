@@ -26,10 +26,14 @@ final class SecurityController
         }
 
         return Inertia::render('settings/security', [
-            'sessions' => array_map(fn ($row) => [
-                'id' => (int) $row->id, 'device' => $row->device_label, 'current' => (int) $row->id === (int) $context->session->id,
-                'authenticated_at' => Sessions::iso($row->authenticated_at), 'last_activity_at' => Sessions::iso($row->last_activity_at),
-                'expires_at' => Sessions::iso($row->expires_at), 'revoke_url' => (string) route('staff.sessions.revoke', ['session' => $row->id]),
+            'sessions' => array_map(fn($row) => [
+                'id' => (int) $row->id,
+                'device' => $row->device_label,
+                'current' => (int) $row->id === (int) $context->session->id,
+                'authenticated_at' => Sessions::iso($row->authenticated_at),
+                'last_activity_at' => Sessions::iso($row->last_activity_at),
+                'expires_at' => Sessions::iso($row->expires_at),
+                'revoke_url' => (string) route('staff.sessions.revoke', ['session' => $row->id]),
             ], $sessions),
             'has_password' => (bool) $context->user->password,
             'password_url' => (string) route('staff.security.password'),
@@ -39,7 +43,6 @@ final class SecurityController
             'factor_secret' => Session::pull('staff_factor_secret_once'),
             'revoke_all_url' => (string) route('staff.sessions.revoke_all'),
             'confirmation_url' => (string) route('staff.challenge')->withQuery(['destination' => '/settings/security']),
-            'google_client_id' => config('app.google_client_id'),
             'page' => ['title' => 'Security & sessions', 'breadcrumbs' => []],
         ]);
     }
@@ -100,8 +103,10 @@ final class SecurityController
         BrowserAuth::challenge($request, $request->validated()->toArray(), $context);
         $secret = Totp::secret();
         Session::put('staff_factor_replacement', [
-            'user_id' => $context->user->id, 'version' => (int) $context->membership->version,
-            'secret' => Hash::encrypt($secret), 'expires' => time() + config('staff.confirmation_seconds'),
+            'user_id' => $context->user->id,
+            'version' => (int) $context->membership->version,
+            'secret' => Hash::encrypt($secret),
+            'expires' => time() + config('staff.confirmation_seconds'),
         ]);
         Session::put('staff_factor_secret_once', $secret);
 
@@ -126,8 +131,10 @@ final class SecurityController
                 throw new StaffException('Enter the code from your new authenticator.', 422, 'mfa_code');
             }
             DB::table('staff_accounts')->where('id', $member->id)->update([
-                'mfa_secret' => $replacement['secret'], 'last_counter' => $counter,
-                'version' => (int) $member->version + 1, 'updated_at' => Sessions::timestamp(),
+                'mfa_secret' => $replacement['secret'],
+                'last_counter' => $counter,
+                'version' => (int) $member->version + 1,
+                'updated_at' => Sessions::timestamp(),
             ]);
             Sessions::revokeAll($context->user->id);
             AuditTrail::record('staff.authenticator_replaced', [], $context->user->id, 'staff');

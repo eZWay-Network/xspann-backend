@@ -29,7 +29,6 @@ final class ChallengeController
         return Inertia::render('auth/challenge', [
             'requires_credential' => $context !== null,
             'submit_url' => (string) route('staff.challenge.store'),
-            'google_client_id' => config('app.google_client_id'),
         ]);
     }
 

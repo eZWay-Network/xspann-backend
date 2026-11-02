@@ -4,20 +4,17 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FormErrors } from "@/components/form-errors";
-import { CredentialFields } from "@/components/credential-fields";
+import { PasswordInput } from "@/components/password-input";
 export default function Login({
   submit_url,
   destination,
-  google_client_id,
 }: {
   submit_url: string;
   destination: string;
-  google_client_id: string | null;
 }) {
   const form = useForm({
     email: "",
     password: "",
-    google_token: "",
     destination,
   });
   return (
@@ -30,9 +27,7 @@ export default function Login({
         className="space-y-5"
         onSubmit={(event) => {
           event.preventDefault();
-          form.post(submit_url, {
-            onFinish: () => form.reset("password", "google_token"),
-          });
+          form.post(submit_url, { onFinish: () => form.reset("password") });
         }}
       >
         <FormErrors errors={form.errors} />
@@ -48,26 +43,16 @@ export default function Login({
             disabled={form.processing}
           />
         </Field>
-        <CredentialFields
-          password={form.data.password}
-          googleToken={form.data.google_token}
-          clientId={google_client_id}
-          onPassword={(value) =>
-            form.setData((data) => ({
-              ...data,
-              password: value,
-              google_token: "",
-            }))
-          }
-          onGoogle={(value) =>
-            form.setData((data) => ({
-              ...data,
-              google_token: value,
-              password: "",
-            }))
-          }
-          disabled={form.processing}
-        />
+        <Field label="Password" error={form.errors.password}>
+          <PasswordInput
+            name="password"
+            autoComplete="current-password"
+            value={form.data.password}
+            onValueChange={(value) => form.setData("password", value)}
+            disabled={form.processing}
+            required
+          />
+        </Field>
         <Button type="submit" className="w-full" loading={form.processing}>
           Continue securely
         </Button>

@@ -5,7 +5,7 @@ namespace App\Services\Staff;
 use App\Models\User;
 use App\Services\{AccountSecurity, AuditTrail};
 use Spark\Exceptions\Http\ResponseException;
-use Spark\Facades\{Cache, DB, Session};
+use Spark\Facades\{Cache, DB, Hash, Session};
 use Spark\Http\Request;
 
 final class BrowserAuth
@@ -14,7 +14,7 @@ final class BrowserAuth
     {
         $key = 'staff.identity.' . hash('sha256', mb_strtolower(trim($identity)));
         Cache::lock($key, 5)->block(3, function () use ($key): void {
-            $attempts = array_values(array_filter(Cache::get($key, []), fn ($time) => $time > time() - 300));
+            $attempts = array_values(array_filter(Cache::get($key, []), fn($time) => $time > time() - 300));
 
             if (count($attempts) >= 10) {
                 throw new StaffException('Too many attempts. Try again in five minutes.', 429);
@@ -24,32 +24,28 @@ final class BrowserAuth
         });
     }
 
-    public static function credential(User $user, array $input): void
+    public static function verifyPassword(User $user, string $password): void
     {
-        try {
-            AccountSecurity::verifyCredential($user, $input);
-        } catch (ResponseException $exception) {
-            if ($exception->response->getStatusCode() >= 500) {
-                throw new StaffException('Sign-in is temporarily unavailable. Please try again.', 503);
-            }
-
-            throw new StaffException('The credentials or staff access could not be verified.', 422, 'credential');
+        if (!$user->password || !Hash::verify($password, $user->password)) {
+            throw new StaffException('The credentials or staff access could not be verified.', 422, 'password');
         }
     }
 
     public static function begin(Request $request, array $input): void
     {
-        self::throttle($input['email']);
-        $user = User::where('email', mb_strtolower(trim($input['email'])))->first();
+        $email = mb_strtolower(trim($input['email']));
+        self::throttle($email);
+        $user = User::where('email', $email)->first();
         $member = $user ? DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->first() : null;
 
         if (!Sessions::eligible($user) || !$member || !Permissions::forRole($member->role)) {
             // Keep a password-hash cost even for an unknown identity.
             password_verify((string) ($input['password'] ?? ''), '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.');
 
-            throw new StaffException('The credentials or staff access could not be verified.', 422, 'credential');
+            throw new StaffException('The credentials or staff access could not be verified.', 422, 'password');
         }
-        self::credential($user, $input);
+        self::verifyPassword($user, $input['password']);
+
         Sessions::logout();
         Session::regenerate(true);
         Session::put('staff_pending', [
@@ -95,10 +91,10 @@ final class BrowserAuth
         }
 
         if ($context) {
-            self::credential($user, $input);
+            self::verifyPassword($user, $input['password'] ?? '');
         }
 
-        Cache::lock("accounts.security.$id", 10)->block(5, fn () => DB::transaction(function () use ($user, $pending, $context, $input, $request): void {
+        Cache::lock("accounts.security.$id", 10)->block(5, fn() => DB::transaction(function () use ($user, $pending, $context, $input, $request): void {
             $member = DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->lockForUpdate()->first();
             $version = $context ? (int) $context->membership->version : (int) $pending['version'];
             $freshUser = User::find($user->id);

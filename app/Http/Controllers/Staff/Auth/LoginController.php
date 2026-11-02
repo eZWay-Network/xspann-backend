@@ -19,7 +19,6 @@ final class LoginController
         return Inertia::render('auth/login', [
             'submit_url' => (string) route('staff.login.store'),
             'destination' => Sessions::destination(session('staff_destination')),
-            'google_client_id' => config('app.google_client_id'),
         ]);
     }
 

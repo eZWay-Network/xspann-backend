@@ -34,15 +34,7 @@ export default function ResetPassword({
         }}
       >
         <FormErrors errors={form.errors} />
-        <Field label="Email address">
-          <Input
-            type="email"
-            autoComplete="username"
-            required
-            value={form.data.email}
-            onValueChange={(value) => form.setData("email", value)}
-          />
-        </Field>
+        <input type="hidden" name="email" value={form.data.email} />
         <Field label="New password">
           <Input
             type="password"

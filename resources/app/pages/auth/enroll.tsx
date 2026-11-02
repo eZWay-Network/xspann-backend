@@ -4,7 +4,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FormErrors } from "@/components/form-errors";
-import { CredentialFields } from "@/components/credential-fields";
+import { PasswordInput } from "@/components/password-input";
 import { EnrollmentSecret } from "@/components/enrollment-secret";
 export default function Enroll({
   stage,
@@ -12,16 +12,14 @@ export default function Enroll({
   credential_url,
   complete_url,
   restart_url,
-  google_client_id,
 }: {
   stage: "credential" | "authenticator";
   secret: string | null;
   credential_url: string;
   complete_url: string;
   restart_url: string;
-  google_client_id: string | null;
 }) {
-  const credential = useForm({ email: "", password: "", google_token: "" });
+  const credential = useForm({ email: "", password: "" });
   const factor = useForm({ mfa_code: "" });
   return (
     <AuthLayout
@@ -35,7 +33,7 @@ export default function Enroll({
           onSubmit={(event) => {
             event.preventDefault();
             credential.post(credential_url, {
-              onFinish: () => credential.reset("password", "google_token"),
+              onFinish: () => credential.reset("password"),
             });
           }}
         >
@@ -49,25 +47,16 @@ export default function Enroll({
               required
             />
           </Field>
-          <CredentialFields
-            password={credential.data.password}
-            googleToken={credential.data.google_token}
-            clientId={google_client_id}
-            onPassword={(value) =>
-              credential.setData((data) => ({
-                ...data,
-                password: value,
-                google_token: "",
-              }))
-            }
-            onGoogle={(value) =>
-              credential.setData((data) => ({
-                ...data,
-                google_token: value,
-                password: "",
-              }))
-            }
-          />
+          <Field label="Password" error={credential.errors.password}>
+            <PasswordInput
+              name="password"
+              value={credential.data.password}
+              onValueChange={(value) => credential.setData("password", value)}
+              autoComplete="current-password"
+              disabled={credential.processing}
+              required
+            />
+          </Field>
           <Button
             type="submit"
             className="w-full"

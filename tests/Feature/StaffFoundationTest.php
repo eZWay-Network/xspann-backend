@@ -32,9 +32,14 @@ class StaffFoundationTest extends TestCase
     {
         $user = $this->makeUser($name);
         DB::table('staff_accounts')->insert([
-            'user_id' => $user->id, 'role' => $role, 'enabled' => true, 'version' => 1,
-            'mfa_secret' => Hash::encrypt(self::SECRET), 'last_counter' => -1,
-            'created_at' => now()->toDateTimeString(), 'updated_at' => now()->toDateTimeString(),
+            'user_id' => $user->id,
+            'role' => $role,
+            'enabled' => true,
+            'version' => 1,
+            'mfa_secret' => Hash::encrypt(self::SECRET),
+            'last_counter' => -1,
+            'created_at' => now()->toDateTimeString(),
+            'updated_at' => now()->toDateTimeString(),
         ]);
 
         return $user;
@@ -106,7 +111,8 @@ class StaffFoundationTest extends TestCase
     {
         $user = $this->staff();
         $this->signIn($user);
-        $this->submit('/challenge', ['password' => 'password123', 'mfa_code' => Totp::code(self::SECRET, intdiv(time(), 30))])->assertStatus(303);
+        $usedCounter = (int) DB::table('staff_accounts')->where('user_id', $user->id)->value('last_counter');
+        $this->submit('/challenge', ['password' => 'password123', 'mfa_code' => Totp::code(self::SECRET, $usedCounter)])->assertStatus(303);
         $this->page('/challenge')->assertJsonPath('props.errors.mfa_code', 'Enter a fresh six-digit authenticator code.');
         DB::table('staff_sessions')->where('user_id', $user->id)->update(['mfa_expires_at' => Sessions::timestamp(-1)]);
         $this->page()->assertStatus(409)->assertHeader('X-Inertia-Location', 'http://localhost/challenge');
@@ -149,7 +155,7 @@ class StaffFoundationTest extends TestCase
             $this->page('/settings/team')->assertStatus($role === 'admin' ? 200 : 403);
 
             $groups = $response->json('props.navigation');
-            $sections = array_values(array_filter($groups, fn ($group) => $group['placement'] === 'settings'));
+            $sections = array_values(array_filter($groups, fn($group) => $group['placement'] === 'settings'));
             $this->assertSame($role === 'admin' ? ['account', 'workspace', 'team'] : ['account'], array_column($sections, 'key'));
             $this->assertSame($role === 'admin' ? 10 : 3, count(array_merge(...array_column($sections, 'items'))));
             foreach ($sections as $section) {
@@ -280,8 +286,10 @@ class StaffFoundationTest extends TestCase
         $this->signIn($admin);
         $member = DB::table('staff_accounts')->where('user_id', $admin->id)->first();
         DB::table('staff_sessions')->insert([
-            'user_id' => $admin->id, 'session_hash' => str_repeat('a', 64),
-            'expires_at' => now()->addMinutes(15), 'created_at' => now(),
+            'user_id' => $admin->id,
+            'session_hash' => str_repeat('a', 64),
+            'expires_at' => now()->addMinutes(15),
+            'created_at' => now(),
         ]);
         $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_140000_staff_browser_foundation.php';
         $migration->down();
@@ -328,10 +336,28 @@ class StaffFoundationTest extends TestCase
             $this->assertSame($path, Sessions::destination($path));
         }
 
-        foreach ([null, '', 'https://example.com/settings/profile', '//example.com/settings/profile',
-            '/%2fexample.com', '/%5cexample.com', '/settings/../login', '/settings/profile%0a',
-            '/login', '/challenge', '/enroll/secret', '/logout', '/api/v1/auth/me', '/up',
-            '/moderation/reports/42/evidence', '/promotions/boosts/7/preview', '/users/invalid', '/settings/security/password', '/xpn-admin', '/unknown'] as $path) {
+        foreach ([
+            null,
+            '',
+            'https://example.com/settings/profile',
+            '//example.com/settings/profile',
+            '/%2fexample.com',
+            '/%5cexample.com',
+            '/settings/../login',
+            '/settings/profile%0a',
+            '/login',
+            '/challenge',
+            '/enroll/secret',
+            '/logout',
+            '/api/v1/auth/me',
+            '/up',
+            '/moderation/reports/42/evidence',
+            '/promotions/boosts/7/preview',
+            '/users/invalid',
+            '/settings/security/password',
+            '/xpn-admin',
+            '/unknown'
+        ] as $path) {
             $this->assertSame('/', Sessions::destination($path));
         }
     }

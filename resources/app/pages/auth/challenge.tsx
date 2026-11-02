@@ -4,19 +4,17 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FormErrors } from "@/components/form-errors";
-import { CredentialFields } from "@/components/credential-fields";
+import { PasswordInput } from "@/components/password-input";
 import type { AppPageProps } from "@/types";
 export default function Challenge({
   requires_credential,
   submit_url,
-  google_client_id,
 }: {
   requires_credential: boolean;
   submit_url: string;
-  google_client_id: string | null;
 }) {
   const { urls } = usePage<AppPageProps>().props;
-  const form = useForm({ password: "", google_token: "", mfa_code: "" });
+  const form = useForm({ password: "", mfa_code: "" });
   return (
     <AuthLayout
       title="Verify it’s you"
@@ -36,26 +34,16 @@ export default function Challenge({
       >
         <FormErrors errors={form.errors} />
         {requires_credential && (
-          <CredentialFields
-            password={form.data.password}
-            googleToken={form.data.google_token}
-            clientId={google_client_id}
-            onPassword={(value) =>
-              form.setData((data) => ({
-                ...data,
-                password: value,
-                google_token: "",
-              }))
-            }
-            onGoogle={(value) =>
-              form.setData((data) => ({
-                ...data,
-                google_token: value,
-                password: "",
-              }))
-            }
-            disabled={form.processing}
-          />
+          <Field label="Password" error={form.errors.password}>
+            <PasswordInput
+              name="password"
+              value={form.data.password}
+              onValueChange={(value) => form.setData("password", value)}
+              autoComplete="current-password"
+              disabled={form.processing}
+              required
+            />
+          </Field>
         )}
         <Field
           label="Authenticator code"

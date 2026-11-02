@@ -43,7 +43,6 @@ final class EnrollmentController
             'credential_url' => (string) route('staff.enroll.credential'),
             'complete_url' => (string) route('staff.enroll.complete'),
             'restart_url' => (string) route('staff.enroll.restart'),
-            'google_client_id' => config('app.google_client_id'),
         ]);
     }
 
@@ -56,7 +55,7 @@ final class EnrollmentController
         if (!Sessions::eligible($user) || mb_strtolower(trim($request->validated('email'))) !== mb_strtolower($user->email)) {
             throw new StaffException('Use the credentials for the invited account.', 422, 'credential');
         }
-        BrowserAuth::credential($user, $request->validated()->toArray());
+        BrowserAuth::verifyPassword($user, $request->validated('password'));
         $hash = Session::get('staff_invitation_hash');
         Sessions::logout();
         Session::put('staff_invitation_hash', $hash);

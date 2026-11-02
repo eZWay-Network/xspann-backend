@@ -17,7 +17,6 @@ import {
   DialogDismiss,
 } from "@/components/ui/dialog";
 import { FormErrors } from "@/components/form-errors";
-import { CredentialFields } from "@/components/credential-fields";
 import { EnrollmentSecret } from "@/components/enrollment-secret";
 import { useApp } from "@/contexts/app";
 type Session = {
@@ -39,13 +38,11 @@ type Props = {
   factor_secret: string | null;
   revoke_all_url: string;
   confirmation_url: string;
-  google_client_id: string | null;
 };
 export default function Security(props: Props) {
   const { preferences, formatDateTime } = useApp();
   const password = useForm({ password: "", new_password: "", mfa_code: "" });
-  const passwordErrors: Record<string, string | undefined> = password.errors;
-  const factor = useForm({ password: "", google_token: "", mfa_code: "" });
+  const factor = useForm({ password: "", mfa_code: "" });
   const complete = useForm({ mfa_code: "" });
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [factorOpen, setFactorOpen] = useState(false);
@@ -184,7 +181,7 @@ export default function Security(props: Props) {
                 <FormErrors errors={password.errors} />
                 <Field
                   label="Current password"
-                  error={passwordErrors.password ?? passwordErrors.credential}
+                  error={password.errors.password}
                 >
                   <PasswordInput
                     autoComplete="current-password"
@@ -308,27 +305,16 @@ export default function Security(props: Props) {
                 }}
               >
                 <FormErrors errors={factor.errors} />
-                <CredentialFields
-                  replacement
-                  errors={factor.errors}
-                  clientId={props.google_client_id}
-                  password={factor.data.password}
-                  googleToken={factor.data.google_token}
-                  onPassword={(value) =>
-                    factor.setData((data) => ({
-                      ...data,
-                      password: value,
-                      google_token: "",
-                    }))
-                  }
-                  onGoogle={(value) =>
-                    factor.setData((data) => ({
-                      ...data,
-                      google_token: value,
-                      password: "",
-                    }))
-                  }
-                />
+                <Field label="Password" error={factor.errors.password}>
+                  <PasswordInput
+                    name="password"
+                    value={factor.data.password}
+                    onValueChange={(value) => factor.setData("password", value)}
+                    autoComplete="current-password"
+                    disabled={factor.processing}
+                    required
+                  />
+                </Field>
                 <Field
                   label="Current authenticator code"
                   error={factor.errors.mfa_code}
