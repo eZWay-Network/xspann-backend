@@ -54,12 +54,19 @@ command('audios:retry', function (Prompt $prompt, array $args): void {
 })->description('Retry eligible failed or interrupted audio uploads, optionally using --id');
 
 command('staff:enroll', function (Prompt $prompt, array $args): void {
-    $id = filter_var($args['user'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $id = is_string($args['user'] ?? null)
+        ? filter_var($args['user'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+        : false;
     $role = $args['role'] ?? 'moderator';
     if (!$id || !in_array($role, \App\Services\Staff\Permissions::roles(), true)) {
         throw new InvalidArgumentException('Use --user=<id> and --role=' . implode('|', \App\Services\Staff\Permissions::roles()) . '.');
     }
-    $user = \App\Models\User::findOrFail($id);
+    $user = \App\Models\User::find($id);
+
+    if (!$user) {
+        throw new InvalidArgumentException('Staff user not found. Check --user=<id>.');
+    }
+
     $secret = \App\Services\Totp::secret();
     $prompt->message("Enroll or reset MFA for $user->username ($role). This replaces existing staff MFA.");
     $prompt->message("Authenticator: XPN Social / $user->username; SHA1; 6 digits; 30 seconds; secret: $secret");
@@ -69,7 +76,9 @@ command('staff:enroll', function (Prompt $prompt, array $args): void {
 })->description('Enroll or recover staff MFA using a trusted operator terminal');
 
 command('staff:revoke', function (Prompt $prompt, array $args): void {
-    $id = filter_var($args['user'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $id = is_string($args['user'] ?? null)
+        ? filter_var($args['user'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+        : false;
     if (!$id) {
         throw new InvalidArgumentException('Use --user=<id>.');
     }

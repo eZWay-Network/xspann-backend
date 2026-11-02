@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\{AuthIdentity, User};
 use App\Services\Social\GoogleAuth;
+use App\Services\Staff\StaffException;
 use Spark\Facades\{Auth, Cache, DB, Hash};
 
 class AccountSecurity
@@ -108,10 +109,19 @@ class AccountSecurity
 
     public static function enrollStaff(User $user, string $role, string $secret, string $code): void
     {
-        abort_unless(in_array($role, \App\Services\Staff\Permissions::roles(), true), 422, 'Invalid staff role.');
-        abort_unless($user->status === 'active' && $user->hasVerifiedEmail() && $user->onboarded_at, 422, 'Staff must have an active verified adult account.');
+        if (!in_array($role, \App\Services\Staff\Permissions::roles(), true)) {
+            throw new StaffException('Invalid staff role.');
+        }
+
+        if ($user->status !== 'active' || !$user->hasVerifiedEmail() || !$user->onboarded_at) {
+            throw new StaffException('Staff must have an active verified adult account.');
+        }
+
         $counter = Totp::counter($secret, $code);
-        abort_unless($counter !== null, 422, 'Authenticator enrollment failed.');
+
+        if ($counter === null) {
+            throw new StaffException('Authenticator enrollment failed. Enter the current six-digit code from the authenticator configured with this secret.');
+        }
 
         \App\Services\Staff\Team::locked(function () use ($user, $role, $secret, $counter): void {
             $existing = DB::table('staff_accounts')->where('user_id', $user->id)->lockForUpdate()->first();

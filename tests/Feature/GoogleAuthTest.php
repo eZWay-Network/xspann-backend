@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\{AuthIdentity, User};
+use App\Services\{AccountSecurity, Totp};
+use App\Services\Staff\Sessions;
 use Spark\Utils\JWT;
-use Spark\Facades\Cache;
+use Spark\Facades\{Cache, DB};
 use Spark\Facades\Queue;
 use Spark\Http\Client\{Http, HttpResponse};
 use Spark\Http\Client\Contracts\HttpResponseContract;
@@ -12,6 +14,8 @@ use Tests\TestCase;
 
 class GoogleAuthTest extends TestCase
 {
+    use \Tests\Support\StaffBrowser;
+
     private \OpenSSLAsymmetricKey $privateKey;
     private Http $http;
 
@@ -57,6 +61,57 @@ class GoogleAuthTest extends TestCase
             'picture' => 'https://lh3.googleusercontent.com/avatar.jpg',
             ...$claims,
         ], $key, 'RS256', ['kid' => $keyId]);
+    }
+
+    public function testLinkedGoogleStaffLoginRequiresMfaAndSupportsPasswordlessReauthentication(): void
+    {
+        $this->app->mergeConfig(['app' => ['url' => 'http://localhost']]);
+        $user = $this->makeUser();
+        $user->update(['password' => null]);
+        AuthIdentity::create(['user_id' => $user->id, 'provider' => 'google', 'provider_id' => '123456789']);
+        $secret = Totp::secret();
+        AccountSecurity::enrollStaff($user, 'admin', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
+        $this->browserPage('/login')->assertOk()->assertJsonPath('props.google_client_id', 'test-client.apps.googleusercontent.com');
+        $token = $this->tokenFor();
+        $this->browserWrite('/login', ['email' => $user->email, 'google_token' => $token])
+            ->assertStatus(303)->assertHeader('Location', 'http://localhost/challenge');
+        $this->assertDatabaseCount('staff_sessions', 0);
+        $this->assertFalse(str_contains(json_encode($_SESSION), $token));
+        $this->browserPage('/challenge')->assertOk()->assertJsonPath('props.requires_credential', false);
+        $this->assertBrowserRejected($this->browserWrite('/challenge', ['mfa_code' => 'invalid']));
+        $this->assertDatabaseCount('staff_sessions', 0);
+        $this->browserWrite('/challenge', ['mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertStatus(303);
+        $this->browserPage('/')->assertOk()->assertJsonPath('props.auth.user.id', $user->id);
+
+        $this->assertSame(1, DB::table('staff_sessions')->where('user_id', $user->id)
+            ->update(['mfa_expires_at' => Sessions::timestamp(-1)]));
+        $this->browserPage('/')->assertStatus(409)->assertHeader('X-Inertia-Location', 'http://localhost/challenge');
+        $this->browserWrite('/challenge', ['google_token' => $this->tokenFor(), 'mfa_code' => Totp::code($secret, intdiv(time(), 30) + 1)])->assertStatus(303);
+        $this->browserPage('/')->assertOk();
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('auth_identities', 1);
+        $this->assertDatabaseCount('jwt_access_tokens', 0);
+    }
+
+    public function testStaffGoogleLoginRejectsUnlinkedStaleAndWrongIdentityCredentialsWithoutCreatingAccounts(): void
+    {
+        $this->app->mergeConfig(['app' => ['url' => 'http://localhost']]);
+        $user = $this->makeUser();
+        $secret = Totp::secret();
+        AccountSecurity::enrollStaff($user, 'admin', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
+        $this->browserPage('/login')->assertOk();
+        $this->assertBrowserRejected($this->browserWrite('/login', ['email' => $user->email, 'google_token' => $this->tokenFor(['email' => $user->email])]));
+        $this->assertDatabaseCount('auth_identities', 0);
+        AuthIdentity::create(['user_id' => $user->id, 'provider' => 'google', 'provider_id' => '123456789']);
+
+        foreach ([$this->tokenFor(['iat' => time() - 301]), $this->tokenFor(['sub' => 'another-account']), 'malformed'] as $token) {
+            $this->assertBrowserRejected($this->browserWrite('/login', ['email' => $user->email, 'google_token' => $token]));
+            $this->assertSame(null, session('staff_pending'));
+            $this->assertFalse(str_contains(json_encode($_SESSION), $token));
+        }
+        $this->assertDatabaseCount('staff_sessions', 0);
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('auth_identities', 1);
     }
 
     public function testCreatesVerifiedAccountAndReturnsAUsableLoginToken(): void
