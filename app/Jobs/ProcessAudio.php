@@ -15,13 +15,14 @@ class ProcessAudio implements JobInterface
 
     public int $tries = 1;
 
-    public function __construct(public int $audioId)
+    public function __construct(public int $audioId, public ?int $recoveryOperationId = null)
     {
     }
 
     public function handle(): void
     {
         Cache::lock("audios.process.$this->audioId", 3600)->block(5, function (): void {
+            \App\Services\Staff\Operations::mediaDispatched($this->recoveryOperationId);
             $audio = Audio::find($this->audioId);
             if (
                 !$audio || $audio->status !== 'processing' || $audio->moderation_status !== 'approved' || !$audio->rights_confirmed_at
@@ -48,6 +49,7 @@ class ProcessAudio implements JobInterface
 
     public function failed(Throwable $exception): void
     {
+        \App\Services\Staff\Operations::mediaDispatched($this->recoveryOperationId);
         Audio::whereKey($this->audioId)
             ->where('status', 'processing')
             ->update(['status' => 'failed', 'updated_at' => now()]);

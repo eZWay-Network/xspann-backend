@@ -5,7 +5,7 @@ namespace App\Services\Staff;
 use App\Models\{Audio, User, Video};
 use App\Services\{Announcements, AudioRetry, Realtime, Releases, VideoRetry};
 use App\Services\Billing\{Billing, PaymentProvider, Reconciliation, SubscriptionActions, Webhooks};
-use Spark\Facades\DB;
+use Spark\Facades\{Cache, DB};
 
 /** Only these domain targets can be recovered. No commands or serialized jobs enter this boundary. */
 final class Recovery
@@ -96,31 +96,11 @@ final class Recovery
             });
         }
         if (in_array($type, ['media.video', 'media.audio'], true)) {
-            $video = $type === 'media.video';
-            $row = $video ? Video::find($id) : Audio::find($id);
-            if (!$row) {
-                return ['no_op', 'media_unavailable'];
-            }
-            $available = $video ? Releases::eligible($row)
-                : ($row->origin === 'upload' && $row->status !== 'deleted' && $row->moderation_status === 'approved'
-                    && $row->rights_confirmed_at !== null && User::visibleTo(null)->whereKey($row->user_id)->exists());
-            if (!$available) {
-                return ['no_op', 'media_not_retryable'];
-            }
-            $state = $video ? $row->processing_state : $row->status;
-            // A worker can stop after dispatch but before recording awaiting_media.
-            if ($operation->result_code === 'awaiting_media'
-                || ($operation->status === 'running' && in_array($state, ['processing', 'ready', 'published'], true))) {
+            $prefix = $type === 'media.video' ? 'videos' : 'audios';
 
-                return $state === 'processing' ? ['running', 'awaiting_media']
-                    : (in_array($state, ['ready', 'published'], true) ? ['completed', 'media_ready'] : ['failed', 'media_processing_failed']);
-            }
-            if (!self::eligible($type, $row)) {
-                return ['no_op', 'media_not_retryable'];
-            }
-            $queued = $video ? VideoRetry::retry($id) : AudioRetry::retry($id);
-
-            return $queued ? ['running', 'awaiting_media'] : ['no_op', 'media_not_retryable'];
+            // Do not reset or duplicate an encoder that is currently executing.
+            return Cache::lock("$prefix.process.$id", 3600)->get(fn () => self::media($operation))
+                ?: ['running', 'media_busy'];
         }
         if ($type === 'release.recover') {
             $row = DB::table('videos')->where('id', $id)->first();
@@ -158,5 +138,44 @@ final class Recovery
         }
 
         return ['cancelled', 'unknown_operation'];
+    }
+
+    private static function media(object $operation): array
+    {
+        $id = (int) $operation->target_id;
+        $video = $operation->type === 'media.video';
+        $row = $video ? Video::find($id) : Audio::find($id);
+
+        if (!$row) {
+            return ['no_op', 'media_unavailable'];
+        }
+
+        $available = $video ? Releases::eligible($row)
+            : ($row->origin === 'upload' && $row->status !== 'deleted' && $row->moderation_status === 'approved'
+                && $row->rights_confirmed_at !== null && User::visibleTo(null)->whereKey($row->user_id)->exists());
+
+        if (!$available) {
+            return ['no_op', 'media_not_retryable'];
+        }
+
+        $state = $video ? $row->processing_state : $row->status;
+        $result = DB::table('staff_operations')->where('id', $operation->id)->value('result_code');
+
+        // Processing alone does not prove dispatch: the producer can stop before enqueueing.
+        if ($result === 'awaiting_media'
+            || ($operation->status === 'running' && in_array($state, ['ready', 'published'], true))) {
+            return $state === 'processing' ? ['running', 'awaiting_media']
+                : (in_array($state, ['ready', 'published'], true) ? ['completed', 'media_ready'] : ['failed', 'media_processing_failed']);
+        }
+
+        $resumingDispatch = $operation->status === 'running' && $state === 'processing';
+
+        if (!$resumingDispatch && !self::eligible($operation->type, $row)) {
+            return ['no_op', 'media_not_retryable'];
+        }
+
+        $queued = $video ? VideoRetry::retry($id, (int) $operation->id) : AudioRetry::retry($id, (int) $operation->id);
+
+        return $queued ? ['running', 'awaiting_media'] : ['no_op', 'media_not_retryable'];
     }
 }

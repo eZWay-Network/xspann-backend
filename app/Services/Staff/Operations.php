@@ -63,13 +63,18 @@ final class Operations
                 'updated_at' => Sessions::timestamp(),
             ]);
             AuditTrail::record('staff.operation.queued', [
-                'operation_id' => $operation, 'type' => $type, 'target_id' => $id, 'reason' => trim($input['reason']),
+                'operation_id' => $operation,
+                'type' => $type,
+                'target_id' => $id,
+                'reason' => trim($input['reason']),
             ], $current->user->id, 'staff');
 
             return (int) $operation;
         };
-        $operation = Cache::lock('staff.retry.' . $context->user->id . '.' . $key, 30)->block(5,
-            fn () => Cache::lock("staff.target.$environment.$type.$id", 30)->block(5, fn () => DB::transaction($persist)));
+        $operation = Cache::lock('staff.retry.' . $context->user->id . '.' . $key, 30)->block(
+            5,
+            fn() => Cache::lock("staff.target.$environment.$type.$id", 30)->block(5, fn() => DB::transaction($persist))
+        );
 
         if ($dispatch) {
             self::dispatch($operation);
@@ -87,6 +92,17 @@ final class Operations
         }
     }
 
+    /** A consumer receipt survives a producer stopping before it saves its dispatch result. */
+    public static function mediaDispatched(?int $id): void
+    {
+        if ($id === null) {
+            return;
+        }
+
+        DB::table('staff_operations')->where('id', $id)->whereIn('type', ['media.video', 'media.audio'])
+            ->whereIn('status', ['queued', 'running'])->update(['result_code' => 'awaiting_media']);
+    }
+
     public static function run(int $id): void
     {
         Cache::lock("staff.operation.$id", 3600)->get(function () use ($id): void {
@@ -97,15 +113,19 @@ final class Operations
             $member = DB::table('staff_accounts')->where('user_id', $row->actor_id)->where('enabled', true)->first();
             $actor = $row->actor_id ? User::find($row->actor_id) : null;
             $ability = self::TYPES[$row->type][0] ?? null;
-            if (!$member || !$actor || $actor->status !== 'active' || !$actor->email_verified_at || !$actor->onboarded_at
+            if (
+                !$member || !$actor || $actor->status !== 'active' || !$actor->email_verified_at || !$actor->onboarded_at
                 || (int) $member->version !== (int) $row->membership_version || !$ability || !Permissions::allows($member->role, $ability)
-                || $row->environment !== config('billing.environment') || $row->expires_at <= Sessions::timestamp()) {
+                || $row->environment !== config('billing.environment') || $row->expires_at <= Sessions::timestamp()
+            ) {
                 self::finish($row, 'cancelled', 'authorization_expired');
 
                 return;
             }
             DB::table('staff_operations')->where('id', $id)->whereIn('status', ['queued', 'running'])->update([
-                'status' => 'running', 'started_at' => $row->started_at ?? Sessions::timestamp(), 'updated_at' => Sessions::timestamp(),
+                'status' => 'running',
+                'started_at' => $row->started_at ?? Sessions::timestamp(),
+                'updated_at' => Sessions::timestamp(),
             ]);
             if (!DB::table('staff_operations')->where('id', $id)->where('status', 'running')->exists()) {
                 return;
@@ -137,15 +157,22 @@ final class Operations
         DB::transaction(function () use ($row, $status, $code): void {
             // Account deletion can cancel work while a domain handler is in flight.
             $updated = DB::table('staff_operations')->where('id', $row->id)->whereIn('status', ['queued', 'running'])->update([
-                'status' => $status, 'result_code' => $code,
-                'completed_at' => $status === 'running' ? null : Sessions::timestamp(), 'updated_at' => Sessions::timestamp(),
+                'status' => $status,
+                'result_code' => $code === 'media_busy'
+                    ? DB::raw("CASE WHEN result_code = 'awaiting_media' THEN result_code ELSE 'media_busy' END")
+                    : $code,
+                'completed_at' => $status === 'running' ? null : Sessions::timestamp(),
+                'updated_at' => Sessions::timestamp(),
             ]);
             if (!$updated || $status === 'running') {
                 return;
             }
             AuditTrail::record('staff.operation.finished', [
-                'operation_id' => (int) $row->id, 'type' => $row->type, 'target_id' => (int) $row->target_id,
-                'status' => $status, 'result_code' => $code,
+                'operation_id' => (int) $row->id,
+                'type' => $row->type,
+                'target_id' => (int) $row->target_id,
+                'status' => $status,
+                'result_code' => $code,
             ], $row->actor_id ? (int) $row->actor_id : null, 'staff');
             if ($row->type === 'export.generate' && in_array($status, ['failed', 'cancelled'], true)) {
                 DB::table('staff_exports')->where('id', $row->target_id)->where('status', 'queued')

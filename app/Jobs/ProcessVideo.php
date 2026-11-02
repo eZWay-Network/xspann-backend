@@ -15,13 +15,14 @@ class ProcessVideo implements JobInterface
 
     public int $tries = 1;
 
-    public function __construct(public int $videoId)
+    public function __construct(public int $videoId, public ?int $recoveryOperationId = null)
     {
     }
 
     public function handle(): void
     {
         Cache::lock("videos.process.$this->videoId", 3600)->block(5, function (): void {
+            \App\Services\Staff\Operations::mediaDispatched($this->recoveryOperationId);
             $video = Video::find($this->videoId);
             if (!$video || $video->status !== Video::STATUS_PROCESSING || !Releases::eligible($video)) {
                 return;
@@ -102,6 +103,7 @@ class ProcessVideo implements JobInterface
 
     public function failed(Throwable $exception): void
     {
+        \App\Services\Staff\Operations::mediaDispatched($this->recoveryOperationId);
         Releases::processingState($this->videoId, [Video::STATUS_PROCESSING], Video::STATUS_FAILED, 'encoding_failed');
     }
 }

@@ -7,7 +7,7 @@ use App\Models\{Audio, User};
 
 class AudioRetry
 {
-    public static function retry(?int $audioId = null): bool
+    public static function retry(?int $audioId = null, ?int $recoveryOperationId = null): bool
     {
         $ids = Audio::whereIn('status', ['failed', 'processing'])
             ->where('origin', 'upload')
@@ -30,7 +30,11 @@ class AudioRetry
             }
 
             try {
-                ProcessAudio::dispatch((int) $id)->send();
+                $dispatch = $recoveryOperationId === null
+                    ? ProcessAudio::dispatch((int) $id)
+                    : ProcessAudio::dispatchOnce((int) $id, $recoveryOperationId);
+
+                $dispatch->send();
             } catch (\Throwable $exception) {
                 Audio::whereKey($id)->where('status', 'processing')->update(['status' => 'failed', 'updated_at' => now()]);
                 throw $exception;

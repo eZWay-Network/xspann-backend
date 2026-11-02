@@ -7,7 +7,7 @@ use App\Models\Video;
 
 class VideoRetry
 {
-    public static function retry(?int $videoId = null): bool
+    public static function retry(?int $videoId = null, ?int $recoveryOperationId = null): bool
     {
         $ids = Video::whereIn('status', [Video::STATUS_FAILED, Video::STATUS_PROCESSING])
             ->when($videoId !== null, fn($query) => $query->whereKey($videoId))
@@ -22,7 +22,11 @@ class VideoRetry
             }
 
             try {
-                ProcessVideo::dispatch((int) $id)->send();
+                $dispatch = $recoveryOperationId === null
+                    ? ProcessVideo::dispatch((int) $id)
+                    : ProcessVideo::dispatchOnce((int) $id, $recoveryOperationId);
+
+                $dispatch->send();
             } catch (\Throwable $exception) {
                 Releases::processingState((int) $id, [Video::STATUS_PROCESSING], Video::STATUS_FAILED, 'encoding_dispatch_failed');
                 throw $exception;

@@ -118,6 +118,142 @@ class StaffOperationsTest extends TestCase
         }
     }
 
+    public function testInterruptedMediaRecoveryDispatchesMissingDatabaseJobs(): void
+    {
+        $this->assertInterruptedMediaRecovery('database');
+    }
+
+    public function testInterruptedMediaRecoveryDispatchesMissingFileJobs(): void
+    {
+        $this->assertInterruptedMediaRecovery('file');
+    }
+
+    private function assertInterruptedMediaRecovery(string $driver): void
+    {
+        $this->app->mergeConfig(['queue' => ['default' => $driver]]);
+        $owner = $this->makeUser('owner');
+        $this->browserLogin($this->makeUser('operator'), 'operations');
+        $queue = app(\Spark\Queue\Queue::class);
+
+        foreach (['videos', 'audios'] as $kind) {
+            foreach (['before_transition', 'after_transition'] as $checkpoint) {
+                $target = $kind === 'videos'
+                    ? $this->makeVideo($owner, ['status' => 'failed', 'processing_state' => 'failed', 'publication_intent' => 'draft'])
+                    : \App\Models\Audio::create([
+                        'user_id' => $owner->id, 'title' => 'Uploaded audio', 'origin' => 'upload', 'status' => 'failed',
+                        'storage_path' => 'sounds/' . $owner->id . '/fixture.m4a',
+                        'rights_confirmed_at' => now(), 'rights_version' => config('policies.rights_version'),
+                    ]);
+                $processing = $kind === 'videos' ? ['status' => 'processing', 'processing_state' => 'processing'] : ['status' => 'processing'];
+
+                if ($checkpoint === 'before_transition') {
+                    DB::table($kind)->where('id', $target->id)->update([...$processing, 'updated_at' => Sessions::timestamp(-7200)]);
+                }
+
+                $this->browserWrite('/operations/media/' . $kind . '/' . $target->id . '/retry', [
+                    'reason' => 'Resume recovery after producer restart', 'idempotency_key' => "$kind-$checkpoint",
+                ])->assertStatus(303);
+                $id = (int) DB::table('staff_operations')->orderBy('id', 'desc')->value('id');
+                DB::table('staff_operations')->where('id', $id)->update(['status' => 'running', 'started_at' => Sessions::timestamp()]);
+
+                if ($checkpoint === 'after_transition') {
+                    // The media transition committed, but enqueue never happened.
+                    DB::table($kind)->where('id', $target->id)->update([...$processing, 'updated_at' => now()]);
+                }
+
+                $before = count($queue->getJobs(queue: 'default'));
+                Operations::run($id);
+                $this->assertCount($before + 1, $queue->getJobs(queue: 'default'));
+                $this->assertDatabaseHas('staff_operations', ['id' => $id, 'status' => 'running', 'result_code' => 'awaiting_media']);
+
+                // Losing the producer's result after enqueue must not enqueue twice.
+                DB::table('staff_operations')->where('id', $id)->update(['result_code' => null]);
+                Operations::run($id);
+                Operations::run($id);
+                $this->assertCount($before + 1, $queue->getJobs(queue: 'default'));
+                DB::table($kind)->where('id', $target->id)->update($kind === 'videos' ? ['status' => 'draft', 'processing_state' => 'ready'] : ['status' => 'ready']);
+                Operations::run($id);
+                $this->assertDatabaseHas('staff_operations', ['id' => $id, 'status' => 'completed', 'result_code' => 'media_ready']);
+            }
+        }
+    }
+
+    public function testEncoderFailureSurvivesAnInterruptedProducerAndAllowsANewRecovery(): void
+    {
+        $owner = $this->makeUser('owner');
+        $this->browserLogin($this->makeUser('operator'), 'operations');
+        $this->app->instance(\App\Services\MediaProcessor::class, new class extends \App\Services\MediaProcessor {
+            public function video(\App\Models\Video $video): array
+            {
+                throw new \RuntimeException('Fixture encoding failure');
+            }
+
+            public function audio(\App\Models\Audio $audio): array
+            {
+                throw new \RuntimeException('Fixture encoding failure');
+            }
+        });
+
+        foreach (['videos', 'audios'] as $kind) {
+            $target = $kind === 'videos'
+                ? $this->makeVideo($owner, ['status' => 'failed', 'processing_state' => 'failed'])
+                : \App\Models\Audio::create([
+                    'user_id' => $owner->id, 'title' => 'Uploaded audio', 'origin' => 'upload', 'status' => 'failed',
+                    'storage_path' => 'sounds/' . $owner->id . '/fixture.m4a',
+                    'rights_confirmed_at' => now(), 'rights_version' => config('policies.rights_version'),
+                ]);
+            $path = '/operations/media/' . $kind . '/' . $target->id . '/retry';
+            $input = ['reason' => 'Recover failed encoding', 'idempotency_key' => "$kind-first-attempt"];
+            $this->browserWrite($path, $input)->assertStatus(303);
+            $id = (int) DB::table('staff_operations')->orderBy('id', 'desc')->value('id');
+            Operations::run($id);
+            DB::table('staff_operations')->where('id', $id)->update(['result_code' => null]);
+            app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0, queue: 'default');
+            Operations::run($id);
+            $this->assertDatabaseHas('staff_operations', ['id' => $id, 'status' => 'failed', 'result_code' => 'media_processing_failed']);
+
+            $this->browserWrite($path, [...$input, 'idempotency_key' => "$kind-second-attempt"])->assertStatus(303);
+            $next = (int) DB::table('staff_operations')->orderBy('id', 'desc')->value('id');
+            Operations::run($next);
+            $pending = app(\Spark\Queue\Queue::class)->getJobs(queue: 'default', status: 'pending');
+            $this->assertCount(1, $pending);
+            $this->assertSame([(int) $target->id, $next], $pending[0]->getParameters());
+            app(\Spark\Queue\Queue::class)->work(once: true, timeout: 5, sleep: 0, queue: 'default');
+        }
+    }
+
+    public function testBusyEncoderLockDoesNotInventOrEraseADispatchReceipt(): void
+    {
+        $owner = $this->makeUser('owner');
+        $video = $this->makeVideo($owner, ['status' => 'failed', 'processing_state' => 'failed']);
+        $this->browserLogin($this->makeUser('operator'), 'operations');
+        $this->browserWrite('/operations/media/videos/' . $video->id . '/retry', [
+            'reason' => 'Resume after encoder lock release', 'idempotency_key' => 'busy-encoder-recovery',
+        ])->assertStatus(303);
+        $id = (int) DB::table('staff_operations')->value('id');
+        $lock = \Spark\Facades\Cache::lock('videos.process.' . $video->id, 60);
+        $this->assertTrue($lock->acquire());
+
+        try {
+            Operations::run($id);
+            $this->assertDatabaseHas('staff_operations', ['id' => $id, 'result_code' => 'media_busy']);
+            $this->assertCount(0, app(\Spark\Queue\Queue::class)->getJobs(queue: 'default'));
+        } finally {
+            $lock->release();
+        }
+
+        Operations::run($id);
+        $this->assertCount(1, app(\Spark\Queue\Queue::class)->getJobs(queue: 'default'));
+        $this->assertTrue($lock->acquire());
+
+        try {
+            Operations::run($id);
+            $this->assertDatabaseHas('staff_operations', ['id' => $id, 'result_code' => 'awaiting_media']);
+        } finally {
+            $lock->release();
+        }
+    }
+
     public function testAudioDispatchFailureLeavesMediaRetryable(): void
     {
         $owner = $this->makeUser('owner');
