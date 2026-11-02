@@ -31,6 +31,22 @@ if ($action === 'code') {
     foreach ([$user->email, 'challenge:' . $user->id] as $identity) {
         \Spark\Facades\Cache::forget('staff.identity.' . hash('sha256', mb_strtolower(trim($identity))));
     }
+} elseif ($action === 'seed-audio' || $action === 'clear-audio') {
+    $title = 'Midnight on the River';
+    $row = \App\Models\Audio::where('title', $title)->where('user_id', $user->id)->first();
+    if ($action === 'seed-audio') {
+        $row ??= \App\Models\Audio::create([
+            'user_id' => $user->id,
+            'title' => $title,
+            'storage_path' => 'sounds/fixture/midnight.mp3',
+            'origin' => 'upload',
+            'status' => 'ready',
+            'reuse_allowed' => true,
+        ]);
+        echo json_encode(['id' => $row->id, 'owner' => $user->id, 'title' => $title], JSON_THROW_ON_ERROR);
+    } elseif ($row) {
+        query('audios')->where('id', $row->id)->delete();
+    }
 } elseif ($action === 'expire-mfa') {
     query('staff_sessions')->where('user_id', $user->id)->update(['mfa_expires_at' => gmdate('Y-m-d H:i:s', time() - 1)]);
 } elseif ($action === 'revoke') {

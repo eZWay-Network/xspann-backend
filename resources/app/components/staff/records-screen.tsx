@@ -32,6 +32,8 @@ export type RecordRow = {
   recovery?: (RecoveryAction & { key: string }) | null;
 };
 export type RecordsProps = {
+  emptyState?: { noun: string; description: string };
+  heading?: "h1" | "h2";
   rows: RecordRow[];
   pagination:
     | { kind: "page"; current_page: number; last_page: number; total: number }
@@ -51,6 +53,11 @@ export type RecordsProps = {
   children?: ReactNode;
   renderAction?: (row: RecordRow) => ReactNode;
 };
+function fieldLabel(key: string) {
+  const words = key.replaceAll("_", " ").replace(/\bid\b/g, "ID");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function RecordsScreen({
   rows,
   pagination,
@@ -62,17 +69,20 @@ export function RecordsScreen({
   create_url,
   children,
   renderAction,
+  heading,
+  emptyState,
 }: RecordsProps) {
-  const [search, setSearch] = useState(filters.q);
-  const [references, setReferences] = useState<Record<string, string>>({});
-  useEffect(() => {
-    setSearch(filters.q);
-    setReferences(
-      Object.fromEntries(
-        filter_fields.map((key) => [key, String(filters[key] ?? "")]),
-      ),
-    );
-  }, [filters]);
+  const [draft, setDraft] = useState(filters);
+  useEffect(() => setDraft(filters), [filters]);
+  const update = (key: string, value: string) =>
+    setDraft((current) => ({ ...current, [key]: value }));
+  const filtered = Boolean(
+    filters.q ||
+    [...filter_fields, ...Object.keys(filter_options)].some(
+      (key) => filters[key],
+    ),
+  );
+  const noun = emptyState?.noun ?? "records";
   const [busy, setBusy] = useState(false);
   const { page } = usePage<AppPageProps>().props;
   const { formatDateTime } = useApp();
@@ -81,6 +91,8 @@ export function RecordsScreen({
       preserveState: true,
       preserveScroll: true,
       replace: true,
+      onSuccess: (response) =>
+        setDraft(response.props.filters as RecordsProps["filters"]),
       onStart: () => setBusy(true),
       onFinish: () => setBusy(false),
     });
@@ -88,6 +100,7 @@ export function RecordsScreen({
   return (
     <div className="space-y-6">
       <PageHeader
+        heading={heading}
         title={page.title}
         description={description}
         actions={
@@ -101,77 +114,77 @@ export function RecordsScreen({
       {children}
       <Card className="overflow-hidden">
         <form
-          className="flex flex-wrap items-center gap-3 border-b p-4"
           onSubmit={(event) => {
             event.preventDefault();
-            visit({
-              ...filters,
-              ...references,
-              q: search,
-              page: 1,
-              cursor: "",
-            });
+            const { page, cursor, ...criteria } = draft;
+            visit(
+              Object.fromEntries(
+                Object.entries(criteria).filter(([, value]) => value !== ""),
+              ),
+            );
           }}
         >
-          <RecordsSearch
-            value={search}
-            onChange={setSearch}
-            placeholder="Search by name or reference"
-          />
-          {filter_fields.map((key) => (
-            <Input
-              key={key}
-              className="w-32"
-              aria-label={key.replaceAll("_", " ")}
-              placeholder={key.replaceAll("_", " ")}
-              inputMode="numeric"
-              pattern="[1-9][0-9]{0,14}"
-              value={references[key] ?? ""}
-              onChange={(event) =>
-                setReferences({ ...references, [key]: event.target.value })
-              }
-            />
-          ))}
-          {Object.entries(filter_options).map(([key, options]) => (
-            <Select
-              key={key}
-              label={key.replaceAll("_", " ")}
-              value={String(filters[key] ?? "")}
-              options={[
-                { value: "", label: `All ${key.replaceAll("_", " ")}` },
-                ...options,
-              ]}
-              onValueChange={(value) =>
-                visit({ ...filters, [key]: value, page: 1, cursor: "" })
-              }
-            />
-          ))}
-          <Select
-            label="Sort order"
-            value={filters.sort}
-            options={[
-              { value: "newest", label: "Newest first" },
-              { value: "oldest", label: "Oldest first" },
-            ]}
-            onValueChange={(value) =>
-              visit({ ...filters, sort: value, page: 1, cursor: "" })
-            }
-          />
-          <Button type="submit" size="sm" disabled={busy}>
-            Search
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            type="button"
+          <fieldset
             disabled={busy}
-            onClick={() => {
-              setSearch("");
-              visit({});
-            }}
+            className="records-toolbar min-w-0 border-b"
           >
-            Reset
-          </Button>
+            <legend className="sr-only">Record filters</legend>
+            <RecordsSearch
+              value={draft.q}
+              onChange={(value) => update("q", value)}
+              placeholder="Search by name or reference"
+            />
+            {filter_fields.map((key) => (
+              <Input
+                key={key}
+                className="w-32"
+                aria-label={fieldLabel(key)}
+                placeholder={fieldLabel(key)}
+                inputMode="numeric"
+                pattern="[1-9][0-9]{0,14}"
+                value={String(draft[key] ?? "")}
+                onChange={(event) => update(key, event.target.value)}
+              />
+            ))}
+            {Object.entries(filter_options).map(([key, options]) => (
+              <Select
+                key={key}
+                label={fieldLabel(key)}
+                value={String(draft[key] ?? "")}
+                options={[
+                  {
+                    value: "",
+                    label:
+                      key === "status"
+                        ? "All statuses"
+                        : `Any ${fieldLabel(key).toLowerCase()}`,
+                  },
+                  ...options,
+                ]}
+                onValueChange={(value) => update(key, value)}
+              />
+            ))}
+            <Select
+              label="Sort order"
+              value={draft.sort}
+              options={[
+                { value: "newest", label: "Newest first" },
+                { value: "oldest", label: "Oldest first" },
+              ]}
+              onValueChange={(value) => update("sort", value)}
+            />
+            <Button type="submit" loading={busy}>
+              Apply filters
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              disabled={busy}
+              onClick={() => visit({})}
+            >
+              Reset
+            </Button>
+          </fieldset>
         </form>
         <div aria-busy={busy} className={busy ? "opacity-60" : undefined}>
           {rows.length ? (
@@ -237,8 +250,24 @@ export function RecordsScreen({
           ) : (
             <EmptyState
               icon={Search}
-              title="No records found"
-              description="Try adjusting your filters or clearing the search."
+              title={filtered ? `No matching ${noun}` : `No ${noun} yet`}
+              description={
+                filtered
+                  ? "Try another search or clear your filters."
+                  : (emptyState?.description ??
+                    "Records will appear here when available.")
+              }
+              action={
+                filtered && (
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => visit({})}
+                  >
+                    Clear filters
+                  </Button>
+                )
+              }
             />
           )}
         </div>

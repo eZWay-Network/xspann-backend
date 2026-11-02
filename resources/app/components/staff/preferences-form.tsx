@@ -1,4 +1,5 @@
 import { useForm } from "@inertiajs/react";
+import { SettingsForm } from "@/components/settings-form";
 import { SettingsSection } from "@/components/settings-section";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
@@ -27,8 +28,22 @@ export function PreferencesForm({
       title="Workspace preferences"
       description="Choose how dates and account reminders appear in your staff workspace. Reporting boundaries remain UTC."
     >
-      <form
-        className="max-w-xl space-y-5"
+      <SettingsForm
+        note="Applies to your staff workspace."
+        action={
+          <Button
+            type="submit"
+            size="sm"
+            loading={settings.processing}
+            disabled={
+              settings.data.timezone === preferences.timezone &&
+              settings.data.page_size === preferences.page_size &&
+              settings.data.attention_enabled === preferences.attention_enabled
+            }
+          >
+            Save preferences
+          </Button>
+        }
         onSubmit={(event) => {
           event.preventDefault();
           settings.patch(preferences_url, {
@@ -43,7 +58,7 @@ export function PreferencesForm({
       >
         <FormErrors errors={settings.errors} />
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Display timezone">
+          <Field label="Display timezone" error={settings.errors.timezone}>
             <Select
               label="Display timezone"
               value={settings.data.timezone}
@@ -55,17 +70,14 @@ export function PreferencesForm({
               className="w-full max-w-full"
             />
           </Field>
-          <Field label="Language">
-            <Select
-              label="Language"
-              value={settings.data.locale}
-              options={[{ value: "en", label: "English" }]}
-              onValueChange={(value) => settings.setData("locale", value)}
-            />
-          </Field>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Language</p>
+            <p className="text-sm text-muted-foreground">English</p>
+          </div>
         </div>
         <Field
           label="Rows per page"
+          error={settings.errors.page_size}
           description="Default size for staff record lists."
         >
           <Select
@@ -94,10 +106,7 @@ export function PreferencesForm({
             </span>
           </span>
         </label>
-        <Button type="submit" loading={settings.processing}>
-          Save preferences
-        </Button>
-      </form>
+      </SettingsForm>
     </SettingsSection>
   );
 }

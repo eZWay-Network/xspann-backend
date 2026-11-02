@@ -45,7 +45,7 @@ export default function Overview({
         }
       />
       <OverviewMetrics metrics={overview.metrics} />
-      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
         <ActivityChart chart={overview.chart} />
         <Distribution distribution={overview.distribution} />
       </div>

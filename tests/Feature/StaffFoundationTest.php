@@ -145,7 +145,18 @@ class StaffFoundationTest extends TestCase
             $this->signIn($user);
             $response = $this->page()->assertOk()->assertJsonPath('props.auth.role', $role);
             $this->assertSame(Permissions::forRole($role), $response->json('props.auth.permissions'));
+            $this->page('/settings')->assertStatus(302)->assertHeader('Location', (string) route('staff.profile'));
             $this->page('/settings/team')->assertStatus($role === 'admin' ? 200 : 403);
+
+            $groups = $response->json('props.navigation');
+            $sections = array_values(array_filter($groups, fn ($group) => $group['placement'] === 'settings'));
+            $this->assertSame($role === 'admin' ? ['account', 'workspace', 'team'] : ['account'], array_column($sections, 'key'));
+            $this->assertSame($role === 'admin' ? 10 : 3, count(array_merge(...array_column($sections, 'items'))));
+            foreach ($sections as $section) {
+                foreach ($section['items'] as $destination) {
+                    $this->page(parse_url($destination['path'], PHP_URL_PATH))->assertOk();
+                }
+            }
 
             if ($role !== 'admin') {
                 $this->assertFalse(str_contains(json_encode($response->json('props.navigation')), 'Team & access'));

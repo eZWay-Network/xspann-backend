@@ -68,6 +68,10 @@ Route::get('/attention', [DashboardController::class, 'attention'])
     ->middleware(['staff.web', 'staff.mfa', 'staff.can:dashboard.view', 'staff.inertia'])
     ->name('staff.attention');
 
+Route::get('/settings', fn () => redirect((string) route('staff.profile')))
+    ->middleware(['staff.web', 'staff.mfa', 'staff.inertia'])
+    ->name('staff.settings');
+
 Route::get('/settings/profile', [ProfileController::class, 'index'])
     ->middleware(['staff.web', 'staff.mfa', 'staff.inertia'])
     ->name('staff.profile');

@@ -24,7 +24,7 @@ final class ActionController
         $target = str_ends_with($path, '/') ? $path . $row->target_id : $path;
 
         return Inertia::render('operations/action', [
-            'page' => ['title' => 'Operation #' . $operation, 'breadcrumbs' => []],
+            'page' => ['title' => 'Operation #' . $operation, 'breadcrumbs' => [], 'navigation_owner' => (string) url($target)],
             'fields' => Records::fields($row, ['id', 'type', 'status', 'result_code', 'created_at', 'started_at', 'completed_at', 'expires_at'], 'UTC'),
             'status' => $row->status,
             'refresh_url' => (string) route('staff.operations.show', ['operation' => $operation]),

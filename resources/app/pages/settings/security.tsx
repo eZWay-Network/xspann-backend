@@ -1,6 +1,8 @@
 import { useForm, router, Link } from "@inertiajs/react";
 import { Monitor, Smartphone, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { SettingsForm } from "@/components/settings-form";
+import { Card } from "@/components/ui/card";
 import { SettingsSection } from "@/components/settings-section";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -42,8 +44,15 @@ type Props = {
 export default function Security(props: Props) {
   const { preferences, formatDateTime } = useApp();
   const password = useForm({ password: "", new_password: "", mfa_code: "" });
+  const passwordErrors: Record<string, string | undefined> = password.errors;
   const factor = useForm({ password: "", google_token: "", mfa_code: "" });
   const complete = useForm({ mfa_code: "" });
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [factorOpen, setFactorOpen] = useState(false);
+  const completionCode = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (props.factor_pending) completionCode.current?.focus();
+  }, [props.factor_pending]);
   const [revocation, setRevocation] = useState<{
     url: string;
     title: string;
@@ -55,7 +64,7 @@ export default function Security(props: Props) {
         title="Identity confirmation"
         description="Sensitive changes require fresh credentials and a new authenticator code."
       >
-        <div className="max-w-xl">
+        <Card className="p-5 sm:p-6">
           <p className="mb-4 flex items-center gap-2 text-sm">
             <ShieldCheck className="size-4 text-success" />
             Authenticator protection is enabled.
@@ -71,7 +80,7 @@ export default function Security(props: Props) {
             terminal-based recovery. An administrator cannot view your existing
             setup key.
           </p>
-        </div>
+        </Card>
       </SettingsSection>
       <SettingsSection
         title="Active sessions"
@@ -144,63 +153,109 @@ export default function Security(props: Props) {
           title="Change password"
           description="Updates your XPN Social account password and signs out all customer and staff sessions."
         >
-          <form
-            className="max-w-xl space-y-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              password.post(props.password_url, {
-                preserveScroll: true,
-                onFinish: () => password.reset(),
-              });
+          <Button
+            variant="secondary"
+            aria-expanded={passwordOpen}
+            onClick={() => {
+              setPasswordOpen(!passwordOpen);
+              password.reset();
+              password.clearErrors();
             }}
           >
-            <FormErrors errors={password.errors} />
-            <Field label="Current password">
-              <PasswordInput
-                autoComplete="current-password"
-                value={password.data.password}
-                onValueChange={(value) => password.setData("password", value)}
-                required
-              />
-            </Field>
-            <Field
-              label="New password"
-              description="Use at least 12 characters."
-            >
-              <PasswordInput
-                autoComplete="new-password"
-                value={password.data.new_password}
-                onValueChange={(value) =>
-                  password.setData("new_password", value)
+            {passwordOpen ? "Cancel password change" : "Change password"}
+          </Button>
+          {passwordOpen && (
+            <div className="mt-4">
+              <SettingsForm
+                note="Changing your account password signs out all customer and staff sessions."
+                action={
+                  <Button size="sm" type="submit" loading={password.processing}>
+                    Change password and sign out
+                  </Button>
                 }
-                minLength={12}
-                required
-              />
-            </Field>
-            <Field label="Fresh authenticator code">
-              <Input
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                value={password.data.mfa_code}
-                onValueChange={(value) => password.setData("mfa_code", value)}
-                required
-              />
-            </Field>
-            <Button type="submit" loading={password.processing}>
-              Change password and sign out
-            </Button>
-          </form>
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  password.post(props.password_url, {
+                    preserveScroll: true,
+                    onFinish: () => password.reset(),
+                  });
+                }}
+              >
+                <FormErrors errors={password.errors} />
+                <Field
+                  label="Current password"
+                  error={passwordErrors.password ?? passwordErrors.credential}
+                >
+                  <PasswordInput
+                    autoComplete="current-password"
+                    value={password.data.password}
+                    onValueChange={(value) =>
+                      password.setData("password", value)
+                    }
+                    required
+                  />
+                </Field>
+                <Field
+                  label="New password"
+                  error={password.errors.new_password}
+                  description="Use at least 12 characters."
+                >
+                  <PasswordInput
+                    autoComplete="new-password"
+                    value={password.data.new_password}
+                    onValueChange={(value) =>
+                      password.setData("new_password", value)
+                    }
+                    minLength={12}
+                    required
+                  />
+                </Field>
+                <Field
+                  label="Fresh authenticator code"
+                  error={password.errors.mfa_code}
+                >
+                  <Input
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    pattern="[0-9]{6}"
+                    value={password.data.mfa_code}
+                    onValueChange={(value) =>
+                      password.setData("mfa_code", value)
+                    }
+                    required
+                  />
+                </Field>
+              </SettingsForm>
+            </div>
+          )}
         </SettingsSection>
       )}
       <SettingsSection
         title="Replace authenticator"
         description="Verify your current factor before enrolling a replacement. Completion signs out every staff session."
       >
+        {!props.factor_pending && (
+          <Button
+            variant="secondary"
+            aria-expanded={factorOpen}
+            onClick={() => {
+              setFactorOpen(!factorOpen);
+              factor.reset();
+              factor.clearErrors();
+            }}
+          >
+            {factorOpen ? "Cancel replacement" : "Replace authenticator"}
+          </Button>
+        )}
         {props.factor_pending ? (
-          <form
-            className="max-w-xl space-y-5"
+          <SettingsForm
+            note="Completing replacement signs out every staff session."
+            action={
+              <Button type="submit" size="sm" loading={complete.processing}>
+                Replace authenticator and sign out
+              </Button>
+            }
             onSubmit={(event) => {
               event.preventDefault();
               complete.post(props.factor_complete_url, {
@@ -218,8 +273,12 @@ export default function Security(props: Props) {
                 authenticator again.
               </p>
             )}
-            <Field label="New authenticator code">
+            <Field
+              label="New authenticator code"
+              error={complete.errors.mfa_code}
+            >
               <Input
+                ref={completionCode}
                 autoComplete="one-time-code"
                 inputMode="numeric"
                 maxLength={6}
@@ -229,60 +288,64 @@ export default function Security(props: Props) {
                 required
               />
             </Field>
-            <Button type="submit" loading={complete.processing}>
-              Replace authenticator and sign out
-            </Button>
-          </form>
+          </SettingsForm>
         ) : (
-          <form
-            className="max-w-xl space-y-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              factor.post(props.factor_url, {
-                preserveScroll: true,
-                onFinish: () => factor.reset(),
-              });
-            }}
-          >
-            <FormErrors errors={factor.errors} />
-            <CredentialFields
-              clientId={props.google_client_id}
-              password={factor.data.password}
-              googleToken={factor.data.google_token}
-              onPassword={(value) =>
-                factor.setData((data) => ({
-                  ...data,
-                  password: value,
-                  google_token: "",
-                }))
-              }
-              onGoogle={(value) =>
-                factor.setData((data) => ({
-                  ...data,
-                  google_token: value,
-                  password: "",
-                }))
-              }
-            />
-            <Field label="Current authenticator code">
-              <Input
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                value={factor.data.mfa_code}
-                onValueChange={(value) => factor.setData("mfa_code", value)}
-                required
-              />
-            </Field>
-            <Button
-              type="submit"
-              variant="secondary"
-              loading={factor.processing}
-            >
-              Set up replacement
-            </Button>
-          </form>
+          factorOpen && (
+            <div className="mt-4">
+              <SettingsForm
+                note="Your current authenticator stays active until you confirm the replacement."
+                action={
+                  <Button type="submit" size="sm" loading={factor.processing}>
+                    Set up replacement
+                  </Button>
+                }
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  factor.post(props.factor_url, {
+                    preserveScroll: true,
+                    onFinish: () => factor.reset(),
+                  });
+                }}
+              >
+                <FormErrors errors={factor.errors} />
+                <CredentialFields
+                  replacement
+                  errors={factor.errors}
+                  clientId={props.google_client_id}
+                  password={factor.data.password}
+                  googleToken={factor.data.google_token}
+                  onPassword={(value) =>
+                    factor.setData((data) => ({
+                      ...data,
+                      password: value,
+                      google_token: "",
+                    }))
+                  }
+                  onGoogle={(value) =>
+                    factor.setData((data) => ({
+                      ...data,
+                      google_token: value,
+                      password: "",
+                    }))
+                  }
+                />
+                <Field
+                  label="Current authenticator code"
+                  error={factor.errors.mfa_code}
+                >
+                  <Input
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    pattern="[0-9]{6}"
+                    value={factor.data.mfa_code}
+                    onValueChange={(value) => factor.setData("mfa_code", value)}
+                    required
+                  />
+                </Field>
+              </SettingsForm>
+            </div>
+          )
         )}
       </SettingsSection>
       <Dialog

@@ -21,14 +21,16 @@ export type IconName =
   | "activity"
   | "clock";
 export type NavigationItem = {
+  key: string;
   title: string;
   icon: IconName;
   path?: string;
   children?: NavigationItem[];
 };
 export type NavigationGroup = {
+  key: string;
   label: string;
-  placement: "main" | "bottom";
+  placement: "main" | "bottom" | "settings";
   items: NavigationItem[];
 };
 export type AttentionItem = {
@@ -56,7 +58,11 @@ export interface AppPageProps extends PageProps {
   navigation: NavigationGroup[];
   workspace: { name: string; support_url: string | null };
   csrf_token: string;
-  page: { title: string; breadcrumbs: { title: string; url: string | null }[] };
+  page: {
+    title: string;
+    navigation_owner?: string;
+    breadcrumbs: { title: string; url: string | null }[];
+  };
   environment: { app: string; billing: "test" | "live" };
   preferences: { timezone: string; locale: string; attention_enabled: boolean };
   attention: AttentionItem[];

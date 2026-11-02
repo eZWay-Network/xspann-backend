@@ -1,4 +1,5 @@
 import { useForm } from "@inertiajs/react";
+import { SettingsForm } from "@/components/settings-form";
 import { SettingsSection } from "@/components/settings-section";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -20,8 +21,20 @@ function SettingForm({
     version: setting.version,
   });
   return (
-    <form
-      className="max-w-xl space-y-4"
+    <SettingsForm
+      note="Changes apply across the staff workspace."
+      action={
+        url && (
+          <Button
+            type="submit"
+            size="sm"
+            loading={form.processing}
+            disabled={form.data.value === setting.value}
+          >
+            Save setting
+          </Button>
+        )
+      }
       onSubmit={(event) => {
         event.preventDefault();
         form.transform((data) => ({ ...data, version: setting.version }));
@@ -30,6 +43,7 @@ function SettingForm({
     >
       <FormErrors errors={form.errors} />
       <Field
+        error={form.errors.value}
         label={
           name === "workspace_name"
             ? "Workspace name"
@@ -49,12 +63,7 @@ function SettingForm({
           required={name === "workspace_name"}
         />
       </Field>
-      {url && (
-        <Button type="submit" loading={form.processing}>
-          Save setting
-        </Button>
-      )}
-    </form>
+    </SettingsForm>
   );
 }
 export default function General({

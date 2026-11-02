@@ -16,28 +16,64 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [attentionOpen, setAttentionOpen] = useState(false);
+  const searchButton = useRef<HTMLButtonElement>(null);
+  const searchReturn = useRef<HTMLElement>(null);
   const content = useRef<HTMLElement>(null);
-  const { auth, attention, urls, pageTitle, preferences } = useApp();
-  useEffect(
-    () =>
-      router.on("success", () => {
-        setMobileOpen(false);
-        setSearchOpen(false);
-        setAttentionOpen(false);
-        content.current?.focus({ preventScroll: true });
-      }),
-    [],
-  );
+  const {
+    auth,
+    attention,
+    urls,
+    pageTitle,
+    preferences,
+    pathname,
+    activePage,
+  } = useApp();
+  const branch =
+    activePage && activePage.parentKey !== activePage.key
+      ? activePage.parentKey
+      : undefined;
+  const [expanded, setExpanded] = useState<string[]>(branch ? [branch] : []);
+  const previousPath = useRef(pathname);
+  useEffect(() => {
+    if (previousPath.current === pathname) return;
+    previousPath.current = pathname;
+    if (branch)
+      setExpanded((keys) => (keys.includes(branch) ? keys : [...keys, branch]));
+    setMobileOpen(false);
+    setSearchOpen(false);
+    setAttentionOpen(false);
+    const heading = content.current?.querySelector("h1");
+    heading?.setAttribute("tabindex", "-1");
+    (heading ?? content.current)?.focus({ preventScroll: true });
+  }, [pathname, branch]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const desktop = window.matchMedia("(min-width: 64rem)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMobileOpen(false);
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    closeOnDesktop();
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, [mobileOpen]);
+
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "k") {
         event.preventDefault();
-        setSearchOpen((open) => !open);
+        if (!searchOpen) {
+          const focused = document.activeElement;
+          searchReturn.current =
+            focused instanceof HTMLElement && focused !== document.body
+              ? focused
+              : searchButton.current;
+        }
+        setSearchOpen(!searchOpen);
       }
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
-  }, []);
+  }, [searchOpen]);
   useEffect(() => {
     if (!auth) return;
     const expire = () => {
@@ -68,19 +104,27 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 border-r bg-card lg:block">
-        <AppSidebar />
+        <AppSidebar expanded={expanded} onExpand={setExpanded} />
       </aside>
       <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
         <DrawerContent side="left">
           <DrawerTitle className="sr-only">Navigation</DrawerTitle>
           <DrawerDismiss />
-          <AppSidebar onNavigate={() => setMobileOpen(false)} />
+          <AppSidebar
+            expanded={expanded}
+            onExpand={setExpanded}
+            onNavigate={() => setMobileOpen(false)}
+          />
         </DrawerContent>
       </Drawer>
       <div className="flex h-dvh min-w-0 flex-col lg:pl-60">
         <AppHeader
           onMenu={() => setMobileOpen(true)}
-          onSearch={() => setSearchOpen(true)}
+          searchButton={searchButton}
+          onSearch={() => {
+            searchReturn.current = searchButton.current;
+            setSearchOpen(true);
+          }}
           onNotifications={() => setAttentionOpen(true)}
           unreadCount={preferences.attention_enabled ? attention.length : 0}
           onLogout={() => router.post(urls.logout)}
@@ -100,7 +144,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
       <AttentionDrawer open={attentionOpen} onOpenChange={setAttentionOpen} />
-      <NavigationSearch open={searchOpen} onOpenChange={setSearchOpen} />
+      <NavigationSearch
+        returnFocus={searchReturn}
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+      />
     </div>
   );
 }

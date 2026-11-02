@@ -2,7 +2,7 @@ import { DetailScreen, type DetailProps } from "@/components/staff/detail";
 import { Card } from "@/components/ui/card";
 export default function Member(props: DetailProps & { permissions: string[] }) {
   return (
-    <DetailScreen {...props}>
+    <DetailScreen {...props} heading="h2">
       <Card className="p-5">
         <h2 className="mb-4 font-semibold">Role permissions</h2>
         <ul className="grid gap-2 text-sm sm:grid-cols-2">

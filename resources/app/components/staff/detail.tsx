@@ -15,6 +15,7 @@ export type DetailField = {
 export type RecordLink = { label: string; url: string };
 export type CaseTarget = { type: string; id: number; url: string };
 export type DetailProps = {
+  heading?: "h1" | "h2";
   fields: DetailField[];
   links?: RecordLink[];
   history?: RecordLink[];
@@ -77,6 +78,7 @@ export function DetailScreen({
   fields,
   links = [],
   history = [],
+  heading,
   public_links = [],
   case_target,
   actions,
@@ -86,6 +88,7 @@ export function DetailScreen({
   return (
     <div className="space-y-6">
       <PageHeader
+        heading={heading}
         title={page.title}
         description="Operational record and related activity."
         actions={actions}

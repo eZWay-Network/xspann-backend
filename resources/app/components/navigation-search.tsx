@@ -1,4 +1,10 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { Link, router } from "@inertiajs/react";
 import { Search, ArrowUpRight } from "lucide-react";
 import { useApp } from "@/contexts/app";
@@ -7,7 +13,9 @@ import { Input } from "./ui/input";
 export function NavigationSearch({
   open,
   onOpenChange,
+  returnFocus,
 }: {
+  returnFocus: RefObject<HTMLElement | null>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -21,15 +29,14 @@ export function NavigationSearch({
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   );
-  function close(value: boolean) {
-    onOpenChange(value);
-    if (!value) setQuery("");
-  }
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
   function navigateResults(event: KeyboardEvent, index: number) {
     if (event.key === "Enter" && index === -1 && results[0]) {
       event.preventDefault();
       navigate(results[0].path);
-      close(false);
+      onOpenChange(false);
       return;
     }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -39,10 +46,11 @@ export function NavigationSearch({
     else links.current[next]?.focus();
   }
   return (
-    <Dialog open={open} onOpenChange={close}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[min(36rem,80dvh)] flex-col overflow-hidden p-0"
+        className="top-[15dvh] flex max-h-[min(36rem,80dvh)] translate-y-0 flex-col overflow-hidden p-0 sm:p-0"
         initialFocus={input}
+        finalFocus={returnFocus}
       >
         <DialogTitle className="sr-only">Search navigation</DialogTitle>
         <div className="relative flex shrink-0 items-center gap-3 border-b px-5 pr-14">
@@ -70,7 +78,7 @@ export function NavigationSearch({
               key={item.path}
               aria-label={`${item.title}, ${item.parent}`}
               href={item.path}
-              onClick={() => close(false)}
+              onClick={() => onOpenChange(false)}
               onKeyDown={(event) => navigateResults(event, index)}
               className="focus-ring flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted focus:bg-muted focus-visible:ring-inset"
             >

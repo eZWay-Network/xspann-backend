@@ -49,6 +49,6 @@ class StaffRouteContractTest extends TestCase
                 $this->assertSame('staff.inertia', $middleware[3]);
             }
         }
-        $this->assertSame(112, count($names));
+        $this->assertSame(113, count($names));
     }
 }

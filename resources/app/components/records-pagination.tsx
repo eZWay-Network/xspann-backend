@@ -14,6 +14,7 @@ export function RecordsPagination({
   onChange: (page: number) => void;
   busy?: boolean;
 }) {
+  if (!total) return null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
       <p aria-live="polite">
@@ -56,6 +57,7 @@ export function CursorPagination({
   onNavigate: (url: string) => void;
   busy?: boolean;
 }) {
+  if (!previous && !next) return null;
   return (
     <div className="flex justify-end gap-2">
       <Button

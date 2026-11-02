@@ -1,8 +1,11 @@
 import { Link } from "@inertiajs/react";
 import { useApp } from "@/contexts/app";
 import Brand from "./brand";
-import { AppNavigation } from "./app-navigation";
-export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
+import { AppNavigation, type MenuExpansion } from "./app-navigation";
+export function AppSidebar({
+  onNavigate,
+  ...expansion
+}: MenuExpansion & { onNavigate?: () => void }) {
   const { urls } = useApp();
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -17,10 +20,18 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         </Link>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-5">
-        <AppNavigation placement="main" onNavigate={onNavigate} />
+        <AppNavigation
+          {...expansion}
+          placement="main"
+          onNavigate={onNavigate}
+        />
       </div>
-      <div className="max-h-[45%] shrink-0 overflow-y-auto overscroll-contain border-t px-2 py-3">
-        <AppNavigation placement="bottom" onNavigate={onNavigate} />
+      <div className="shrink-0 border-t px-2 py-3">
+        <AppNavigation
+          {...expansion}
+          placement="bottom"
+          onNavigate={onNavigate}
+        />
       </div>
     </div>
   );

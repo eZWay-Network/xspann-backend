@@ -13,7 +13,12 @@ final class SharedProps
             if (isset($item['ability']) && !$context->can($item['ability'])) {
                 return null;
             }
-            $result = ['title' => $item['title'], 'icon' => $item['icon']];
+
+            $result = [
+                'key' => $item['route'] ?? $item['key'],
+                'title' => $item['title'],
+                'icon' => $item['icon'],
+            ];
 
             if (isset($item['children'])) {
                 $result['children'] = array_values(array_filter(array_map($filter, $item['children'])));
@@ -29,7 +34,12 @@ final class SharedProps
             $items = array_values(array_filter(array_map($filter, $group['items'])));
 
             if ($items) {
-                $groups[] = ['label' => $group['label'], 'placement' => $group['placement'], 'items' => $items];
+                $groups[] = [
+                    'key' => $group['key'] ?? $items[0]['key'],
+                    'label' => $group['label'],
+                    'placement' => $group['placement'],
+                    'items' => $items,
+                ];
             }
         }
 

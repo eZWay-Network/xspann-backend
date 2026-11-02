@@ -1,14 +1,17 @@
+import type { RefObject } from "react";
 import { Bell, Menu, Search } from "lucide-react";
 import { useApp } from "@/contexts/app";
 import { Button } from "./ui/button";
 import { AccountMenu } from "./account-menu";
 export function AppHeader({
+  searchButton,
   onMenu,
   onSearch,
   onNotifications,
   unreadCount,
   onLogout,
 }: {
+  searchButton: RefObject<HTMLButtonElement | null>;
   onMenu: () => void;
   onSearch: () => void;
   onNotifications: () => void;
@@ -35,6 +38,7 @@ export function AppHeader({
           variant="ghost"
           size="sm"
           className="gap-2 bg-muted/70 h-9 px-2.5 text-muted-foreground"
+          ref={searchButton}
           onClick={onSearch}
           aria-label="Search navigation"
         >
@@ -42,7 +46,9 @@ export function AppHeader({
           <span className="hidden text-[0.85rem] font-normal sm:inline">
             Search
           </span>
-          <kbd className="keyboard-key hidden sm:inline">⌘ K</kbd>
+          <kbd className="keyboard-key hidden sm:inline">
+            {/Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "⌘ K" : "Ctrl K"}
+          </kbd>
         </Button>
         <Button
           variant="ghost"

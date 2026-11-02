@@ -23,8 +23,10 @@ declare global {
 export function GoogleCredential({
   clientId,
   onCredential,
+  alignStart = false,
 }: {
   clientId: string | null;
+  alignStart?: boolean;
   onCredential: (credential: string) => void;
 }) {
   const element = useRef<HTMLDivElement>(null);
@@ -87,16 +89,21 @@ export function GoogleCredential({
   }, [clientId]);
   if (!clientId) return null;
   return (
-    <div className="space-y-3">
-      <p className="text-center text-xs text-muted-foreground">
+    <div
+      className={alignStart ? "space-y-3 text-left" : "space-y-3 text-center"}
+    >
+      <p className="text-xs text-muted-foreground">
         Or use your linked Google account
       </p>
       {loading && (
-        <p role="status" className="text-center text-xs text-muted-foreground">
+        <p role="status" className="text-xs text-muted-foreground">
           Loading Google sign-in…
         </p>
       )}
-      <div ref={element} className="flex justify-center" />
+      <div
+        ref={element}
+        className={alignStart ? "flex justify-start" : "flex justify-center"}
+      />
       {unavailable && (
         <Alert>
           Google sign-in could not load. Try again or use your password.

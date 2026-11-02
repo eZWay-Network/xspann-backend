@@ -52,8 +52,8 @@ foreach ([
     'name' => 'Taylor Brooks', 'username' => 'invitee', 'email' => 'invitee@example.test', 'password' => 'StaffFixturePassword123!',
     'email_verified_at' => now(), 'onboarded_at' => now(), 'date_of_birth' => '1990-01-01',
 ]);
-for ($index = 1; $index <= 48; $index++) {
-    $date = gmdate('Y-m-d H:i:s', time() - (($index * 7) % 30) * 86400);
+for ($index = 1; $index <= 138; $index++) {
+    $date = gmdate('Y-m-d H:i:s', time() - ($index <= 90 ? $index - 1 : ($index * 7) % 30) * 86400);
     $id = query('users')->insert([
         'name' => "Artist $index", 'username' => "artist_$index", 'email' => "artist_$index@example.test", 'status' => 'active',
         'email_verified_at' => $date, 'onboarded_at' => $date, 'created_at' => $date,

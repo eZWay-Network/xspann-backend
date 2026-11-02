@@ -27,14 +27,25 @@ final class AudioController
             $query->where('user_id', $filters['owner_id']);
         }
         if ($filters['q'] !== '') {
-            $query->where(fn ($query) => $query->whereContains('title', $filters['q'])->orWhere('id', ctype_digit($filters['q']) ? (int) $filters['q'] : 0));
+            $query->where(fn($query) => $query->whereContains('title', $filters['q'])->orWhere('id', ctype_digit($filters['q']) ? (int) $filters['q'] : 0));
         }
 
-        return Inertia::render('content/audios/index', Records::listing($query, $filters,
-            fn ($row) => Records::row($row, $row->title ?: 'Audio #' . $row->id,
-                (string) route('staff.audios.show', ['audio' => $row->id]), $row->moderation_status, 'user_id #' . $row->user_id),
-            'staff.audios.index', self::FILTERS) + ['page' => ['title' => 'Audios', 'breadcrumbs' => []],
-                'description' => 'Content metadata and rights declarations. Private playback requires an authorized review case.']);
+        return Inertia::render('content/audios/index', Records::listing(
+            $query,
+            $filters,
+            fn($row) => Records::row(
+                $row,
+                $row->title ?: 'Audio #' . $row->id,
+                (string) route('staff.audios.show', ['audio' => $row->id]),
+                $row->moderation_status,
+                'Owner ID #' . $row->user_id
+            ),
+            'staff.audios.index',
+            self::FILTERS
+        ) + [
+            'page' => ['title' => 'Audio', 'breadcrumbs' => []],
+            'description' => 'Content metadata and rights declarations. Private playback requires an authorized review case.'
+        ]);
     }
 
     public function show(Request $request, int $audio): Response
@@ -56,10 +67,13 @@ final class AudioController
             }
         }
 
-        return Inertia::render('content/audios/show', ['page' => ['title' => 'Audio #' . $id, 'breadcrumbs' => []],
-            'fields' => $fields, 'links' => $links,
+        return Inertia::render('content/audios/show', [
+            'page' => ['title' => 'Audio #' . $id, 'breadcrumbs' => []],
+            'fields' => $fields,
+            'links' => $links,
             'case_target' => $context->can('content.case.create') && (int) $row->user_id !== (int) $context->user->id
                 && \App\Models\Audio::availableTo(null)->whereKey($id)->exists()
-                    ? ['type' => 'audio', 'id' => $id, 'url' => (string) route('staff.cases.create')] : null]);
+                ? ['type' => 'audio', 'id' => $id, 'url' => (string) route('staff.cases.create')] : null
+        ]);
     }
 }

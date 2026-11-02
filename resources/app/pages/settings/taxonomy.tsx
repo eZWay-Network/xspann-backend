@@ -108,6 +108,7 @@ export default function Taxonomy(
   return (
     <>
       <RecordsScreen
+        heading="h2"
         {...props}
         renderAction={(row) => {
           const genre = props.rows.find((item) => item.id === row.id)!;
