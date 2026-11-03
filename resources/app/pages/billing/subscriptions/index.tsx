@@ -2,15 +2,15 @@ import {
   RecordsScreen,
   type RecordsProps,
 } from "@/components/staff/records-screen";
-import { PlanPricing, type Pricing } from "@/components/staff/plan-pricing";
+import { DetailFields, type DetailField } from "@/components/staff/detail";
 
 export default function Subscriptions({
   pricing,
   ...records
-}: RecordsProps & { pricing: Pricing }) {
+}: RecordsProps & { pricing: { title: string; fields: DetailField[] } }) {
   return (
     <RecordsScreen {...records}>
-      <PlanPricing pricing={pricing} />
+      <DetailFields {...pricing} />
     </RecordsScreen>
   );
 }

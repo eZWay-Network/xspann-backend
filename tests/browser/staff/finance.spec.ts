@@ -85,7 +85,8 @@ test("Stripe guide and plan prices explain current checkout support", async ({ p
   await expect(page.getByRole("heading", { name: "Stripe integration guide" })).toBeVisible();
   const webhook = page.locator("details").filter({ has: page.getByText("Webhook setup", { exact: true }) });
   await expect(webhook.getByText("invoice.paid", { exact: true })).toBeVisible();
-  await expect(webhook.getByText("2024-06-20 (required)", { exact: true })).toBeVisible();
+  await expect(webhook.getByText("Your current version or another stable release", { exact: true })).toBeVisible();
+  await expect(webhook.getByText("2024-06-20", { exact: true })).toBeVisible();
   await expect(webhook.locator("li code")).toHaveCount(16);
   await page.screenshot({ path: info.outputPath("stripe-webhook-guide.png") });
 
@@ -98,13 +99,9 @@ test("Stripe guide and plan prices explain current checkout support", async ({ p
 
   for (const path of ["/settings/catalog", "/billing/subscriptions"]) {
     if (new URL(page.url()).pathname !== path) await page.goto(path);
-    const table = page.getByRole("table", { name: /artist plans, monthly and yearly prices/i });
-    for (const [name, monthly, yearly] of [["Artist Starter", "$4.99", "$49"], ["Artist Pro", "$19.99", "$199"], ["Artist Spotlight", "$99", "$990"]]) {
-      const row = table.getByRole("row").filter({ has: page.getByRole("rowheader", { name, exact: true }) });
-      await expect(row.getByRole("cell").nth(0)).toContainText(monthly);
-      await expect(row.getByRole("cell").nth(1)).toContainText(yearly);
-      await expect(row.getByRole("cell").nth(1)).toContainText("Planned");
-    }
+    const prices = page.locator("section").filter({ has: page.getByRole("heading", { name: "Monthly plan prices (USD)", exact: true }) }).last();
+    await expect(prices.getByRole("term")).toHaveText(["Artist Starter", "Artist Pro"]);
+    await expect(prices.getByRole("definition")).toHaveText(["$4.99 / month", "$19.99 / month"]);
     expect(await page.evaluate(() => {
       const main = document.querySelector("main")!;
       return document.documentElement.scrollWidth <= innerWidth && main.scrollWidth <= main.clientWidth + 1;

@@ -139,12 +139,6 @@ class StripeProvider implements PaymentProvider
             'Webhook account or environment mismatch.'
         );
 
-        abort_unless(
-            ($event['api_version'] ?? null) === config('billing.stripe_version'),
-            400,
-            'Webhook API version mismatch.'
-        );
-
         return $event;
     }
 }

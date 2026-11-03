@@ -43,7 +43,7 @@ class BillingRecoveryTest extends TestCase
         $old = $time - 301;
         $this->rawWebhook($body, "t=$old,v1=" . hash_hmac('sha256', "$old.$body", 'whsec_test'))->assertStatus(400);
         $this->rawWebhook(str_repeat('x', 1048577), $signature)->assertStatus(413);
-        foreach ([['livemode' => true], ['account' => 'acct_foreign'], ['api_version' => '2025-01-01'], ['context' => 'acct_foreign']] as $change) {
+        foreach ([['livemode' => true], ['account' => 'acct_foreign'], ['data' => ['related_object' => ['id' => 'obj_test']]], ['context' => 'acct_foreign']] as $change) {
             $invalid = json_encode([...$event, ...$change], JSON_THROW_ON_ERROR);
             $this->rawWebhook($invalid, "t=$time,v1=" . hash_hmac('sha256', "$time.$invalid", 'whsec_test'))->assertStatus(400);
         }
@@ -56,6 +56,34 @@ class BillingRecoveryTest extends TestCase
         $this->assertFalse(str_contains($record->payload, 'evt_signed'));
         app(Webhooks::class)->process($record->id);
         $this->assertSame('ignored', query('billing_webhooks')->first()->status);
+    }
+
+    public function testSnapshotVersionsReconcileUsingRetrievedInvoiceInsteadOfEmbeddedFields(): void
+    {
+        $owner = $this->makeUser();
+        $this->makeArtist($owner);
+        $this->asUser($owner);
+        $attempt = $this->checkout();
+        $invoice = $this->stripe->complete($attempt->session_id);
+        $time = time();
+
+        foreach (['2020-03-02', '2026-10-28.endive'] as $index => $version) {
+            $eventId = 'evt_version_' . $index;
+            $body = json_encode([
+                'id' => $eventId,
+                'type' => 'invoice.paid',
+                'created' => $time,
+                'livemode' => false,
+                'api_version' => $version,
+                'data' => ['object' => ['id' => $invoice, 'amount_paid' => 1, 'status' => 'open']],
+            ], JSON_THROW_ON_ERROR);
+            $this->rawWebhook($body, "t=$time,v1=" . hash_hmac('sha256', "$time.$body", 'whsec_test'))->assertOk();
+            $receipt = query('billing_webhooks')->where('event_id', $eventId)->first();
+            app(Webhooks::class)->process($receipt->id);
+            $this->assertDatabaseHas('billing_webhooks', ['id' => $receipt->id, 'status' => 'processed']);
+            $this->assertDatabaseHas('billing_invoices', ['invoice_id' => $invoice, 'status' => 'paid', 'amount_paid' => 1999]);
+            $this->assertDatabaseCount('billing_paid_periods', 1);
+        }
     }
 
     public function testReceiptSurvivesDispatchFailureAndMaintenanceRecoversLostCheckoutResponse(): void

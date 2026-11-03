@@ -17,13 +17,15 @@ return [
     'retention_days' => 2555,
     'webhook_retention_days' => 30,
     'plans' => [
-        'artist_starter' => ['name' => 'Artist Starter', 'amount' => 499, 'price_id' => env('STRIPE_STARTER_PRICE_ID')],
-        'artist_pro' => ['name' => 'Artist Pro', 'amount' => 1999, 'price_id' => env('STRIPE_PRO_PRICE_ID')],
-    ],
-    // Launch pricing shown for comparison. These intervals are not offered at checkout.
-    'planned_prices' => [
-        'artist_starter' => ['yearly' => 4900],
-        'artist_pro' => ['yearly' => 19900],
-        'artist_spotlight' => ['name' => 'Artist Spotlight', 'monthly' => 9900, 'yearly' => 99000],
+        'artist_starter' => [
+            'name' => 'Artist Starter',
+            'amount' => 499, // $4.99
+            'price_id' => env('STRIPE_STARTER_PRICE_ID')
+        ],
+        'artist_pro' => [
+            'name' => 'Artist Pro',
+            'amount' => 1999, // $19.99
+            'price_id' => env('STRIPE_PRO_PRICE_ID')
+        ],
     ],
 ];

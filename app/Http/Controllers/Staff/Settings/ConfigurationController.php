@@ -10,9 +10,7 @@ final class ConfigurationController
 {
     public function catalog(): Response
     {
-        return $this->page('catalog', 'Catalog & capabilities', Configuration::catalog(), [
-            'pricing' => Configuration::planPricing(),
-        ]);
+        return $this->page('catalog', 'Catalog & capabilities', Configuration::catalog());
     }
 
     public function policies(): Response
@@ -31,8 +29,13 @@ final class ConfigurationController
     {
         $sections = [];
         foreach (\App\Services\Staff\Permissions::roles() as $role) {
-            $sections[] = ['title' => ucwords(str_replace('_', ' ', $role)), 'fields' => array_map(
-                fn ($ability) => ['label' => $ability, 'value' => true], \App\Services\Staff\Permissions::forRole($role))];
+            $sections[] = [
+                'title' => ucwords(str_replace('_', ' ', $role)),
+                'fields' => array_map(
+                    fn($ability) => ['label' => $ability, 'value' => true],
+                    \App\Services\Staff\Permissions::forRole($role)
+                )
+            ];
         }
 
         return $this->page('roles', 'Role permissions', $sections);

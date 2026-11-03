@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 type StripeGuide = {
   endpoint: string;
   environment: string;
-  api_version: string;
+  request_api_version: string;
   events: Record<string, string[]>;
   signing_secret_configured: boolean;
   portal_configured: boolean;
@@ -100,13 +100,19 @@ export default function Integrations({
             <dd className="font-medium text-foreground">Your account</dd>
             <dt>Payload style</dt>
             <dd className="font-medium text-foreground">Snapshot</dd>
-            <dt>API version</dt>
-            <dd className="font-mono text-foreground">
-              {stripe.api_version} (required)
+            <dt>Webhook API version</dt>
+            <dd className="font-medium text-foreground">
+              Your current version or another stable release
             </dd>
             <dt>Destination type</dt>
             <dd className="font-medium text-foreground">Webhook endpoint</dd>
           </dl>
+          <p>
+            XPN uses the object ID from each signed Snapshot to retrieve current
+            billing details. Only those outbound Stripe API requests use{" "}
+            <code>{stripe.request_api_version}</code>. You can keep your webhook
+            endpoint on its current version.
+          </p>
           <div>
             <h4 className="font-medium text-foreground">Select these events</h4>
             <p>

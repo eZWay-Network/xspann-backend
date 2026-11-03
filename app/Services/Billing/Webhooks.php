@@ -94,6 +94,7 @@ class Webhooks
     {
         $remote = [];
         $type = $event['type'];
+        // Snapshot versions vary. Fetch current financial state by ID with the pinned Stripe client.
         $id = $event['data']['object']['id'] ?? null;
         if (!is_string($id) || !preg_match('/^[a-zA-Z0-9_]+$/D', $id)) {
             return false;
