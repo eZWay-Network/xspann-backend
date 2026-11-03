@@ -12,8 +12,8 @@ export default function Export(
   return (
     <DetailScreen {...props}>
       <p className="text-sm text-muted-foreground">
-        Requested range: {props.filters.from} to {props.filters.to} · UTC.
-        Snapshot metrics use generation time.
+        Requested range: {props.filters.from} to {props.filters.to} ·{" "}
+        {props.filters.timezone}. Snapshot metrics use generation time.
       </p>
       <div className="flex gap-3">
         {props.download_url && (

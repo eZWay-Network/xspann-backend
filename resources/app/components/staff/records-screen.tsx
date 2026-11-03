@@ -28,6 +28,8 @@ export type RecordRow = {
   status: string;
   description: string | null;
   created_at: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
   links?: { label: string; url: string }[];
   recovery?: (RecoveryAction & { key: string }) | null;
 };
@@ -208,6 +210,13 @@ export function RecordsScreen({
                         {row.description && (
                           <p className="mt-1 text-xs whitespace-pre-wrap break-words text-muted-foreground">
                             {row.description}
+                          </p>
+                        )}
+                        {(row.starts_at || row.ends_at) && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {row.starts_at && formatDateTime(row.starts_at)}
+                            {row.starts_at && row.ends_at && " – "}
+                            {row.ends_at && formatDateTime(row.ends_at)}
                           </p>
                         )}
                         {row.links?.map((link) => (

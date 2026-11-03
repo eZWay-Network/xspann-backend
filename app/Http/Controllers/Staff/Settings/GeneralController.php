@@ -15,7 +15,7 @@ final class GeneralController
             'page' => ['title' => 'General settings', 'breadcrumbs' => []],
             'settings' => Settings::read(),
             'save_url' => Context::from($request)->can('settings.manage') ? (string) route('staff.settings.general.update') : null,
-            'environment_name' => config('app.env'), 'business_timezone' => config('app.timezone'),
+            'environment_name' => config('app.env'),
         ]);
     }
 

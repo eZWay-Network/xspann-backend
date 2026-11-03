@@ -26,7 +26,7 @@ export function PreferencesForm({
   return (
     <SettingsSection
       title="Workspace preferences"
-      description="Choose how dates and account reminders appear in your staff workspace. Reporting boundaries remain UTC."
+      description="Choose how dates and account reminders appear in your staff workspace. Reports and calendars use the same timezone."
     >
       <SettingsForm
         note="Applies to your staff workspace."

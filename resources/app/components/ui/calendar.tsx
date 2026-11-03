@@ -1,10 +1,16 @@
+import { calendarDate, todayIn } from "@/lib/staff-dates";
+import { useApp } from "@/contexts/app";
 import { DayPicker, type DayPickerProps } from "react-day-picker";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 
 export function Calendar(props: DayPickerProps) {
+  const { clock } = useApp();
   return (
     <DayPicker
+      timeZone="UTC"
+      today={calendarDate(todayIn(clock))}
+      noonSafe
       showOutsideDays
       className="p-3"
       classNames={{

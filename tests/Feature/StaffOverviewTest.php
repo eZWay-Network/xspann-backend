@@ -41,6 +41,32 @@ class StaffOverviewTest extends TestCase
         }
     }
 
+    public function testLocalDayCountsIncludeBothRepeatedHoursAndExcludeTheNextMidnight(): void
+    {
+        $user = $this->makeUser('analyst');
+        $context = new Context($user, (object) ['role' => 'analyst'], (object) []);
+        foreach (['2024-11-03 03:59:59', '2024-11-03 04:00:00', '2024-11-03 05:30:00',
+            '2024-11-03 06:30:00', '2024-11-04 04:59:59', '2024-11-04 05:00:00'] as $i => $timestamp) {
+            $account = $this->makeUser('boundary' . $i);
+            DB::table('users')->where('id', $account->id)->update(['created_at' => $timestamp]);
+        }
+        $range = fn ($day) => Overview::range(['period' => 'custom', 'from' => $day, 'to' => $day], 'America/New_York');
+        $overview = Overview::read($context, $range('2024-11-03'));
+        $this->assertSame(['from' => '2024-11-03T04:00:00Z', 'until' => '2024-11-04T05:00:00Z'], $overview['bounds']);
+        $this->assertSame([['date' => '2024-11-03', 'value' => 4]], $overview['chart']['series']);
+        $this->assertSame(['from' => '2024-03-10 05:00:00', 'until' => '2024-03-11 04:00:00'], Overview::bounds($range('2024-03-10')));
+    }
+
+    public function testRepeatedMidnightStartsAtItsFirstOccurrenceAndSkippedDatesHaveNoInstants(): void
+    {
+        $day = ['period' => 'custom', 'from' => '2021-10-29', 'to' => '2021-10-29'];
+        $this->assertSame(['from' => '2021-10-28 21:00:00', 'until' => '2021-10-29 22:00:00'],
+            Overview::bounds(Overview::range($day, 'Asia/Amman')));
+        $skipped = ['period' => 'custom', 'from' => '2011-12-30', 'to' => '2011-12-30'];
+        $this->assertSame(['from' => '2011-12-30 10:00:00', 'until' => '2011-12-30 10:00:00'],
+            Overview::bounds(Overview::range($skipped, 'Pacific/Apia')));
+    }
+
     public function testCustomRangesAreBoundedAcrossDaylightSavingAndRejectMalformedDates(): void
     {
         $timezone = date_default_timezone_get();

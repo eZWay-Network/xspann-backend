@@ -1,6 +1,6 @@
-import type { AppPageProps } from "@/types";
+import { useApp } from "@/contexts/app";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { router, usePage } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Alert } from "@/components/ui/alert";
 import { ReasonField } from "@/components/staff/review-forms";
-function Snapshot({ value }: { value: unknown }) {
+function Snapshot({
+  value,
+  formatDateTime,
+}: {
+  value: unknown;
+  formatDateTime: (value: string) => string;
+}) {
   if (value === null || value === undefined) return <span>—</span>;
   if (typeof value !== "object")
     return (
@@ -25,7 +31,11 @@ function Snapshot({ value }: { value: unknown }) {
             {key.replaceAll("_", " ")}
           </dt>
           <dd className="mt-1 text-sm">
-            <Snapshot value={item} />
+            {key.endsWith("_at") && typeof item === "string" ? (
+              formatDateTime(item)
+            ) : (
+              <Snapshot value={item} formatDateTime={formatDateTime} />
+            )}
           </dd>
         </div>
       ))}
@@ -39,7 +49,7 @@ export function Disclosure({
   url: string;
   contact?: boolean;
 }) {
-  const { csrf_token, auth } = usePage<AppPageProps>().props;
+  const { csrf_token, auth, formatDateTime } = useApp();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [reason, setReason] = useState("");
@@ -182,6 +192,7 @@ export function Disclosure({
             )}
             {data && (
               <Snapshot
+                formatDateTime={formatDateTime}
                 value={Object.fromEntries(
                   Object.entries(data).filter(([key]) => key !== "media_url"),
                 )}

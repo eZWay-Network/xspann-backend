@@ -312,13 +312,11 @@ function Remedy({
         />
       </Field>
       {form.data.action === "propose_extension" && (
-        <Field label="Proposed start (UTC)">
-          <DateTime
-            label="Proposed start"
-            value={form.data.starts_at}
-            onChange={(value) => form.setData("starts_at", value)}
-          />
-        </Field>
+        <DateTime
+          label="Proposed start"
+          value={form.data.starts_at}
+          onChange={(value) => form.setData("starts_at", value)}
+        />
       )}
       <ReasonField
         value={form.data.reason}

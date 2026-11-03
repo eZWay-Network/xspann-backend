@@ -64,6 +64,7 @@ export interface AppPageProps extends PageProps {
     breadcrumbs: { title: string; url: string | null }[];
   };
   environment: { app: string; billing: "test" | "live" };
+  clock: import("@/lib/staff-dates").StaffClock;
   preferences: { timezone: string; locale: string; attention_enabled: boolean };
   attention: AttentionItem[];
   urls: Record<

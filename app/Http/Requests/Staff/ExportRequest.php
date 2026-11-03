@@ -9,6 +9,7 @@ final class ExportRequest extends StaffRequest
         return [
             'type' => ['required', ['in' => ['dashboard', 'finance', 'operations']]],
             'period' => ['required', ['in' => ['month', '7', '30', '90', 'custom']]],
+            'timezone' => 'sometimes|string|max:80',
             'from' => 'sometimes|nullable|string|max:10',
             'to' => 'sometimes|nullable|string|max:10',
             'idempotency_key' => 'required|string|min:16|max:128',

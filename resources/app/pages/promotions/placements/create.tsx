@@ -1,5 +1,5 @@
-import type { AppPageProps } from "@/types";
-import { useForm, usePage } from "@inertiajs/react";
+import { useApp } from "@/contexts/app";
+import { useForm } from "@inertiajs/react";
 import { PageHeader } from "@/components/page-header";
 import { FormPanel } from "@/components/staff/form-panel";
 import { ReasonField } from "@/components/staff/review-forms";
@@ -18,7 +18,7 @@ export default function CreatePlacement({
   network_accounts: { value: string; label: string }[];
   capacity: number;
 }) {
-  const { page } = usePage<AppPageProps>().props;
+  const { page, formatDateTime, preferences } = useApp();
   const form = useForm({
     artist_id: "",
     month: "",
@@ -27,6 +27,14 @@ export default function CreatePlacement({
     capacity_confirmed: false,
     reason: "",
   });
+  const monthStart = form.data.month
+    ? new Date(form.data.month + "-01T00:00:00Z")
+    : null;
+  const monthEnd = monthStart
+    ? new Date(
+        Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1),
+      )
+    : null;
   const unavailable = capacity <= 0 || network_accounts.length === 0;
   return (
     <div className="max-w-3xl space-y-6">
@@ -60,8 +68,12 @@ export default function CreatePlacement({
           />
         </Field>
         <Field
-          label="Enrollment month (UTC)"
-          description="Choose any day in the intended month."
+          label="Enrollment month"
+          description={
+            monthStart && monthEnd
+              ? `Program window in ${preferences.timezone}: ${formatDateTime(monthStart.toISOString())} to ${formatDateTime(monthEnd.toISOString())}.`
+              : "Choose the month for both placements."
+          }
         >
           <DatePicker
             label="Enrollment month"

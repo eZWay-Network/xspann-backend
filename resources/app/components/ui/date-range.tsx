@@ -1,7 +1,9 @@
+import { useApp } from "@/contexts/app";
+import { calendarDate, todayIn } from "@/lib/staff-dates";
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { CalendarDays } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import type { DateRange as Range } from "react-day-picker";
 import { Calendar } from "./calendar";
 import { Button } from "./button";
@@ -16,31 +18,39 @@ export function DateRange({
   onChange: (from: string, to: string) => void;
   disabled?: boolean;
 }) {
+  const {
+    preferences: { timezone },
+    clock,
+  } = useApp();
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<Range | undefined>({
-    from: parseISO(from),
-    to: parseISO(to),
+    from: calendarDate(from),
+    to: calendarDate(to),
   });
   return (
     <Popover.Root
       open={open}
       onOpenChange={(value) => {
         setOpen(value);
-        if (value) setRange({ from: parseISO(from), to: parseISO(to) });
+        if (value)
+          setRange({
+            from: calendarDate(from),
+            to: calendarDate(to),
+          });
       }}
     >
       <Popover.Trigger
         render={<Button variant="secondary" disabled={disabled} />}
       >
         <CalendarDays />
-        {format(parseISO(from), "MMM d")} –{" "}
-        {format(parseISO(to), "MMM d, yyyy")}
+        {format(calendarDate(from), "MMM d")} –{" "}
+        {format(calendarDate(to), "MMM d, yyyy")}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner sideOffset={8} align="end" className="z-50">
           <Popover.Popup className="rounded-lg border bg-card shadow-popover outline-none">
             <Popover.Title className="px-4 pt-4 text-sm font-semibold">
-              Reporting dates · UTC
+              Reporting dates · {timezone}
             </Popover.Title>
             <Calendar
               mode="range"
@@ -49,7 +59,7 @@ export function DateRange({
               defaultMonth={range?.from}
               max={89}
               disabled={{
-                after: parseISO(new Date().toISOString().slice(0, 10)),
+                after: calendarDate(todayIn(clock)),
               }}
             />
             <div className="flex items-center justify-between gap-4 border-t p-3">

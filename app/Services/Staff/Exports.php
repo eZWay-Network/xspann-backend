@@ -15,22 +15,26 @@ final class Exports
     {
         $context->authorize('exports.create');
         $context->authorize(self::SOURCES[$input['type']]);
-        $range = Overview::range($input);
         $hash = hash('sha256', $input['idempotency_key']);
         [$id, $operation] = Cache::lock('staff.export.' . $context->user->id . '.' . $hash, 30)->block(5,
-            fn () => DB::transaction(function () use ($context, $input, $range, $hash): array {
+            fn () => DB::transaction(function () use ($context, $input, $hash): array {
                 $current = Sessions::requireCurrent($context);
                 $current->authorize(self::SOURCES[$input['type']]);
                 $old = DB::table('staff_exports')->where('actor_id', $current->user->id)->where('idempotency_hash', $hash)->first();
                 if ($old) {
                     $previous = json_decode($old->filters, true, flags: JSON_THROW_ON_ERROR);
                     // Retrying a preset after midnight must keep the original resolved dates.
-                    $sameRange = $previous['period'] === $range['period']
-                        && ($range['period'] !== 'custom' || ($previous['from'] === $range['from'] && $previous['to'] === $range['to']));
+                    $sameRange = $previous['period'] === $input['period']
+                        && ($input['period'] !== 'custom' || ($previous['from'] === ($input['from'] ?? null) && $previous['to'] === ($input['to'] ?? null)));
                     abort_unless($old->type === $input['type'] && $sameRange
                         && $old->environment === config('billing.environment'), 409, 'This export reference has different input.');
                     $id = (int) $old->id;
                 } else {
+                    $range = Overview::range($input, $current->preferences()['timezone']);
+                    if (isset($input['timezone']) && ($range['timezone'] !== $input['timezone']
+                        || $range['from'] !== ($input['from'] ?? null) || $range['to'] !== ($input['to'] ?? null))) {
+                        throw new StaffException('The reporting dates or timezone changed. Refresh the report before exporting.', 409, 'period');
+                    }
                     $id = (int) DB::table('staff_exports')->insert([
                         'actor_id' => $current->user->id, 'membership_version' => $current->membership->version,
                         'type' => $input['type'], 'environment' => config('billing.environment'),
@@ -79,7 +83,8 @@ final class Exports
             }
             $context = new Context(User::find($actorId), $member, (object) []);
             // Presets were resolved when requested; crossing midnight must not move this report.
-            $range = Overview::range([...json_decode($row->filters, true, flags: JSON_THROW_ON_ERROR), 'period' => 'custom']);
+            $saved = json_decode($row->filters, true, flags: JSON_THROW_ON_ERROR);
+            $range = Overview::range([...$saved, 'period' => 'custom'], $saved['timezone'] ?? 'UTC');
             $records = self::rows($context, $row->type, $range);
             abort_if(count($records) > 10000, 422, 'Report exceeds the export limit.');
             $stream = fopen('php://temp', 'w+');

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { usePage } from "@inertiajs/react";
+import { repeatedTimeOffset, wallClock } from "@/lib/staff-dates";
 import { icons } from "@/lib/icons";
 import type { AppPageProps, NavigationGroup, NavigationItem } from "@/types";
 
@@ -65,12 +66,15 @@ export function useApp() {
     group.items.some((item) => item.key === activePage?.key),
   );
   const activeMenuKey = section ? "staff.settings" : activePage?.parentKey;
-  const formatDateTime = (value: string, seconds = false) =>
-    new Intl.DateTimeFormat(props.preferences.locale, {
+  const formatDateTime = (value: string, seconds = false) => {
+    const instant = new Date(value);
+    const displayed = new Intl.DateTimeFormat(props.preferences.locale, {
       dateStyle: "medium",
       timeStyle: seconds ? "medium" : "short",
-      timeZone: props.preferences.timezone,
-    }).format(new Date(value));
+      timeZone: "UTC",
+    }).format(wallClock(instant.getTime(), props.clock));
+    return displayed + repeatedTimeOffset(instant, props.clock);
+  };
   return {
     ...props,
     pathname,

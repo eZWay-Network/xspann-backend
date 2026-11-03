@@ -4,7 +4,7 @@ namespace App\Http\Middlewares;
 
 use App\Http\Resources\Staff\SharedProps;
 use App\Queries\Staff\Attention;
-use App\Services\Staff\Context;
+use App\Services\Staff\{Calendar, Context};
 use Inertia\Facades\Inertia;
 use Spark\Http\Request;
 
@@ -14,15 +14,20 @@ final class StaffInertia
     {
         $context = Context::from($request);
 
+        $timezone = $context->preferences()['timezone'];
         Inertia::share([
             'workspace' => Inertia::always(\App\Services\Staff\Settings::workspace()),
             'auth' => Inertia::always(SharedProps::auth($context)),
             'navigation' => Inertia::always(SharedProps::navigation($context)),
             'preferences' => Inertia::always(SharedProps::preferences($context)),
+            'clock' => Inertia::once(fn () => Calendar::clock($timezone))
+                ->as('staff-clock:' . timezone_version_get() . ':' . $timezone)->until(3600),
             'attention' => Inertia::always(Attention::read($context)),
             'urls' => Inertia::always([
                 'dashboard' => (string) route('staff.dashboard'),
-                'attention' => (string) route('staff.attention'),
+                'clock' => Inertia::once(fn () => Calendar::clock($timezone))
+                ->as('staff-clock:' . timezone_version_get() . ':' . $timezone)->until(3600),
+            'attention' => (string) route('staff.attention'),
                 'profile' => (string) route('staff.profile'),
                 'security' => (string) route('staff.security'),
                 'logout' => (string) route('staff.logout'),

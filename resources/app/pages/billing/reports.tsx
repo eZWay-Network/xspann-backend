@@ -37,7 +37,7 @@ export default function Reports({
       />
       <FinanceSummary report={report} />
       <p className="text-xs text-muted-foreground">
-        Updated {formatDateTime(report.generated_at)} · UTC aggregation ·
+        Updated {formatDateTime(report.generated_at)} ({filters.timezone}) ·
         Earliest retained invoice:{" "}
         {report.data_since ? formatDateTime(report.data_since) : "none"}
       </p>

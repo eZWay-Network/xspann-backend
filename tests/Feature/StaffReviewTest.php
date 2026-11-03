@@ -67,10 +67,13 @@ class StaffReviewTest extends TestCase
     {
         [, $artist] = $this->paidArtist();
         $this->promotionSetup();
-        $this->browserLogin($this->makeUser('operator'), 'promotion_operator');
+        $this->browserLogin($operator = $this->makeUser('operator'), 'promotion_operator');
         $id = DB::table('promotion_placements')->insert(['environment' => 'test', 'user_id' => $artist->user_id, 'artist_id' => $artist->id, 'type' => 'feature', 'destination' => 'sponsored', 'status' => 'scheduled', 'month' => '2026-11', 'starts_at' => '2026-11-01 00:00:00', 'ends_at' => '2026-11-02 00:00:00', 'created_at' => '2026-11-01 00:00:00', 'updated_at' => '2026-11-01 00:00:00']);
         $this->browserPage('/promotions/placements?month=2026-11&day=2026-11-01')->assertOk()->assertJsonPath('props.rows.0.id', (int) $id);
         $this->browserPage('/promotions/placements?day=2026-11-02')->assertOk()->assertJsonPath('props.rows', []);
+        DB::table('staff_preferences')->insert(['user_id' => $operator->id, 'timezone' => 'Asia/Dhaka']);
+        $this->browserPage('/promotions/placements?day=2026-11-02')->assertOk()->assertJsonPath('props.rows.0.id', (int) $id);
+        $this->browserPage('/promotions/placements?day=2026-11-03')->assertOk()->assertJsonPath('props.rows', []);
         $this->browserPage('/promotions/placements?month=2026-13')->assertStatus(422);
         $this->browserPage('/promotions/placements?day=2026-11-31')->assertStatus(422);
     }

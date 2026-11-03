@@ -132,22 +132,25 @@ class StaffFinanceTest extends TestCase
     public function testFinanceRangesKeepCurrenciesSeparateAndExportsFreezeRequestedDates(): void
     {
         $invoice = $this->purchase();
-        $day = (new \DateTimeImmutable('yesterday', new \DateTimeZone('UTC')))->format('Y-m-d');
+        $day = '2024-11-03';
         $until = (new \DateTimeImmutable($day, new \DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d');
-        DB::table('billing_invoices')->where('id', $invoice->id)->update(['issued_at' => $day . ' 00:00:00']);
+        DB::table('billing_invoices')->where('id', $invoice->id)->update(['issued_at' => $day . ' 04:00:00']);
         $copy = (array) $invoice;
         unset($copy['id']);
-        DB::table('billing_invoices')->insert([...$copy, 'invoice_id' => 'in_euro_boundary', 'currency' => 'eur', 'amount_paid' => 1500, 'issued_at' => $day . ' 23:59:59']);
-        DB::table('billing_invoices')->insert([...$copy, 'invoice_id' => 'in_exclusive_boundary', 'issued_at' => $until . ' 00:00:00']);
+        DB::table('billing_invoices')->insert([...$copy, 'invoice_id' => 'in_euro_boundary', 'currency' => 'eur', 'amount_paid' => 1500, 'issued_at' => $until . ' 04:59:59']);
+        DB::table('billing_invoices')->insert([...$copy, 'invoice_id' => 'in_exclusive_boundary', 'issued_at' => $until . ' 05:00:00']);
         DB::table('billing_invoices')->insert([...$copy, 'invoice_id' => 'in_other_environment', 'environment' => 'live', 'issued_at' => $day . ' 12:00:00']);
-        $this->browserLogin($this->makeUser('finance'), 'finance');
+        $this->browserLogin($actor = $this->makeUser('finance'), 'finance');
+        DB::table('staff_preferences')->insert(['user_id' => $actor->id, 'timezone' => 'America/New_York']);
         $this->browserPage('/billing/reports?period=custom&from=' . $day . '&to=' . $day)->assertOk()
             ->assertJsonCount(2, 'props.report.invoices')->assertJsonPath('props.report.invoices.0.currency', 'EUR')
             ->assertJsonPath('props.report.invoices.0.amount_paid', 1500)->assertJsonPath('props.report.invoices.1.amount_paid', 1999)
             ->assertJsonPath('props.report.invoices.1.count', 1);
         $this->browserWrite('/exports', ['type' => 'finance', 'period' => 'month', 'idempotency_key' => 'frozen-finance-dates'])->assertStatus(303);
-        // Represents a preset resolved before midnight, still waiting for its worker.
-        $filters = json_encode(['period' => 'month', 'from' => $day, 'to' => $day, 'timezone' => 'UTC']);
+        $this->browserPage('/exports/1')->assertJsonPath('props.filters.timezone', 'America/New_York');
+        // A preset requested before midnight keeps its range and zone even after the actor changes preferences.
+        DB::table('staff_preferences')->where('user_id', $actor->id)->update(['timezone' => 'Asia/Dhaka']);
+        $filters = json_encode(['period' => 'month', 'from' => $day, 'to' => $day, 'timezone' => 'America/New_York']);
         DB::table('staff_exports')->where('id', 1)->update(['filters' => $filters]);
         $this->browserWrite('/exports', ['type' => 'finance', 'period' => 'month', 'idempotency_key' => 'frozen-finance-dates'])->assertStatus(303);
         $this->assertSame([], session()->getFlash('errors', []));
@@ -156,8 +159,8 @@ class StaffFinanceTest extends TestCase
         $this->assertDatabaseHas('staff_exports', ['id' => 1, 'filters' => $filters, 'status' => 'queued']);
         Operations::run((int) DB::table('staff_operations')->value('id'));
         $csv = $this->get('/exports/1/download')->assertOk()->content();
-        $this->assertTrue(str_contains($csv, '1999,USD,' . $day . 'T00:00:00Z,' . $until . 'T00:00:00Z'), $csv);
-        $this->assertTrue(str_contains($csv, '1500,EUR,' . $day . 'T00:00:00Z'));
+        $this->assertTrue(str_contains($csv, '1999,USD,' . $day . 'T04:00:00Z,' . $until . 'T05:00:00Z'), $csv);
+        $this->assertTrue(str_contains($csv, '1500,EUR,' . $day . 'T04:00:00Z'));
     }
 
     public function testDeletionCancellationSurvivesAnInFlightRecoveryFinishing(): void

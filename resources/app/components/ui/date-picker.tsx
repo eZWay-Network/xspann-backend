@@ -1,7 +1,9 @@
+import { useApp } from "@/contexts/app";
+import { calendarDate, todayIn } from "@/lib/staff-dates";
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { CalendarDays } from "lucide-react";
-import { format, parseISO, isValid } from "date-fns";
+import { format, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,8 +25,9 @@ export function DatePicker({
   disabled?: boolean;
   required?: boolean;
 }) {
+  const { clock } = useApp();
   const [open, setOpen] = useState(false);
-  const date = value ? parseISO(value) : undefined;
+  const date = value ? calendarDate(value) : undefined;
   const selected = date && isValid(date) ? date : undefined;
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -72,7 +75,7 @@ export function DatePicker({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  onChange(format(new Date(), "yyyy-MM-dd"));
+                  onChange(todayIn(clock));
                   setOpen(false);
                 }}
               >

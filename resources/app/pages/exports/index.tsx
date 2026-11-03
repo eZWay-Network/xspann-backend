@@ -17,7 +17,7 @@ export default function Exports(
             <p className="text-xs text-muted-foreground">
               {type === "operations"
                 ? "Current operational queues"
-                : `${type} · this UTC month`}
+                : `${type} · this month`}
             </p>
             <ExportButton url={props.store_url} type={type} />
           </div>

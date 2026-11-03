@@ -85,8 +85,8 @@ function Edit({ url, placement }: { url: string; placement: Placement }) {
   const form = useForm({
     version: placement.version,
     action: "schedule",
-    starts_at: "",
-    ends_at: "",
+    starts_at: placement.starts_at ?? "",
+    ends_at: placement.ends_at ?? "",
     reason: "",
   });
   return (
@@ -122,20 +122,16 @@ function Edit({ url, placement }: { url: string; placement: Placement }) {
       </Field>
       {form.data.action === "schedule" && (
         <>
-          <Field label="Start (UTC)">
-            <DateTime
-              label="Schedule start"
-              value={form.data.starts_at}
-              onChange={(value) => form.setData("starts_at", value)}
-            />
-          </Field>
-          <Field label="End (UTC)">
-            <DateTime
-              label="Schedule end"
-              value={form.data.ends_at}
-              onChange={(value) => form.setData("ends_at", value)}
-            />
-          </Field>
+          <DateTime
+            label="Schedule start"
+            value={form.data.starts_at}
+            onChange={(value) => form.setData("starts_at", value)}
+          />
+          <DateTime
+            label="Schedule end"
+            value={form.data.ends_at}
+            onChange={(value) => form.setData("ends_at", value)}
+          />
         </>
       )}
       <ReasonField
@@ -165,20 +161,16 @@ function Evidence({ url, placement }: { url: string; placement: Placement }) {
         form.post(url, { preserveScroll: true });
       }}
     >
-      <Field label="Actual start (UTC)">
-        <DateTime
-          label="Actual start"
-          value={form.data.actual_starts_at}
-          onChange={(value) => form.setData("actual_starts_at", value)}
-        />
-      </Field>
-      <Field label="Actual end (UTC)">
-        <DateTime
-          label="Actual end"
-          value={form.data.actual_ends_at}
-          onChange={(value) => form.setData("actual_ends_at", value)}
-        />
-      </Field>
+      <DateTime
+        label="Actual start"
+        value={form.data.actual_starts_at}
+        onChange={(value) => form.setData("actual_starts_at", value)}
+      />
+      <DateTime
+        label="Actual end"
+        value={form.data.actual_ends_at}
+        onChange={(value) => form.setData("actual_ends_at", value)}
+      />
       <Field label="Approved HTTPS proof or evidence: archive reference">
         <Input
           value={form.data.proof}

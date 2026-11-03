@@ -11,13 +11,14 @@ final class DashboardController
 {
     public function index(Request $request): Response
     {
-        $range = Overview::range($request->all());
+        $context = Context::from($request);
+        $range = Overview::range($request->all(), $context->preferences()['timezone']);
 
         return Inertia::render('overview', [
-            'overview' => fn() => Overview::read(Context::from($request), $range),
+            'overview' => fn() => Overview::read($context, $range),
             'filters' => $range,
-            'finance' => Context::from($request)->can('analytics.finance.view') ? \App\Queries\Staff\Finance::read(Context::from($request), $range) : null,
-            'export_url' => Context::from($request)->can('exports.create') && Context::from($request)->can('analytics.platform.view') ? (string) route('staff.exports.store') : null,
+            'finance' => $context->can('analytics.finance.view') ? \App\Queries\Staff\Finance::read($context, $range) : null,
+            'export_url' => $context->can('exports.create') && $context->can('analytics.platform.view') ? (string) route('staff.exports.store') : null,
             'filter_url' => (string) route('staff.dashboard'),
             'page' => ['title' => 'Overview', 'breadcrumbs' => []],
         ]);

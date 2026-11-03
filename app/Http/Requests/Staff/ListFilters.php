@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Staff;
 
 use App\Services\Staff\{Context, StaffException};
-use Spark\Facades\DB;
 use Spark\Http\Request;
 use Spark\Paginator\Cursor;
 
@@ -12,8 +11,8 @@ final class ListFilters
     public static function read(Request $request, array $choices = []): array
     {
         $input = $request->all();
-        $size = (int) DB::table('staff_preferences')->where('user_id', Context::from($request)->user->id)->value('page_size');
-        $filters = ['q' => '', 'page' => 1, 'per_page' => in_array($size, [10, 20, 50], true) ? $size : 20,
+        $size = Context::from($request)->preferences()['page_size'];
+        $filters = ['q' => '', 'page' => 1, 'per_page' => $size,
             'sort' => 'newest', ...array_fill_keys(array_keys($choices), '')];
 
         foreach (['q', 'page', 'per_page', 'sort', 'cursor', ...array_keys($choices)] as $key) {

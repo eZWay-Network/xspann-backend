@@ -3,7 +3,6 @@
 namespace App\Http\Resources\Staff;
 
 use App\Services\Staff\{Context, Permissions, Sessions};
-use Spark\Facades\DB;
 
 final class SharedProps
 {
@@ -65,8 +64,6 @@ final class SharedProps
 
     public static function preferences(Context $context): array
     {
-        $row = DB::table('staff_preferences')->where('user_id', $context->user->id)->first();
-
-        return ['timezone' => $row->timezone ?? 'UTC', 'locale' => $row->locale ?? 'en', 'attention_enabled' => (bool) ($row->attention_enabled ?? true)];
+        return array_intersect_key($context->preferences(), array_flip(['timezone', 'locale', 'attention_enabled']));
     }
 }

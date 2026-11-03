@@ -12,7 +12,7 @@ final class ReportController
     public function index(Request $request): Response
     {
         $context = Context::from($request);
-        $range = Overview::range($request->all());
+        $range = Overview::range($request->all(), $context->preferences()['timezone']);
 
         return Inertia::render('billing/reports', [
             'page' => ['title' => 'Finance reports', 'breadcrumbs' => []],

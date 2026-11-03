@@ -1,5 +1,7 @@
 import { router } from "@inertiajs/react";
-import { format, parseISO } from "date-fns";
+import { calendarDate } from "@/lib/staff-dates";
+import { useApp } from "@/contexts/app";
+import { format } from "date-fns";
 import {
   RecordsScreen,
   type RecordsProps,
@@ -12,6 +14,7 @@ import { Button } from "@/components/ui/button";
 export default function Placements(props: RecordsProps) {
   const view = String(props.filters.view || "list");
   const day = String(props.filters.day ?? "");
+  const { preferences } = useApp();
   const visit = (updates: Record<string, string | number>) =>
     router.get(
       props.list_url,
@@ -51,7 +54,8 @@ export default function Placements(props: RecordsProps) {
         <Card className="flex flex-wrap items-start gap-5 p-3">
           <Calendar
             mode="single"
-            selected={day ? parseISO(day) : undefined}
+            defaultMonth={day ? calendarDate(day) : undefined}
+            selected={day ? calendarDate(day) : undefined}
             onSelect={(date) =>
               visit({ day: date ? format(date, "yyyy-MM-dd") : "" })
             }
@@ -59,8 +63,9 @@ export default function Placements(props: RecordsProps) {
           <div className="space-y-3 p-3">
             <h2 className="text-sm font-semibold">Scheduled obligations</h2>
             <p className="max-w-sm text-description">
-              Select a day to show obligations scheduled across that UTC date.
-              Each obligation retains its own delivery evidence.
+              Select a day to show obligations scheduled on that date in{" "}
+              {preferences.timezone}. Each obligation retains its own delivery
+              evidence.
             </p>
             {day && (
               <Button

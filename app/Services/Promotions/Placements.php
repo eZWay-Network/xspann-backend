@@ -86,7 +86,7 @@ class Placements
         Promotion::future($start);
         abort_unless($end > $start, 422, 'End must follow start.');
         if (!$extension) {
-            abort_unless($start >= "$row->month-01 00:00:00" && $end <= $row->due_at, 422, 'Schedule must fit the enrolled UTC month.');
+            abort_unless($start >= "$row->month-01 00:00:00" && $end <= $row->due_at, 422, 'Schedule must fit within the enrollment window.');
         }
         if ($row->type === 'feature') {
             abort_unless(Promotion::seconds($end) - Promotion::seconds($start) === 7 * 86400, 422, 'A feature is exactly seven days.');

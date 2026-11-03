@@ -96,22 +96,18 @@ function Observation({ url }: { url: string }) {
       </Field>
       {!form.data.available && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Incident start (optional, UTC)">
-            <DateTime
-              label="Incident start"
-              required={false}
-              value={form.data.starts_at}
-              onChange={(value) => form.setData("starts_at", value)}
-            />
-          </Field>
-          <Field label="Incident end (optional, UTC)">
-            <DateTime
-              label="Incident end"
-              required={false}
-              value={form.data.ends_at}
-              onChange={(value) => form.setData("ends_at", value)}
-            />
-          </Field>
+          <DateTime
+            label="Incident start"
+            required={false}
+            value={form.data.starts_at}
+            onChange={(value) => form.setData("starts_at", value)}
+          />
+          <DateTime
+            label="Incident end"
+            required={false}
+            value={form.data.ends_at}
+            onChange={(value) => form.setData("ends_at", value)}
+          />
         </div>
       )}
       <ReasonField

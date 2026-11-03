@@ -77,7 +77,7 @@ export function WorkerTable({ workers }: { workers: Worker[] }) {
   );
 }
 export function OperationalHealth({ health }: { health: Health }) {
-  const { page, formatDateTime, auth } = useApp();
+  const { page, formatDateTime, auth, preferences } = useApp();
   return (
     <div className="page-stack">
       <PageHeader
@@ -154,8 +154,8 @@ export function OperationalHealth({ health }: { health: Health }) {
         </Card>
       )}
       <p className="text-xs text-muted-foreground">
-        Observed {formatDateTime(health.generated_at)}. Use the corresponding
-        domain page to recover eligible work.
+        Observed {formatDateTime(health.generated_at)} ({preferences.timezone}).
+        Use the corresponding domain page to recover eligible work.
       </p>
     </div>
   );

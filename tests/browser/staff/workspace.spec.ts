@@ -240,7 +240,7 @@ test("Settings sections fit, retain their owner and stay searchable", async ({
   await page.screenshot({ path: info.outputPath("settings-account.png") });
 });
 
-test("UTC chart periods remain visible and reconcile with daily values", async ({
+test("Local chart periods remain visible and reconcile with daily values", async ({
   page,
   isMobile,
 }, info) => {
@@ -271,7 +271,7 @@ test("UTC chart periods remain visible and reconcile with daily values", async (
       await page.screenshot({ path: info.outputPath("overview-90-days.png") });
     }
     await page.getByRole("button", { name: "View data" }).click();
-    const table = page.getByRole("table", { name: /by UTC day/ });
+    const table = page.getByRole("table", { name: /by day in/ });
     const daily = await table.locator("tbody tr").allTextContents();
     expect(daily).toHaveLength(days);
     const values = await table
@@ -330,7 +330,7 @@ test("cookie login, overview, keyboard search, date controls and responsive shel
   });
   await page.getByRole("button", { name: "View data" }).click();
   await expect(
-    page.getByRole("columnheader", { name: "UTC date" }),
+    page.getByRole("columnheader", { name: "Date", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Show chart" }).click();
   await page.getByRole("button", { name: /–/ }).click();
@@ -645,4 +645,111 @@ test("identity confirmation, authenticator replacement and password change revok
   } finally {
     await other.close();
   }
+});
+
+test.describe("Scheduling in the staff timezone", () => {
+  test.use({ timezoneId: "Asia/Tokyo" });
+
+  test("Today uses the saved timezone and an ambiguous incident round-trips through storage", async ({
+    page,
+  }) => {
+    // Simulate a device whose installed zone database disagrees with the server.
+    await page.addInitScript(() => {
+      Intl.DateTimeFormat = new Proxy(Intl.DateTimeFormat, {
+        construct(target, [locales, options]) {
+          const deviceOptions =
+            options?.timeZone === "America/New_York"
+              ? { ...options, timeZone: "Etc/GMT+5" }
+              : options;
+          return new target(locales, deviceOptions);
+        },
+      });
+    });
+    await login(
+      page,
+      "operations",
+      "/settings/preferences",
+      "Workspace preferences",
+    );
+    const zone = page.getByRole("combobox", { name: "Display timezone" });
+    if (!(await zone.innerText()).includes("America/New York")) {
+      await zone.click();
+      await page
+        .getByRole("option", { name: "America/New York", exact: true })
+        .click();
+      await page.getByRole("button", { name: "Save preferences" }).click();
+      await expect(
+        page.getByText("Your workspace preferences have been saved.", {
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
+    await page.goto("/operations/jobs");
+    await expect(page.getByText(/Observed .+America\/New_York/)).toBeVisible();
+    await page.goto("/promotions/surface");
+    const day = page.getByRole("button", { name: /^Incident start:/ });
+    const clock = page.locator(
+      'input[type=time][aria-label="Incident start time"]',
+    );
+    await page.evaluate((instant) => {
+      Date.now = () => instant;
+    }, Date.parse("2024-03-11T02:00:00Z"));
+    await day.click();
+    await page.getByRole("button", { name: "Today", exact: true }).click();
+    await expect(day).toContainText("Mar 10, 2024");
+    await clock.fill("02:30");
+    await expect(page.getByRole("alert")).toContainText(
+      "This time does not exist",
+    );
+    expect(
+      await clock.evaluate((el: HTMLInputElement) => el.checkValidity()),
+    ).toBe(false);
+
+    await page.evaluate((instant) => {
+      Date.now = () => instant;
+    }, Date.parse("2024-11-04T02:00:00Z"));
+    await day.click();
+    await page.getByRole("button", { name: "Today", exact: true }).click();
+    await expect(day).toContainText("Nov 3, 2024");
+    await clock.fill("01:30");
+    expect(
+      await clock.evaluate((el: HTMLInputElement) => el.checkValidity()),
+    ).toBe(false);
+    await page
+      .getByRole("combobox", { name: "Incident start occurrence" })
+      .click();
+    await expect(
+      page.getByRole("option", { name: "First · -04:00" }),
+    ).toBeVisible();
+    await page.getByRole("option", { name: "Second · -05:00" }).click();
+    expect(
+      await clock.evaluate((el: HTMLInputElement) => el.checkValidity()),
+    ).toBe(true);
+    const reference = "tz-check-" + Date.now();
+    await page
+      .getByLabel("Independent observation or incident reference")
+      .fill(reference);
+    await page
+      .getByLabel("Observation note")
+      .fill("Verified historical incident window");
+    const submission = page.waitForRequest(
+      (req) =>
+        req.method() === "POST" && req.url().includes("/promotions/surface"),
+    );
+    await page
+      .getByRole("button", { name: "Record observation", exact: true })
+      .click();
+    expect((await submission).postDataJSON().starts_at).toBe(
+      "2024-11-03T06:30:00Z",
+    );
+    await expect(
+      page.getByText("Surface observation recorded.", { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    const record = page.getByRole("row").filter({ hasText: reference });
+    await expect(record).toContainText(
+      /Nov 3, 2024(?:,| at) 1:30 AM \(-05:00\)/,
+    );
+    await expectNoOverflow(page);
+  });
 });

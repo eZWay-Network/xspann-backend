@@ -11,6 +11,33 @@ class StaffSettingsExportTest extends TestCase
 {
     use ArtistFixtures, StaffBrowser;
 
+    public function testCustomExportRetriesUseTheOriginalReportingTimezoneAcrossTheDateLine(): void
+    {
+        $this->browserLogin($actor = $this->makeUser('analyst'), 'analyst');
+        $zone = 'Pacific/Kiritimati';
+        $day = (new \DateTimeImmutable('now', new \DateTimeZone($zone)))->format('Y-m-d');
+        DB::table('staff_preferences')->insert(['user_id' => $actor->id, 'timezone' => $zone]);
+        $input = ['type' => 'dashboard', 'period' => 'custom', 'from' => $day, 'to' => $day,
+            'idempotency_key' => 'custom-export-date-line'];
+        $this->browserWrite('/exports', $input)->assertStatus(303);
+        $this->assertSame([], session()->getFlash('errors', []));
+
+        // A date in UTC+14 is always at least one day ahead of UTC-11.
+        DB::table('staff_preferences')->where('user_id', $actor->id)->update(['timezone' => 'Pacific/Pago_Pago']);
+        $this->browserWrite('/exports', $input)->assertStatus(303);
+        $this->assertSame([], session()->getFlash('errors', []));
+        $this->assertDatabaseCount('staff_exports', 1);
+        $this->browserPage('/exports/1')->assertJsonPath('props.filters.timezone', $zone);
+        $this->assertBrowserRejected($this->browserWrite('/exports', [...$input, 'idempotency_key' => 'new-custom-export-date-line']));
+
+        $stale = [...$input, 'from' => '2024-01-01', 'to' => '2024-01-01', 'timezone' => $zone, 'idempotency_key' => 'stale-dashboard-timezone'];
+        $this->assertBrowserRejected($this->browserWrite('/exports', $stale));
+        $this->assertDatabaseCount('staff_exports', 1);
+        $this->browserWrite('/exports', [...$stale, 'timezone' => 'Pacific/Pago_Pago'])->assertStatus(303);
+        $this->assertSame([], session()->getFlash('errors', []));
+        $this->assertDatabaseCount('staff_exports', 2);
+    }
+
     public function testSettingsUseTypedReadersRejectUnknownFieldsAndEnforceVersions(): void
     {
         $this->browserLogin($this->makeUser('admin'));
@@ -161,7 +188,7 @@ class StaffSettingsExportTest extends TestCase
         $this->browserPage('/exports')->assertForbidden();
     }
 
-    public function testOperationalExportsRetainDomainBacklogWhenQueueMetadataIsUnavailable(): void
+    public function testOperationalExportsIncludeFileQueueMetadataAndDomainBacklog(): void
     {
         $owner = $this->makeUser('owner');
         $this->makeVideo($owner, ['status' => 'failed', 'processing_state' => 'failed']);
@@ -172,10 +199,10 @@ class StaffSettingsExportTest extends TestCase
         Operations::run((int) DB::table('staff_operations')->value('id'));
         $id = (int) DB::table('staff_exports')->value('id');
         $csv = $this->get('/exports/' . $id . '/download')->assertOk()->content();
-        $this->assertTrue(str_contains($csv, 'queue_metadata,availability,unavailable'));
+        $this->assertTrue(str_contains($csv, 'queue_metadata,availability,available'));
         $this->assertTrue(str_contains($csv, 'domain_backlog,"Failed videos",1,'));
         $this->assertTrue(str_contains($csv, 'domain_oldest,"Failed videos",'));
-        $this->assertFalse(str_contains($csv, 'queue:default'));
+        $this->assertTrue(str_contains($csv, 'queue:default'));
     }
 
     public function testMembershipEnableRequiresRetainedValidFactorAndLeavesSessionsRevoked(): void

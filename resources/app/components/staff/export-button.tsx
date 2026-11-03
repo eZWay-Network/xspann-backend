@@ -27,6 +27,7 @@ export function ExportButton({
           form.transform((data) => ({
             ...data,
             type,
+            timezone: filters?.timezone,
             period: filters?.period ?? "month",
             from: filters?.from,
             to: filters?.to,

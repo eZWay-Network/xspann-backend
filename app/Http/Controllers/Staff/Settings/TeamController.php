@@ -19,8 +19,7 @@ final class TeamController
                 throw new StaffException('Choose a valid page.', 422, $key);
             }
         }
-        $preferences = DB::table('staff_preferences')->where('user_id', Context::from($request)->user->id)->first();
-        $size = in_array((int) ($preferences->page_size ?? 20), [10, 20, 50], true) ? (int) ($preferences->page_size ?? 20) : 20;
+        $size = Context::from($request)->preferences()['page_size'];
         $members = DB::table('staff_accounts')->join('users', 'users.id', '=', 'staff_accounts.user_id')
             ->select(['staff_accounts.id', 'staff_accounts.user_id', 'staff_accounts.role', 'staff_accounts.enabled', 'staff_accounts.version', 'users.name', 'users.username'])
             ->orderBy('staff_accounts.id')->paginate($size, 'page');

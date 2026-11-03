@@ -6,7 +6,7 @@ use App\Http\Requests\Staff\{ListFilters, PlacementRequest, PlacementEditRequest
 use App\Http\Resources\PromotionResource;
 use App\Http\Resources\Staff\Records;
 use App\Services\Promotions\{Placements, Promotion, Reports};
-use App\Services\Staff\Context;
+use App\Services\Staff\{Calendar, Context};
 use Inertia\Facades\Inertia;
 use Spark\Http\{Request, Response};
 
@@ -19,6 +19,7 @@ final class PlacementController
         if (!empty($filters['month'])) {
             abort_unless(preg_match('/^20\d{2}-(0[1-9]|1[0-2])$/D', $filters['month']) === 1, 422, 'Choose a valid month.');
         }
+        $context = Context::from($request);
         $query = Promotion::table('placements');
         foreach (['type', 'status', 'artist_id', 'month'] as $key) {
             if (!empty($filters[$key])) {
@@ -26,10 +27,14 @@ final class PlacementController
             }
         }
         if (!empty($filters['day'])) {
+            $zone = new \DateTimeZone($context->preferences()['timezone']);
             $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $filters['day'], new \DateTimeZone('UTC'));
             abort_unless($day && $day->format('Y-m-d') === $filters['day'], 422, 'Choose a valid calendar date.');
-            $query->where('starts_at', '<', $day->modify('+1 day')->format('Y-m-d H:i:s'))
-                ->where('ends_at', '>', $day->format('Y-m-d H:i:s'));
+            $from = Calendar::startOfDay($day, $zone);
+            $until = Calendar::startOfDay($day->modify('+1 day'), $zone);
+            abort_unless($from < $until, 422, 'Choose a date that exists in your timezone.');
+            $query->where('starts_at', '<', $until->format('Y-m-d H:i:s'))
+                ->where('ends_at', '>', $from->format('Y-m-d H:i:s'));
         }
         if ($filters['q'] !== '') {
             $query->where('id', ctype_digit($filters['q']) ? (int) $filters['q'] : 0);
@@ -38,10 +43,12 @@ final class PlacementController
         return Inertia::render('promotions/placements/index', Records::listing($query, $filters,
             fn ($row) => Records::row($row, Records::label($row->type) . ' #' . $row->id,
                 (string) route('staff.placements.show', ['placement' => $row->id]), $row->status,
-                'Artist #' . $row->artist_id . ' · ' . ($row->month ?? 'Campaign') . ' · ' . ($row->starts_at ?? 'Unscheduled'), 'UTC'),
+                'Artist #' . $row->artist_id . ' · ' . ($row->month ?? 'Campaign') . ($row->starts_at ? '' : ' · Unscheduled'), 'UTC') + [
+                    'starts_at' => Records::date($row->starts_at, 'UTC'),
+                ],
             'staff.placements.index', array_diff_key($choices, ['type' => true])) + [
                 'page' => ['title' => 'Placements', 'breadcrumbs' => []], 'description' => 'Paired monthly feature and network-post obligations. Scheduling is not delivery.',
-                'create_url' => Context::from($request)->can('placements.manage') ? (string) route('staff.placements.create') : null,
+                'create_url' => $context->can('placements.manage') ? (string) route('staff.placements.create') : null,
             ]);
     }
 

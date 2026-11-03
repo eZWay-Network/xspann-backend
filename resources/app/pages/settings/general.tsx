@@ -70,18 +70,15 @@ export default function General({
   settings,
   save_url,
   environment_name,
-  business_timezone,
 }: {
   settings: Record<string, Setting>;
   save_url: string | null;
   environment_name: string;
-  business_timezone: string;
 }) {
   return (
     <div className="space-y-8">
       <p className="text-sm text-muted-foreground">
-        Environment: {environment_name} · Application timezone:{" "}
-        {business_timezone}. Deployment configuration is read-only.
+        Environment: {environment_name}. Deployment configuration is read-only.
       </p>
       {Object.entries(settings).map(([name, setting]) => (
         <SettingsSection

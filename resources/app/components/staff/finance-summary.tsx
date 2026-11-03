@@ -36,7 +36,7 @@ export function FinanceSummary({ report }: { report: FinanceReport }) {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Paid invoices issued · UTC</CardTitle>
+            <CardTitle>Paid invoices issued</CardTitle>
           </CardHeader>
           {report.invoices.length ? (
             <Table>

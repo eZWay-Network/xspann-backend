@@ -2,20 +2,20 @@
 
 namespace App\Queries\Staff;
 
-use App\Services\Staff\{Context, Sessions, StaffException};
+use App\Services\Staff\{Calendar, Context, Sessions, StaffException};
 use Spark\Database\QueryBuilder;
 use Spark\Facades\DB;
 
 final class Overview
 {
-    public static function range(array $input): array
+    public static function range(array $input, string $timezone = 'UTC'): array
     {
         $period = $input['period'] ?? 'month';
 
         if (!in_array($period, ['month', '7', '30', '90', 'custom'], true)) {
             throw new StaffException('Choose a supported reporting period.', 422, 'period');
         }
-        $today = new \DateTimeImmutable('today', new \DateTimeZone('UTC'));
+        $today = new \DateTimeImmutable('today', new \DateTimeZone($timezone));
         $from = $period === 'month' ? $today->modify('first day of this month')->format('Y-m-d')
             : ($period === 'custom' ? ($input['from'] ?? '') : $today->modify('-' . ((int) $period - 1) . ' days')->format('Y-m-d'));
         $to = $period === 'custom' ? ($input['to'] ?? '') : $today->format('Y-m-d');
@@ -38,7 +38,21 @@ final class Overview
             throw new StaffException('Choose up to 90 days ending today or earlier.', 422, 'from');
         }
 
-        return ['period' => $period, 'from' => $from, 'to' => $to, 'timezone' => 'UTC'];
+        return ['period' => $period, 'from' => $from, 'to' => $to, 'timezone' => $timezone];
+    }
+
+    /** Convert local calendar boundaries independently, including short and long days. */
+    public static function bounds(array $range): array
+    {
+        $zone = new \DateTimeZone($range['timezone']);
+        $utc = new \DateTimeZone('UTC');
+        $from = new \DateTimeImmutable($range['from'], $utc);
+        $until = (new \DateTimeImmutable($range['to'], $utc))->modify('+1 day');
+
+        return [
+            'from' => Calendar::startOfDay($from, $zone)->format('Y-m-d H:i:s'),
+            'until' => Calendar::startOfDay($until, $zone)->format('Y-m-d H:i:s'),
+        ];
     }
 
     private static function eligible(string $table = 'users'): QueryBuilder
@@ -72,7 +86,7 @@ final class Overview
         $seriesQuery = DB::table('users');
         $seriesColumn = 'users.created_at';
         $seriesTitle = 'Retained registrations';
-        $definition = 'Retained accounts created in each UTC day. Deleted accounts are absent; this is not daily active users.';
+        $definition = 'Retained accounts created in each reporting day. Deleted accounts are absent; this is not daily active users.';
         $distribution = [];
         $distributionTitle = 'Artist visibility';
 
@@ -109,7 +123,7 @@ final class Overview
             $seriesQuery = DB::table('reports');
             $seriesColumn = 'reports.created_at';
             $seriesTitle = 'Retained report intake';
-            $definition = 'Reports created in each UTC day, across the retained case history. No evidence is included.';
+            $definition = 'Reports created in each reporting day, across the retained case history. No evidence is included.';
             $distributionTitle = 'Report queue';
             $distribution = [['label' => 'Open', 'value' => $count('reports', 'open')], ['label' => 'Closed', 'value' => DB::table('reports')->where('status', '!=', 'open')->count()]];
         } elseif ($role === 'finance') {
@@ -123,7 +137,7 @@ final class Overview
             $seriesQuery = $billing('invoices')->where('status', 'paid');
             $seriesColumn = 'billing_invoices.issued_at';
             $seriesTitle = 'Paid invoices issued';
-            $definition = 'Number of retained paid invoices issued each UTC day in the ' . $environment . ' environment. Monetary totals remain separated by currency below.';
+            $definition = 'Number of retained paid invoices issued each reporting day in the ' . $environment . ' environment. Monetary totals remain separated by currency below.';
             $distributionTitle = 'Current paid-access mix';
             $distribution = array_map(fn ($row) => ['label' => $row->plan_code, 'value' => (int) $row->accounts],
                 Finance::paidAccess()->selectRaw('c.plan_code, COUNT(*) AS accounts')->groupBy('c.plan_code')->get()->all());
@@ -140,20 +154,20 @@ final class Overview
             $seriesQuery = $boosts();
             $seriesColumn = 'promotion_boosts.created_at';
             $seriesTitle = 'Retained campaign creation';
-            $definition = 'Campaigns created in each UTC day in the ' . $environment . ' environment. This does not measure delivery or impressions.';
+            $definition = 'Campaigns created in each reporting day in the ' . $environment . ' environment. This does not measure delivery or impressions.';
             $distributionTitle = 'Campaign status';
             $distribution = [['label' => 'Active', 'value' => $boosts()->where('status', 'active')->count()], ['label' => 'Interrupted', 'value' => $boosts()->where('status', 'interrupted')->count()]];
         } else {
             $metrics = [
                 self::metric('Failed videos', DB::table('videos')->where('processing_state', 'failed')->count(), 'Processing failures now', 'video'),
                 self::metric('Failed audio', $count('audios', 'failed'), 'Processing failures now', 'artist'),
-                self::metric('Due releases', DB::table('videos')->where('publication_state', 'scheduled')->where('publish_at', '<=', Sessions::timestamp())->count(), 'Scheduled UTC time has passed', 'clock'),
+                self::metric('Due releases', DB::table('videos')->where('publication_state', 'scheduled')->where('publish_at', '<=', Sessions::timestamp())->count(), 'Scheduled time has passed', 'clock'),
                 self::metric('Pending deliveries', $count('announcement_deliveries', 'pending'), 'Pending announcement recipients', 'activity'),
             ];
             $seriesQuery = DB::table('videos');
             $seriesColumn = 'videos.created_at';
             $seriesTitle = 'Retained video intake';
-            $definition = 'Retained video records created each UTC day, including private metadata counts. Worker health is unknown without observations.';
+            $definition = 'Retained video records created each reporting day, including private metadata counts. Worker health is unknown without observations.';
             $distributionTitle = 'Video processing';
             $distribution = [['label' => 'Processing', 'value' => DB::table('videos')->where('processing_state', 'processing')->count()], ['label' => 'Failed', 'value' => DB::table('videos')->where('processing_state', 'failed')->count()]];
         }
@@ -171,12 +185,7 @@ final class Overview
             'chart' => ['title' => $seriesTitle, 'definition' => $definition, 'series' => $series, 'total' => array_sum(array_column($series, 'value')), 'ceiling' => max(1, ...array_column($series, 'value')), 'availability' => 'available', 'comparison' => null, 'unit' => 'records'],
             'distribution' => ['title' => $distributionTitle, 'items' => $distribution, 'total' => $total],
             'generated_at' => Sessions::iso(Sessions::timestamp()),
-            'bounds' => [
-                'from' => $range['from'] . 'T00:00:00Z',
-                'until' => (new \DateTimeImmutable($range['to'], new \DateTimeZone('UTC')))
-                    ->modify('+1 day')
-                    ->format('Y-m-d\T00:00:00\Z'),
-            ],
+            'bounds' => array_map(Sessions::iso(...), self::bounds($range)),
             'data_since' => null,
             'comparison_note' => 'Current counts are snapshots. No historical snapshot comparison is available.',
         ];
@@ -184,19 +193,24 @@ final class Overview
 
     private static function series(QueryBuilder $query, string $column, array $range): array
     {
-        // One aggregate query. Convert each UTC boundary into the app's storage timezone.
+        // One aggregate query. Convert each reporting-day boundary into the app's storage timezone.
         $timezone = new \DateTimeZone((str_starts_with($column, 'promotion_') || str_starts_with($column, 'billing_')) ? 'UTC' : config('app.timezone', 'UTC'));
-        $day = new \DateTimeImmutable($range['from'], new \DateTimeZone('UTC'));
-        $last = new \DateTimeImmutable($range['to'], new \DateTimeZone('UTC'));
+        $zone = new \DateTimeZone($range['timezone']);
+        $utc = new \DateTimeZone('UTC');
+        $day = new \DateTimeImmutable($range['from'], $utc);
+        $last = new \DateTimeImmutable($range['to'], $utc);
+        $start = Calendar::startOfDay($day, $zone);
         $expressions = $bindings = $dates = [];
         while ($day <= $last) {
             $index = count($dates);
-            $end = $day->modify('+1 day');
+            $nextDay = $day->modify('+1 day');
+            $end = Calendar::startOfDay($nextDay, $zone);
             $expressions[] = "COALESCE(SUM(CASE WHEN $column >= :staff_from_$index AND $column < :staff_to_$index THEN 1 ELSE 0 END), 0) AS day_$index";
-            $bindings["staff_from_$index"] = $day->setTimezone($timezone)->format('Y-m-d H:i:s');
+            $bindings["staff_from_$index"] = $start->setTimezone($timezone)->format('Y-m-d H:i:s');
             $bindings["staff_to_$index"] = $end->setTimezone($timezone)->format('Y-m-d H:i:s');
             $dates[] = $day->format('Y-m-d');
-            $day = $end;
+            $day = $nextDay;
+            $start = $end;
         }
         $row = $query->where($column, '>=', reset($bindings))->where($column, '<', end($bindings))
             ->selectRaw(implode(', ', $expressions), $bindings)->first();

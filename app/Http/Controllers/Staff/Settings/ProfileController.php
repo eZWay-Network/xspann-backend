@@ -23,15 +23,10 @@ final class ProfileController
     private function page(Request $request, string $component): Response
     {
         $context = Context::from($request);
-        $preferences = DB::table('staff_preferences')->where('user_id', $context->user->id)->first();
 
         return Inertia::render($component, [
             'profile' => ['name' => $context->user->name, 'username' => $context->user->username],
-            'preferences' => [
-                'timezone' => $preferences->timezone ?? 'UTC', 'locale' => $preferences->locale ?? 'en',
-                'page_size' => (int) ($preferences->page_size ?? 20), 'attention_enabled' => (bool) ($preferences->attention_enabled ?? true),
-                'version' => (int) ($preferences->version ?? 0),
-            ],
+            'preferences' => $context->preferences(),
             'timezones' => \DateTimeZone::listIdentifiers(),
             'profile_url' => (string) route('staff.profile.update'),
             'preferences_url' => (string) route('staff.preferences.update'),

@@ -3,15 +3,35 @@
 namespace App\Services\Staff;
 
 use App\Models\User;
+use Spark\Facades\DB;
 use Spark\Http\Request;
 
 final class Context
 {
+    private ?array $preferences = null;
+
     public function __construct(
         public readonly User $user,
         public readonly object $membership,
         public readonly object $session,
     ) {
+    }
+
+    public function preferences(): array
+    {
+        if ($this->preferences === null) {
+            $row = DB::table('staff_preferences')->where('user_id', $this->user->id)->first();
+            $pageSize = (int) ($row->page_size ?? 20);
+            $this->preferences = [
+                'timezone' => $row->timezone ?? config('app.timezone', 'UTC'),
+                'locale' => $row->locale ?? 'en',
+                'page_size' => in_array($pageSize, [10, 20, 50], true) ? $pageSize : 20,
+                'attention_enabled' => (bool) ($row->attention_enabled ?? true),
+                'version' => (int) ($row->version ?? 0),
+            ];
+        }
+
+        return $this->preferences;
     }
 
     public static function from(Request $request): self

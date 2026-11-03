@@ -11,8 +11,7 @@ final class Finance
     public static function read(Context $context, array $range): array
     {
         $context->authorize('analytics.finance.view');
-        $until = (new \DateTimeImmutable($range['to'], new \DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d H:i:s');
-        $from = $range['from'] . ' 00:00:00';
+        ['from' => $from, 'until' => $until] = Overview::bounds($range);
         // Each invoice is counted once. Joining adjustments here would multiply money.
         $invoices = Billing::table('invoices')->where('status', 'paid')->where('issued_at', '>=', $from)->where('issued_at', '<', $until)
             ->selectRaw('currency, COUNT(*) AS invoice_count, SUM(amount_paid) AS amount_paid')->groupBy('currency')->orderBy('currency')->get();
@@ -34,7 +33,7 @@ final class Finance
             'generated_at' => Sessions::iso(Sessions::timestamp()),
             'data_since' => Billing::date(Billing::table('invoices')->selectRaw('MIN(issued_at) AS earliest')->first()?->earliest),
             'bounds' => ['from' => Billing::date($from), 'until' => Billing::date($until)],
-            'definition' => 'Tax-inclusive paid invoices issued in the selected UTC range, by currency. These are retained invoice totals, not net revenue or settlement-date receipts. Adjustments are shown separately by current state and local creation date.',
+            'definition' => 'Tax-inclusive paid invoices issued in the selected date range, by currency. These are retained invoice totals, not net revenue or settlement-date receipts. Adjustments are shown separately by current state and local creation date.',
             'comparison' => null,
         ];
     }

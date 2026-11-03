@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\Staff\{Operations, Sessions};
-use Spark\Facades\DB;
+use Spark\Facades\{DB, Queue};
 use Tests\Support\{CommunicationFixtures, StaffBrowser};
 use Tests\TestCase;
 
@@ -25,8 +25,76 @@ class StaffOperationsTest extends TestCase
         $this->browserPage('/operations/overview')->assertJsonPath('props.health.workers.0.status', 'unknown')->assertJsonPath('props.health.queue_availability', 'available');
         $this->browserPage('/operations/overview')->assertJsonPath('props.health.domains.0.count', 1);
         $this->app->mergeConfig(['queue' => ['default' => 'file']]);
-        $this->browserPage('/operations/jobs')->assertOk()->assertJsonPath('props.health.queue_availability', 'unavailable')->assertJsonCount(0, 'props.health.queues');
+        $this->browserPage('/operations/jobs')->assertOk()->assertJsonPath('props.health.driver', 'file')
+            ->assertJsonPath('props.health.queue_availability', 'available');
+        $this->app->mergeConfig(['queue' => ['default' => 'missing-connection']]);
+        $this->browserPage('/operations/jobs')->assertJsonPath('props.health.queue_availability', 'unavailable')->assertJsonCount(0, 'props.health.queues');
         $this->browserPage('/billing/invoices')->assertForbidden();
+    }
+
+    public function testQueueHealthDoesNotScheduleWorkWhenItInspectsAnEmptyQueue(): void
+    {
+        $this->app->withQueue(then: require dirname(__DIR__, 2) . '/bootstrap/jobs.php');
+        foreach (['database', 'file'] as $driver) {
+            $this->app->mergeConfig(['queue' => ['default' => $driver]]);
+            $health = \App\Queries\Staff\OperationalHealth::read();
+            $this->assertSame('available', $health['queue_availability']);
+            $this->assertSame(0, array_sum(array_column($health['queues'], 'pending')));
+        }
+        $this->assertDatabaseCount('jobs', 0);
+    }
+
+    public function testQueueHealthReadsNamedQueuesAndScheduledTimesAcrossDrivers(): void
+    {
+        $connections = ['database', 'file'];
+        if ($port = getenv('XPN_TEST_REDIS_PORT')) {
+            $this->app->mergeConfig(['queue' => ['connections' => ['redis' => [
+                'driver' => 'redis', 'host' => '127.0.0.1', 'port' => (int) $port,
+                'prefix' => 'xpn-health-test-' . bin2hex(random_bytes(8)),
+            ]]]]);
+            $connections[] = 'redis';
+        }
+
+        foreach ($connections as $connection) {
+            $this->app->mergeConfig(['queue' => ['default' => $connection]]);
+            try {
+                foreach (['2024-03-10T05:01:00Z', '2024-03-10T00:00:00-05:00'] as $instant) {
+                    Queue::push(job('strlen', ['private fixture'], new \Spark\Carbon($instant)), 'health-check');
+                }
+                DB::table('staff_worker_heartbeats')->where('worker', 'staff')->delete();
+                Queue::push(job(\App\Jobs\StaffMaintenance::class), 'heartbeat-check');
+                Queue::work(once: true, queue: 'heartbeat-check');
+
+                $health = \App\Queries\Staff\OperationalHealth::read();
+                $workers = array_column($health['workers'], null, 'task');
+                $this->assertSame('observed', $workers['staff']['status']);
+                $this->assertSame($connection, $health['driver']);
+                $this->assertSame('available', $health['queue_availability']);
+                $queues = array_column($health['queues'], null, 'queue');
+                $this->assertSame(['queue' => 'health-check', 'pending' => 2, 'processing' => 0, 'failed' => 0,
+                    'oldest_at' => '2024-03-10T05:00:00Z'], $queues['health-check']);
+                $this->assertFalse(str_contains(json_encode($health), 'private fixture'));
+            } finally {
+                Queue::removeQueue('health-check');
+                Queue::removeQueue('heartbeat-check');
+            }
+        }
+    }
+
+    public function testQueueHealthIncludesAllPagesAndCountsReservedJobsAsProcessing(): void
+    {
+        for ($i = 0; $i < 504; $i++) {
+            Queue::push(job('strlen', ['test']), 'bulk');
+        }
+        foreach (['reserved', 'processing', 'failed'] as $status) {
+            $id = DB::table('jobs')->where('queue', 'bulk')->where('status', 'pending')->value('id');
+            DB::table('jobs')->where('id', $id)->update(['status' => $status]);
+        }
+
+        $queues = array_column(\App\Queries\Staff\OperationalHealth::read()['queues'], null, 'queue');
+        $this->assertSame(501, $queues['bulk']['pending']);
+        $this->assertSame(2, $queues['bulk']['processing']);
+        $this->assertSame(1, $queues['bulk']['failed']);
     }
 
     public function testMediaRetryRemainsRunningUntilEncodingHasARecordedOutcome(): void

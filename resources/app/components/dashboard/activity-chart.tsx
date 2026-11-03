@@ -1,6 +1,8 @@
 import { Tooltip } from "@/components/ui/tooltip";
 import { useLayoutEffect, useRef, useState } from "react";
-import { format, parseISO } from "date-fns";
+import { useApp } from "@/contexts/app";
+import { calendarDate } from "@/lib/staff-dates";
+import { format } from "date-fns";
 import {
   Card,
   CardHeader,
@@ -12,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableHead, TableCell } from "@/components/ui/table";
 import type { OverviewData } from "@/types";
 export function ActivityChart({ chart }: { chart: OverviewData["chart"] }) {
+  const {
+    preferences: { timezone },
+  } = useApp();
   const plot = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [table, setTable] = useState(false);
@@ -56,7 +61,7 @@ export function ActivityChart({ chart }: { chart: OverviewData["chart"] }) {
         <div>
           <CardTitle>{chart.title}</CardTitle>
           <CardDescription>
-            {table ? "Daily records" : interval} · UTC
+            {table ? "Daily records" : interval} · {timezone}
           </CardDescription>
         </div>
         <Button
@@ -84,10 +89,12 @@ export function ActivityChart({ chart }: { chart: OverviewData["chart"] }) {
         ) : table ? (
           <div className="max-h-52 overflow-y-auto">
             <Table>
-              <caption className="sr-only">{chart.title} by UTC day</caption>
+              <caption className="sr-only">
+                {chart.title} by day in {timezone}
+              </caption>
               <thead>
                 <tr>
-                  <TableHead>UTC date</TableHead>
+                  <TableHead>Date</TableHead>
                   <TableHead>Records</TableHead>
                 </tr>
               </thead>
@@ -106,7 +113,7 @@ export function ActivityChart({ chart }: { chart: OverviewData["chart"] }) {
             className="focus-ring flex h-48 gap-3 rounded sm:h-52"
             tabIndex={0}
             role="img"
-            aria-label={`${chart.title}. ${interval} in UTC. Total ${chart.total}. Use View data for exact daily counts.`}
+            aria-label={`${chart.title}. ${interval} in ${timezone}. Total ${chart.total}. Use View data for exact daily counts.`}
           >
             <div
               className="flex w-9 shrink-0 flex-col justify-between pb-6 text-[10px] text-muted-foreground"
@@ -133,11 +140,11 @@ export function ActivityChart({ chart }: { chart: OverviewData["chart"] }) {
                   {periods.map((row, index) => (
                     <Tooltip
                       key={row.start}
-                      content={`${row.label} UTC · ${row.value} records`}
+                      content={`${row.label} · ${row.value} records`}
                     >
                       <div
                         tabIndex={-1}
-                        aria-label={`${row.label} UTC · ${row.value} records`}
+                        aria-label={`${row.label} · ${row.value} records`}
                         className={`focus-ring relative min-w-0 flex-1 max-w-10 rounded-t transition-colors hover:bg-chart-1 focus:bg-chart-1 ${index === periods.length - 1 ? "bg-chart-1" : "bg-chart-2"}`}
                         style={{
                           height: `${(row.value / scale) * 100}%`,
@@ -156,7 +163,7 @@ export function ActivityChart({ chart }: { chart: OverviewData["chart"] }) {
                     chart.series[chart.series.length - 1]!.date,
                   ]),
                 ].map((date) => (
-                  <span key={date}>{format(parseISO(date), "MMM d")}</span>
+                  <span key={date}>{format(calendarDate(date), "MMM d")}</span>
                 ))}
               </div>
             </div>

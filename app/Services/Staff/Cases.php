@@ -2,6 +2,7 @@
 
 namespace App\Services\Staff;
 
+use App\Http\Resources\Staff\Records;
 use App\Models\Report;
 use App\Services\{AuditTrail, Communications, Moderation, ReleaseMedia};
 use Spark\Facades\{DB, Hash};
@@ -22,6 +23,13 @@ final class Cases
         AuditTrail::record('moderation.evidence_viewed', ['report_id' => $id], $context->user->id, 'staff');
         $snapshot = json_decode($report->evidence, true, flags: JSON_THROW_ON_ERROR);
         unset($snapshot['storage_path'], $snapshot['creative']['storage_path']);
+
+        // Message and boost snapshots use the UTC domain clock. Media rights use the app storage clock.
+        foreach (['created_at', 'starts_at', 'ends_at', 'rights_confirmed_at'] as $field) {
+            if (isset($snapshot[$field])) {
+                $snapshot[$field] = Records::date($snapshot[$field], in_array($report->target_type, ['message', 'boost'], true) ? 'UTC' : null);
+            }
+        }
 
         return ['snapshot' => $snapshot, 'details' => $report->details,
             'media_url' => in_array($report->target_type, ['video', 'audio', 'boost'], true)
