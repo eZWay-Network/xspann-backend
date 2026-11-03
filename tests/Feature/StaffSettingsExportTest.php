@@ -29,6 +29,41 @@ class StaffSettingsExportTest extends TestCase
         $this->browserWrite('/settings/general', [...$input, 'version' => 1], 'PATCH')->assertForbidden();
     }
 
+    public function testStaffPriceComparisonAndStripeGuideExposeOnlyPublicSetupInformation(): void
+    {
+        $this->app->mergeConfig(['billing' => [
+            'stripe_secret' => 'sk_test_private_fixture',
+            'webhook_secrets' => ['whsec_private_fixture'],
+            'portal_configuration' => 'bpc_private_fixture',
+            'automatic_tax' => true,
+            'plans' => ['artist_starter' => ['price_id' => 'price_private_fixture']],
+        ]]);
+
+        $this->browserLogin($this->makeUser('pricing-admin'));
+        $guide = $this->browserPage('/settings/integrations')->assertOk();
+        $guide->assertJsonPath('props.stripe.endpoint', 'http://localhost/api/v1/webhooks/stripe')
+            ->assertJsonPath('props.stripe.api_version', '2024-06-20')
+            ->assertJsonPath('props.stripe.events.Invoices.0', 'invoice.paid')
+            ->assertJsonPath('props.stripe.automatic_tax', true)
+            ->assertJsonPath('props.stripe.portal_configured', true);
+        $this->assertFalse(str_contains($guide->content(), 'private_fixture'));
+
+        foreach (['/settings/catalog', '/billing/subscriptions'] as $path) {
+            $page = $this->browserPage($path)->assertOk();
+            $plans = $page->json('props.pricing.plans');
+            $this->assertSame(['Artist Starter', 'Artist Pro', 'Artist Spotlight'], array_column($plans, 'name'));
+            $this->assertSame([499, 1999, 9900], array_column($plans, 'monthly_cents'));
+            $this->assertSame([4900, 19900, 99000], array_column($plans, 'yearly_cents'));
+            $this->assertSame([true, true, false], array_column($plans, 'monthly_checkout'));
+            $this->assertTrue($plans[0]['price_configured']);
+            $this->assertFalse(str_contains($page->content(), 'private_fixture'));
+        }
+
+        $offers = $this->getJson('/api/v1/plans')->assertOk()->json('data.offers');
+        $this->assertSame(['free', 'artist_starter', 'artist_pro'], array_column($offers, 'code'));
+        $this->assertSame([null, 'month', 'month'], array_column($offers, 'interval'));
+    }
+
     public function testTaxonomyArchivesNewSelectionsAndPreservesExistingReferences(): void
     {
         $this->browserLogin($this->makeUser('admin'));

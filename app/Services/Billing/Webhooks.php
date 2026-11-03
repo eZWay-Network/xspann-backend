@@ -9,6 +9,14 @@ use function is_string;
 
 class Webhooks
 {
+    public const EVENTS = [
+        'Checkout' => ['checkout.session.completed', 'checkout.session.expired'],
+        'Invoices' => ['invoice.paid', 'invoice.payment_failed', 'invoice.payment_action_required'],
+        'Subscriptions' => ['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'],
+        'Refunds' => ['refund.created', 'refund.updated', 'refund.failed', 'charge.refund.updated', 'charge.refunded'],
+        'Disputes' => ['charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed'],
+    ];
+
     public function __construct(private PaymentProvider $provider, private Reconciliation $reconciliation)
     {
     }
@@ -91,11 +99,11 @@ class Webhooks
             return false;
         }
 
-        $checkoutEvent = in_array($type, ['checkout.session.completed', 'checkout.session.expired'], true);
-        $invoiceEvent = in_array($type, ['invoice.paid', 'invoice.payment_failed', 'invoice.payment_action_required'], true);
-        $subscriptionEvent = in_array($type, ['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'], true);
-        $refundEvent = in_array($type, ['refund.created', 'refund.updated', 'refund.failed', 'charge.refund.updated', 'charge.refunded'], true);
-        $disputeEvent = in_array($type, ['charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed'], true);
+        $checkoutEvent = in_array($type, self::EVENTS['Checkout'], true);
+        $invoiceEvent = in_array($type, self::EVENTS['Invoices'], true);
+        $subscriptionEvent = in_array($type, self::EVENTS['Subscriptions'], true);
+        $refundEvent = in_array($type, self::EVENTS['Refunds'], true);
+        $disputeEvent = in_array($type, self::EVENTS['Disputes'], true);
         if (!$checkoutEvent && !$invoiceEvent && !$subscriptionEvent && !$refundEvent && !$disputeEvent) {
             return false;
         }

@@ -10,7 +10,9 @@ final class ConfigurationController
 {
     public function catalog(): Response
     {
-        return $this->page('catalog', 'Catalog & capabilities', Configuration::catalog());
+        return $this->page('catalog', 'Catalog & capabilities', Configuration::catalog(), [
+            'pricing' => Configuration::planPricing(),
+        ]);
     }
 
     public function policies(): Response
@@ -20,7 +22,9 @@ final class ConfigurationController
 
     public function integrations(): Response
     {
-        return $this->page('integrations', 'Integrations', Configuration::integrations());
+        return $this->page('integrations', 'Integrations', Configuration::integrations(), [
+            'stripe' => Configuration::stripeGuide(),
+        ]);
     }
 
     public function roles(): Response
@@ -34,8 +38,8 @@ final class ConfigurationController
         return $this->page('roles', 'Role permissions', $sections);
     }
 
-    private function page(string $name, string $title, array $sections): Response
+    private function page(string $name, string $title, array $sections, array $props = []): Response
     {
-        return Inertia::render('settings/' . $name, ['page' => ['title' => $title, 'breadcrumbs' => []], 'sections' => $sections]);
+        return Inertia::render('settings/' . $name, ['page' => ['title' => $title, 'breadcrumbs' => []], 'sections' => $sections, ...$props]);
     }
 }

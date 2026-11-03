@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Staff\Billing;
 
-use App\Queries\Staff\BillingRecords;
+use App\Queries\Staff\{BillingRecords, Configuration};
 use App\Services\Staff\Context;
 use Inertia\Facades\Inertia;
 use Spark\Http\{Request, Response};
@@ -11,7 +11,9 @@ final class SubscriptionController
 {
     public function index(Request $request): Response
     {
-        return Inertia::render('billing/subscriptions/index', BillingRecords::listing($request, 'subscriptions'));
+        return Inertia::render('billing/subscriptions/index', BillingRecords::listing($request, 'subscriptions') + [
+            'pricing' => Configuration::planPricing(),
+        ]);
     }
 
     public function show(Request $request, int $record): Response

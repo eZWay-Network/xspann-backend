@@ -3,21 +3,45 @@
 namespace App\Queries\Staff;
 
 use App\Http\Resources\Staff\Records;
+use App\Services\Billing\Webhooks;
 
 /** Explicit, non-secret deployment projections. Never serialize a configuration subtree. */
 final class Configuration
 {
+    public static function planPricing(): array
+    {
+        $plans = [];
+
+        foreach (config('billing.planned_prices') as $code => $prices) {
+            $offer = config("billing.plans.$code");
+            $plans[] = [
+                'name' => $offer['name'] ?? $prices['name'],
+                'monthly_cents' => $offer['amount'] ?? $prices['monthly'],
+                'yearly_cents' => $prices['yearly'],
+                'monthly_checkout' => $offer !== null,
+                'price_configured' => !empty($offer['price_id']),
+            ];
+        }
+
+        return [
+            'environment' => config('billing.environment'),
+            'live_sales_enabled' => (bool) config('billing.live_sales_enabled'),
+            'plans' => $plans,
+        ];
+    }
+
     public static function catalog(): array
     {
         $sections = [];
         foreach (['free', 'artist_starter', 'artist_pro'] as $plan) {
-            $fields = [['label' => 'Plan', 'value' => $plan], ['label' => 'Billing interval', 'value' => $plan === 'free' ? 'Free' : 'Monthly'],
-                ['label' => 'Price (USD minor units)', 'value' => (int) config("billing.plans.$plan.amount", 0)],
-                ['label' => 'Provider price configured', 'value' => (bool) config("billing.plans.$plan.price_id")]];
+            $fields = [];
             foreach (['links', 'playlists', 'featured_release', 'enhanced_profile', 'enhanced_directory_card', 'analytics_30_days', 'release_scheduling', 'fan_announcements', 'announcement_recipients', 'monthly_boost_credit_cents'] as $key) {
-                $fields[] = ['label' => Records::label($key), 'value' => config("artists.plans.$plan.$key")];
+                $value = config("artists.plans.$plan.$key");
+                $fields[] = $key === 'monthly_boost_credit_cents'
+                    ? ['label' => 'Monthly boost credit', 'value' => '$' . number_format($value / 100, 2)]
+                    : ['label' => Records::label($key), 'value' => $value];
             }
-            $sections[] = ['title' => Records::label($plan), 'fields' => $fields];
+            $sections[] = ['title' => ($plan === 'free' ? 'Free' : config("billing.plans.$plan.name")) . ' capabilities', 'fields' => $fields];
         }
         $sections[] = ['title' => 'Release policy', 'fields' => [
             ['label' => 'Live sales enabled', 'value' => (bool) config('billing.live_sales_enabled')],
@@ -46,6 +70,19 @@ final class Configuration
         $sections[] = ['title' => 'Retention & rights', 'fields' => $fields];
 
         return $sections;
+    }
+
+    public static function stripeGuide(): array
+    {
+        return [
+            'endpoint' => rtrim(config('app.url'), '/') . '/api/v1/webhooks/stripe',
+            'environment' => config('billing.environment'),
+            'api_version' => config('billing.stripe_version'),
+            'events' => Webhooks::EVENTS,
+            'portal_configured' => (bool) config('billing.portal_configuration'),
+            'automatic_tax' => (bool) config('billing.automatic_tax'),
+            'signing_secret_configured' => (bool) config('billing.webhook_secrets'),
+        ];
     }
 
     public static function integrations(): array

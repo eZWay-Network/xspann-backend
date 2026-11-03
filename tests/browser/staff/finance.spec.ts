@@ -79,3 +79,36 @@ test("operations and controlled settings fit the shared responsive interface", a
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test("Stripe guide and plan prices explain current checkout support", async ({ page }, info) => {
+  await login(page, "admin", "/settings/integrations");
+  await expect(page.getByRole("heading", { name: "Stripe integration guide" })).toBeVisible();
+  const webhook = page.locator("details").filter({ has: page.getByText("Webhook setup", { exact: true }) });
+  await expect(webhook.getByText("invoice.paid", { exact: true })).toBeVisible();
+  await expect(webhook.getByText("2024-06-20 (required)", { exact: true })).toBeVisible();
+  await expect(webhook.locator("li code")).toHaveCount(16);
+  await page.screenshot({ path: info.outputPath("stripe-webhook-guide.png") });
+
+  await page.locator("summary").filter({ hasText: "Customer portal" }).click();
+  await expect(page.getByText("STRIPE_PORTAL_CONFIGURATION", { exact: true })).toBeVisible();
+  await page.locator("summary").filter({ hasText: "Automatic tax" }).click();
+  await expect(page.getByText("STRIPE_AUTOMATIC_TAX", { exact: true })).toBeVisible();
+  await page.locator("summary").filter({ hasText: "Account, prices and return URLs" }).click();
+  await page.getByRole("link", { name: "plan catalog", exact: true }).click();
+
+  for (const path of ["/settings/catalog", "/billing/subscriptions"]) {
+    if (new URL(page.url()).pathname !== path) await page.goto(path);
+    const table = page.getByRole("table", { name: /artist plans, monthly and yearly prices/i });
+    for (const [name, monthly, yearly] of [["Artist Starter", "$4.99", "$49"], ["Artist Pro", "$19.99", "$199"], ["Artist Spotlight", "$99", "$990"]]) {
+      const row = table.getByRole("row").filter({ has: page.getByRole("rowheader", { name, exact: true }) });
+      await expect(row.getByRole("cell").nth(0)).toContainText(monthly);
+      await expect(row.getByRole("cell").nth(1)).toContainText(yearly);
+      await expect(row.getByRole("cell").nth(1)).toContainText("Planned");
+    }
+    expect(await page.evaluate(() => {
+      const main = document.querySelector("main")!;
+      return document.documentElement.scrollWidth <= innerWidth && main.scrollWidth <= main.clientWidth + 1;
+    })).toBe(true);
+  }
+  await page.screenshot({ path: info.outputPath("subscription-prices.png") });
+});

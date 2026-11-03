@@ -22,7 +22,8 @@ Route::get('/auth/email/verify/{user}/{hash}', [AuthController::class, 'verifyEm
 
 Route::get('/up', fn() => json(['status' => 'ok']));
 
-Route::get('/api/docs', DocsController::class);
+Route::get('/api/docs', DocsController::class)
+    ->middleware(['staff.web']);
 
 // The application's browser surface is the staff workspace.
 Route::get('/login', [LoginController::class, 'index'])
@@ -68,7 +69,7 @@ Route::get('/attention', [DashboardController::class, 'attention'])
     ->middleware(['staff.web', 'staff.mfa', 'staff.can:dashboard.view', 'staff.inertia'])
     ->name('staff.attention');
 
-Route::get('/settings', fn () => redirect((string) route('staff.profile')))
+Route::get('/settings', fn() => redirect((string) route('staff.profile')))
     ->middleware(['staff.web', 'staff.mfa', 'staff.inertia'])
     ->name('staff.settings');
 
