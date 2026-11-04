@@ -7,8 +7,8 @@ return [
     'documents' => [
         'terms' => ['version' => '2026-10-29', 'url' => "$website/terms", 'required' => true],
         'privacy' => ['version' => '2026-10-29', 'url' => "$website/privacy", 'required' => true],
-        // 'community' => ['version' => '2026-10-29', 'url' => "$website/community", 'required' => true],
-        // 'marketing' => ['version' => '2026-10-29', 'url' => "$website/marketing-preferences", 'required' => false],
+        'community' => ['version' => '2026-10-29', 'url' => "$website/community", 'required' => true],
+        'marketing' => ['version' => '2026-10-29', 'url' => "$website/marketing-preferences", 'required' => false],
     ],
     'rights_version' => '2026-10-29',
     'minimum_age' => 18,
