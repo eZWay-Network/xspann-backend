@@ -7,5 +7,6 @@
 vendor
 docs/*
 node_modules
+composer.json
 playwright-report/
 test-results/
