@@ -325,7 +325,7 @@ class StaffFoundationTest extends TestCase
         $this->page('/missing-page')->assertStatus(404)->assertHeader('Cache-Control', 'no-store, private, max-age=0');
         $health = $this->get('/up')->assertOk()->assertJsonPath('status', 'ok');
         $this->assertFalse(str_contains($health->content(), '"component"'));
-        $this->get('/api/docs')->assertOk();
+        $this->page('/api/docs')->assertStatus(409)->assertHeader('X-Inertia-Location', 'http://localhost/login');
         $this->postJson('/api/v1/auth/login', [])->assertStatus(422);
         $this->getJson('/api/v1/does-not-exist')->assertStatus(404);
     }

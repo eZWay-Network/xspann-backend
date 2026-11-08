@@ -182,6 +182,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/token/refresh', [AuthController::class, 'refreshToken']);
 
         Route::get('/feed/following', [FeedController::class, 'following']);
+        Route::post('/me/uploads/resolve', [UploadController::class, 'resolve'])->middleware('throttle:60');
         Route::post('/uploads/avatar', [UploadController::class, 'avatar'])->middleware('throttle:20');
         Route::post('/uploads/videos/signed-url', [UploadController::class, 'video'])->middleware('throttle:20');
         Route::post('/uploads/videos/local', [UploadController::class, 'local'])->middleware('throttle:20');

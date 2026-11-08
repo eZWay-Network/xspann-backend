@@ -8,6 +8,8 @@ use Tests\Support\HttpServer;
 
 class UploadApiTest extends TestCase
 {
+    use \Tests\Support\ArtistFixtures;
+
     private ?HttpServer $server = null;
     private string $baseUrl;
     private string $bearer = '';
@@ -69,11 +71,12 @@ class UploadApiTest extends TestCase
             ->assertStatus($expected)->json();
     }
 
-    private function loginHttp(): void
+    private function loginHttp(): \App\Models\User
     {
-        $this->makeUser();
+        $user = $this->makeUser();
         $this->startServer();
         $this->bearer = $this->http('/auth/login', ['email' => 'alice@example.com', 'password' => 'password123'])['data']['token'];
+        return $user;
     }
 
     private function videoFile(): string
@@ -376,10 +379,11 @@ class UploadApiTest extends TestCase
 
     public function testPrivateDraftMultipartStaysOffPublicStorageAndRequiresOwnerPreview(): void
     {
-        $this->loginHttp();
+        $this->makeArtist($this->loginHttp());
         $file = $this->videoFile();
         $upload = $this->http('/uploads/videos/local', [
-            'publication_intent' => 'draft', 'file' => new \CURLFile($file, 'video/mp4', 'draft.mp4'),
+            'publication_intent' => 'draft',
+            'file' => new \CURLFile($file, 'video/mp4', 'draft.mp4'),
         ], 201, true)['data'];
         $this->assertTrue(str_starts_with($upload['storage_path'], 'local:videos/1/'));
         $this->assertSame(null, $upload['video_url']);
@@ -410,10 +414,12 @@ class UploadApiTest extends TestCase
         try {
             $this->useS3(['endpoint' => $cloud->url, 'use_path_style_endpoint' => true, 'temporary_urls' => true]);
             $this->app->mergeConfig(['storage' => ['video_upload_mode' => 'signed', 'release_disk' => 's3']]);
-            $this->loginHttp();
+            $this->makeArtist($this->loginHttp());
             $file = $this->videoFile();
             $signed = $this->http('/uploads/videos/signed-url', [
-                'filename' => 'draft.mp4', 'content_type' => 'video/mp4', 'publication_intent' => 'draft',
+                'filename' => 'draft.mp4',
+                'content_type' => 'video/mp4',
+                'publication_intent' => 'draft',
             ])['data'];
             $this->assertSame('signed_url', $signed['upload_method']);
             $this->assertSame(null, $signed['video_url']);

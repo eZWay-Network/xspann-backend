@@ -18,6 +18,7 @@ class Video extends Model
     public const STATUS_DELETED = "deleted";
 
     protected array $fillable = [
+        'creation_id',
         'processing_state',
         'publication_state',
         'publication_intent',

@@ -41,7 +41,8 @@ class AudioController extends Controller
                 if ($source && $source->reuse_content !== $input->boolean('reuse_allowed')) {
                     abort_if($source->publication_state === 'scheduled', 409, 'Cancel the schedule before editing a release.');
                     \App\Services\Releases::save($source, [
-                        'reuse_content' => $input->boolean('reuse_allowed'), 'version' => $source->version + 1,
+                        'reuse_content' => $input->boolean('reuse_allowed'),
+                        'version' => $source->version + 1,
                     ]);
                 }
             }
@@ -86,6 +87,10 @@ class AudioController extends Controller
         \App\Services\ContentRights::apply($request->validated());
 
         $audio = PendingUploads::attach($request->user('id'), function () use ($request): Audio {
+            $creation = $request->validated('creation_id');
+            if ($creation !== null) {
+                abort_if(Audio::where('user_id', $request->user('id'))->where('creation_id', $creation)->exists(), 409, 'This creation attempt already exists.');
+            }
             StorageService::validateOwner($request->validated('storage_path'), $request->user('id'), 'storage_path', 'sounds', true);
 
             return Audio::create([

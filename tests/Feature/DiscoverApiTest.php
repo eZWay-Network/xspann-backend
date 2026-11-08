@@ -11,6 +11,8 @@ use Tests\TestCase;
 
 class DiscoverApiTest extends TestCase
 {
+    use \Tests\Support\StaffBrowser;
+
     public function testGuestsOnlyDiscoverPublicPublishedVideosFromActiveAccounts(): void
     {
         $creator = $this->makeUser();
@@ -231,6 +233,7 @@ class DiscoverApiTest extends TestCase
 
     public function testDiscoverDocumentationExportsQueryParametersAndBothResourceTypes(): void
     {
+        $this->browserLogin($this->makeUser('referenceviewer'));
         $html = $this->get('/api/docs')->assertOk()->content();
         preg_match('/<script id="reference-data" type="application\/json">(.*?)<\/script>/s', $html, $matches);
         $reference = json_decode($matches[1], true, flags: JSON_THROW_ON_ERROR);

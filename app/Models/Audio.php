@@ -14,6 +14,7 @@ class Audio extends Model
     protected string $table = 'audios';
 
     protected array $fillable = [
+        'creation_id',
         'user_id',
         'source_video_id',
         'title',

@@ -26,12 +26,17 @@ return new class {
 
     public function up(): void
     {
+        $password = env('XPN_FIXTURE_PASSWORD');
+        if (!is_string($password) || strlen($password) < 8) {
+            throw new RuntimeException('Set a dedicated XPN_FIXTURE_PASSWORD of at least 8 characters on the QA deployment before seeding.');
+        }
+
         $media = $this->media();
         if (!$media['videos']) {
             Prompt::warning('No eligible clips under videos/ on the configured disk. Skipping video posts and playlists.');
         }
 
-        DB::transaction(function () use ($media): void {
+        DB::transaction(function () use ($media, $password): void {
             $users = [];
             $artists = [];
             $required = array_filter(config('policies.documents'), fn($policy) => $policy['required']);
@@ -42,7 +47,7 @@ return new class {
 
             foreach ($this->accounts() as $index => $email) {
                 $profile = self::ARTISTS[$index] ?? null;
-                $user = $this->user($index, $email, $profile[4] ?? null, $portraits);
+                $user = $this->user($index, $email, $password, $profile[4] ?? null, $portraits);
                 PolicyEnrollment::accept($user, $policies, 'seed');
                 $users[] = $user->id;
 
@@ -91,7 +96,7 @@ return new class {
         return $emails;
     }
 
-    private function user(int $index, string $email, ?string $bio, array $portraits): User
+    private function user(int $index, string $email, string $password, ?string $bio, array $portraits): User
     {
         $first = ['Amara', 'Ben', 'Camila', 'Dev', 'Eli', 'Farah', 'Idris', 'Jules', 'Kira', 'Leo', 'Mai', 'Nora', 'Rafi', 'Tessa', 'Yuna', 'Zane'];
         $last = ['Ali', 'Bell', 'Costa', 'Das', 'Ellis', 'Grant', 'Hart', 'Ito', 'Kim', 'Lane', 'Moss', 'Park', 'Reyes', 'Silva', 'Tran', 'West'];
@@ -110,7 +115,7 @@ return new class {
             'name' => $name,
             'username' => strtolower(str_replace(' ', '_', $name)) . ($index + 1),
             'email' => $email,
-            'password' => 'test@123456',
+            'password' => $password,
             'bio' => $bio ?? $bios[array_rand($bios)],
             'avatar' => $portraits ? $portraits[array_rand($portraits)] : null,
             'date_of_birth' => sprintf('%d-%02d-%02d', random_int(1978, 2001), random_int(1, 12), random_int(1, 28)),

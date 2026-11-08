@@ -18,8 +18,16 @@ trait ReleaseUpgrades
         $this->event('invoice.paid', $this->stripe->complete($attempt->session_id));
         $before = query('billing_invoices')->first();
         $secret = \Spark\Facades\Hash::encrypt('FORWARD-MFA-FIXTURE');
-        query('staff_accounts')->insert(['user_id' => $owner->id, 'role' => 'finance', 'enabled' => true,
-            'mfa_secret' => $secret, 'last_counter' => 123, 'version' => 7, 'created_at' => now(), 'updated_at' => now()]);
+        query('staff_accounts')->insert([
+            'user_id' => $owner->id,
+            'role' => 'finance',
+            'enabled' => true,
+            'mfa_secret' => $secret,
+            'last_counter' => 123,
+            'version' => 7,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
         $migration = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_01_160000_staff_finance_operations.php';
         $migration->down();
         $migration->up();
@@ -40,10 +48,16 @@ trait ReleaseUpgrades
         $this->assertSame(1, $report['paid_access'][0]['accounts']);
         $this->assertSame('available', \App\Queries\Staff\OperationalHealth::read()['queue_availability']);
         $export = (int) query('staff_exports')->insert([
-            'actor_id' => $owner->id, 'membership_version' => 7, 'type' => 'finance', 'environment' => 'test',
-            'filters' => json_encode($range), 'idempotency_hash' => hash('sha256', 'upgrade-export'),
-            'status' => 'queued', 'expires_at' => \App\Services\Staff\Sessions::timestamp(86400),
-            'created_at' => now(), 'updated_at' => now(),
+            'actor_id' => $owner->id,
+            'membership_version' => 7,
+            'type' => 'finance',
+            'environment' => 'test',
+            'filters' => json_encode($range),
+            'idempotency_hash' => hash('sha256', 'upgrade-export'),
+            'status' => 'queued',
+            'expires_at' => \App\Services\Staff\Sessions::timestamp(86400),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
         $this->assertSame(['completed', 'export_ready'], \App\Services\Staff\Exports::generate($export, $owner->id, $member));
         \App\Services\Staff\Exports::deleting($owner->id);
@@ -62,8 +76,11 @@ trait ReleaseUpgrades
         $migration->down();
         foreach (['legacy' => null, 'browser' => 1] as $name => $version) {
             query('staff_sessions')->insert([
-                'user_id' => $reporter->id, 'session_hash' => hash('sha256', 'cutover-' . $name),
-                'membership_version' => $version, 'expires_at' => now()->addMinutes(15), 'created_at' => now(),
+                'user_id' => $reporter->id,
+                'session_hash' => hash('sha256', 'cutover-' . $name),
+                'membership_version' => $version,
+                'expires_at' => now()->addMinutes(15),
+                'created_at' => now(),
             ]);
         }
         $migration->up();
@@ -73,7 +90,7 @@ trait ReleaseUpgrades
         $this->assertDatabaseCount('staff_sessions', 1);
         $this->assertDatabaseHas('staff_sessions', ['session_hash' => hash('sha256', 'cutover-browser'), 'membership_version' => 1]);
         query('reports')->where('id', $report->id)->update(['source' => 'staff', 'initiator_id' => $reporter->id]);
-        $this->assertThrows(\PDOException::class, fn () => query('reports')->where('id', $report->id)->update(['initiator_id' => 999999]));
+        $this->assertThrows(\PDOException::class, fn() => query('reports')->where('id', $report->id)->update(['initiator_id' => 999999]));
         $migration->down();
         $migration->up();
         $this->assertSame($before->evidence, query('reports')->where('id', $report->id)->value('evidence'));
@@ -206,14 +223,20 @@ trait ReleaseUpgrades
         query('notifications')->insert(['user_id' => $fan->id, 'type' => 'legacy', 'data' => '{"message":"Preserved notification"}']);
 
         // Apply each release step with the real migration ledger, retaining data from earlier steps.
-        $stepTwo = $paths[6];
-        copy($stepTwo, $directory . '/' . basename($stepTwo));
+        $names = array_map('basename', $paths);
+        $artistsStep = array_search('migration_2026_10_31_120000_artists_and_playlists.php', $names, true);
+        $releaseStep = array_search('migration_2026_10_31_150000_billing_and_releases.php', $names, true);
+        $this->assertTrue(is_int($artistsStep) && is_int($releaseStep) && $artistsStep < $releaseStep);
+        foreach (array_slice($paths, 6, $artistsStep - 5) as $path) {
+            copy($path, $directory . '/' . basename($path));
+        }
         $runner->up(['force' => true]);
         $artist = $this->makeArtist($owner);
         $playlist = query('artist_playlists')->insert(['artist_id' => $artist->id, 'title' => 'Preserved collection']);
         query('artist_playlist_items')->insert(['playlist_id' => $playlist, 'video_id' => $video, 'position' => 0]);
-        $stepThree = $paths[7];
-        copy($stepThree, $directory . '/' . basename($stepThree));
+        foreach (array_slice($paths, $artistsStep + 1, $releaseStep - $artistsStep) as $path) {
+            copy($path, $directory . '/' . basename($path));
+        }
         $runner->up(['force' => true]);
         $this->assertDatabaseHas('videos', ['id' => $video, 'processing_state' => 'ready', 'publication_state' => 'published', 'publication_intent' => 'immediate', 'publish_at' => null]);
 
@@ -223,7 +246,7 @@ trait ReleaseUpgrades
         $attempt = $this->checkout(key: 'baseline-upgrade-checkout');
         $invoice = $this->stripe->complete($attempt->session_id);
         // Step 3 code now emits outbox hints, so reconcile after Step 4's forward schema arrives.
-        foreach (array_slice($paths, 8) as $path) {
+        foreach (array_slice($paths, $releaseStep + 1) as $path) {
             copy($path, $directory . '/' . basename($path));
             $runner->up(['force' => true]);
         }

@@ -7,6 +7,8 @@ use Tests\TestCase;
 
 class ApiContractTest extends TestCase
 {
+    use \Tests\Support\StaffBrowser;
+
     private const ROUTES = [
         'GET /api/v1/artists/featured',
         'GET /api/v1/promotion-offers',
@@ -134,6 +136,7 @@ class ApiContractTest extends TestCase
         'POST /api/v1/auth/email/verification-notification',
         'POST /api/v1/auth/token/refresh',
         'GET /api/v1/feed/following',
+        'POST /api/v1/me/uploads/resolve',
         'POST /api/v1/uploads/avatar',
         'POST /api/v1/uploads/videos/signed-url',
         'POST /api/v1/uploads/videos/local',
@@ -169,6 +172,7 @@ class ApiContractTest extends TestCase
 
     public function testEveryEndpointExistsAndDocsRender(): void
     {
+        $this->browserLogin($this->makeUser('referenceviewer'));
         $expected = self::ROUTES;
         $actual = [];
         foreach (app(Router::class)->getRoutes() as $route) {
@@ -184,6 +188,7 @@ class ApiContractTest extends TestCase
 
     public function testBladeDocsContainEveryRouteAndEscapeConfiguration(): void
     {
+        $this->browserLogin($this->makeUser('referenceviewer'));
         $this->app->mergeConfig(['app' => ['url' => 'https://example.com/<script>alert(1)</script>']]);
         $response = $this->get('/api/docs')->assertOk();
         $html = $response->content();
@@ -201,6 +206,7 @@ class ApiContractTest extends TestCase
 
     public function testDocumentationContractsCoverAllRegisteredOperations(): void
     {
+        $this->browserLogin($this->makeUser('referenceviewer'));
         $html = $this->get('/api/docs')->assertOk()->content();
         preg_match('/<script id="reference-data" type="application\/json">(.*?)<\/script>/s', $html, $matches);
         $docs = json_decode($matches[1], true, flags: JSON_THROW_ON_ERROR);
@@ -225,7 +231,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(157, count($entries));
+        $this->assertSame(158, count($entries));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
         $reportParameters = array_column($entries['reportcontroller-store']['parameters'], null, 'name');
         foreach (\App\Services\Moderation::TARGETS as $field => $type) {

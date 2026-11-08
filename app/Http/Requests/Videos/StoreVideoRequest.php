@@ -9,6 +9,7 @@ class StoreVideoRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'creation_id' => ['sometimes', 'required', 'uuid'],
             'reuse_content' => ['required', 'boolean'],
             'rights_confirmed' => ['required', 'accepted'],
             'rights_version' => ['required', 'string', 'max:40'],

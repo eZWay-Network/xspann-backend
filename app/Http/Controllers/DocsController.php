@@ -12,6 +12,13 @@ class DocsController extends Controller
 {
     public function __invoke(): Response
     {
+        $reference = self::reference(url('/api/v1'));
+
+        return view('docs', $reference + ['endpointCount' => array_sum(array_map('count', $reference['groups']))]);
+    }
+
+    public static function reference(string $baseUrl): array
+    {
         $catalog = self::catalog();
         $schemas = self::schemas();
         $groups = array_fill_keys(['Authentication', 'Feed', 'Discover', 'Videos', 'Uploads', 'Users', 'Comments', 'Social actions', 'Safety', 'Notifications', 'Audio library'], []);
@@ -220,7 +227,7 @@ class DocsController extends Controller
             unset($entry['rules']);
             $groups[$entry['group']][] = $entry;
         }
-        return view('docs', ['groups' => $groups, 'schemas' => $schemas, 'baseUrl' => url('/api/v1'), 'endpointCount' => array_sum(array_map('count', $groups))]);
+        return compact('baseUrl', 'groups', 'schemas');
     }
 
     public static function catalog(): array
@@ -316,6 +323,7 @@ class DocsController extends Controller
         foreach (['avatar' => [AvatarUploadRequest::class, 'Upload an avatar', 'JPEG, PNG or WebP image, up to 5 MiB. Use avatar_url in PUT /auth/profile.', 'avatar_url', 'avatars/1/example.webp'], 'local' => [LocalVideoUploadRequest::class, 'Upload a video file', 'MP4, QuickTime or WebM, up to 500 MiB. Uploads through the backend to the configured storage disk. Submit storage_path to POST /videos afterward.', 'video_url', 'videos/1/example.mp4'], 'audio' => [LocalAudioUploadRequest::class, 'Upload a sound', 'Audio file up to 50 MiB. Uploads only; submit storage_path and title to POST /audios afterward. Processing enforces a 600-second limit.', 'audio_url', 'sounds/1/example.mp3']] as $action => [$rules, $title, $description, $urlKey, $path]) {
             $add('UploadController@' . $action, 'Uploads', $title, $description . ' The returned storage_path is a disk:key reference; pass it back unchanged. Send multipart/form-data with field file. Server and proxy upload limits may be lower.', ['upload_method' => 'multipart', 'storage_path' => 'public:' . $path, $urlKey => 'https://media.example.com/' . $path], '201', $rules, ['file' => '@/path/to/file']);
         }
+        $add('UploadController@resolve', 'Uploads', 'Find a creation attempt', 'Find the exact non-deleted video or sound created with this UUID by the current account. An unknown attempt returns 404.', ['id' => 1], '200', ['kind' => ['required', ['in' => ['video', 'sound']]], 'creation_id' => ['required', 'uuid']], ['kind' => 'video', 'creation_id' => '123e4567-e89b-42d3-a456-426614174000']);
         $add('UploadController@video', 'Uploads', 'Request a video upload URL', 'Inspect upload_method. signed_url: PUT the raw file to upload_url using exactly the returned headers within 15 minutes, without the API bearer token. multipart: POST FormData with field_name to upload_url with your bearer token. After upload, create the video post using the returned disk:key storage_path unchanged.', ['upload_method' => 'signed_url', 'storage_path' => 's3:videos/1/example.mp4', 'video_url' => 'https://media.example.com/videos/1/example.mp4', 'upload_url' => 'https://storage.example.com/presigned-upload', 'headers' => ['Content-Type' => 'video/mp4']], '200', SignedVideoUploadRequest::class, ['filename' => 'example.mp4', 'content_type' => 'video/mp4']);
         $chunkExample = ['upload_id' => '123e4567-e89b-42d3-a456-426614174000', 'total_chunks' => 1, 'filename' => 'example.mp4', 'content_type' => 'video/mp4', 'total_size' => 1024];
         $add('UploadController@videoChunk', 'Uploads', 'Upload a video chunk', 'Send multipart/form-data. Generate one UUID per upload. Chunk index is zero-based and less than total_chunks. Chunks are at most 2 MiB; total video size is at most 524288000 bytes. Reusing an index replaces that chunk. Keep all session metadata identical.', ['upload_method' => 'chunked', 'upload_id' => $chunkExample['upload_id'], 'chunk_index' => 0, 'total_chunks' => 1], '201', ChunkUploads::rules(true), $chunkExample + ['chunk_index' => 0, 'chunk' => '@/path/to/chunk']);

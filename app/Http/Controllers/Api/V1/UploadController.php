@@ -9,6 +9,21 @@ use Spark\Http\{Request, Response};
 
 class UploadController extends Controller
 {
+    public function resolve(Request $request): Response
+    {
+        $input = $request->validate([
+            'kind' => ['required', ['in' => ['sound', 'video']]],
+            'creation_id' => ['required', 'uuid'],
+        ]);
+        $model = $input->kind === 'sound' ? \App\Models\Audio::class : \App\Models\Video::class;
+        $item = $model::where('user_id', $request->user('id'))
+            ->where('creation_id', $input->creation_id)
+            ->where('status', '!=', 'deleted')
+            ->firstOrFail();
+
+        return json(['data' => ['id' => $item->id]]);
+    }
+
     public function artistImage(AvatarUploadRequest $request): Response
     {
         \App\Services\Artists::owned($request->user());

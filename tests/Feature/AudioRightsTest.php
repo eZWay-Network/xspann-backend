@@ -9,6 +9,44 @@ use Tests\TestCase;
 
 class AudioRightsTest extends TestCase
 {
+    use \Tests\Support\ArtistFixtures;
+
+    public function testCreationResolutionIsExactAndOwnerScoped(): void
+    {
+        $owner = $this->makeUser();
+        $other = $this->makeUser('other');
+        $key = '123e4567-e89b-42d3-a456-426614174000';
+        foreach (['video', 'sound'] as $kind) {
+            $video = $kind === 'video';
+            $route = $video ? '/api/v1/videos' : '/api/v1/audios';
+            $path = $video ? "videos/$owner->id/test.mp4" : "sounds/$owner->id/test.m4a";
+            storage('public')->put($path, 'uploaded bytes');
+            $input = $video ? $this->videoRights() : [...$this->audioRights(), 'title' => 'Repeated title'];
+            $input += ['storage_path' => $path, 'creation_id' => $key];
+            $lookup = ['kind' => $kind, 'creation_id' => $key];
+            $id = $this->asUser($owner)->postJson($route, $input)->assertCreated()->json('data.id');
+            $this->postJson('/api/v1/me/uploads/resolve', $lookup)->assertOk()->assertJsonPath('data.id', $id);
+            $this->postJson($route, $input)->assertStatus(409);
+            $this->asUser($other)->postJson('/api/v1/me/uploads/resolve', $lookup)->assertNotFound();
+            $this->assertDatabaseCount($video ? 'videos' : 'audios', 1);
+        }
+    }
+
+    public function testPrivateDraftRequiresApprovedArtistWithoutPaidPlan(): void
+    {
+        $owner = $this->makeUser();
+        $path = "videos/$owner->id/source.mp4";
+        storage('local')->put($path, 'private video');
+        \App\Services\PendingUploads::track($owner->id, $path, 'local', true);
+        $draft = [...$this->videoRights(), 'storage_path' => "local:$path", 'publication_intent' => 'draft'];
+        $this->asUser($owner)->postJson('/api/v1/videos', $draft)->assertForbidden();
+        $artist = $this->makeArtist($owner);
+        query('artists')->where('id', $artist->id)->update(['moderation_status' => 'hidden']);
+        $this->postJson('/api/v1/videos', $draft)->assertForbidden();
+        query('artists')->where('id', $artist->id)->update(['moderation_status' => 'approved']);
+        $this->postJson('/api/v1/videos', $draft)->assertCreated();
+    }
+
     public function testRemovedProviderRoutesAndFieldsAreRejectedIncludingExplicitNull(): void
     {
         foreach (['/sounds/jamendo', '/sounds/jamendo/123', '/sounds/jamendo/123/videos'] as $path) {

@@ -9,6 +9,7 @@ class StoreAudioRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'creation_id' => ['sometimes', 'required', 'uuid'],
             'reuse_allowed' => ['required', 'boolean'],
             'rights_confirmed' => ['required', 'accepted'],
             'rights_version' => ['required', 'string', 'max:40'],

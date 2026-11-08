@@ -43,6 +43,10 @@ class VideoController extends Controller
         ContentRights::apply($input);
 
         $video = PendingUploads::attach($request->user('id'), function () use ($request, $input): Video {
+            $creation = $request->validated('creation_id');
+            if ($creation !== null) {
+                abort_if(Video::where('user_id', $request->user('id'))->where('creation_id', $creation)->exists(), 409, 'This creation attempt already exists.');
+            }
             StorageService::validateOwner($input->storage_path, $request->user('id'), 'storage_path', 'videos', true);
             StorageService::validateOwner($input->thumbnail_url, $request->user('id'), 'thumbnail_url', 'thumbnails');
 
@@ -56,6 +60,13 @@ class VideoController extends Controller
             }
 
             $draft = $input->get('publication_intent', 'immediate') === 'draft';
+            if ($draft) {
+                $eligible = \App\Models\Artist::where('user_id', $request->user('id'))
+                    ->where('moderation_status', 'approved')
+                    ->exists();
+                abort_unless($eligible, 403, 'Private drafts require an approved artist profile.');
+            }
+
             \App\Services\ReleaseMedia::attach($input->storage_path, $request->user('id'), $draft);
             if ($draft && $input->thumbnail_url) {
                 throw ValidationException::withMessages(['thumbnail_url' => ['Draft covers are generated privately during encoding.']]);
