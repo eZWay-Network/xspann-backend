@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Spark\Facades\Gate;
 use Spark\Foundation\Providers\ServiceProvider;
+use Spark\Pulse\Facades\Pulse;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,5 +24,9 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::define('model.update', fn($model) => user('id') === $model->user_id);
         Gate::define('model.delete', fn($model) => user('id') === $model->user_id);
+
+        if (class_exists(Pulse::class)) {
+            Pulse::auth(fn() => is_logged('staff_web'));
+        }
     }
 }
