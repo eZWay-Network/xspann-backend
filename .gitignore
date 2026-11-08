@@ -4,9 +4,9 @@
 .codex
 .idea
 .DS_Store
-vendor
-docs/*
+/vendor
+/docs/*
 node_modules
-composer.json
+composer.lock
 playwright-report/
 test-results/

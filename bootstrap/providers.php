@@ -15,7 +15,13 @@
 
 return [
     \Spark\Relay\RelayServiceProvider::class,
+
     // Application service provider for registering and bootstrapping services
     \App\Providers\AppServiceProvider::class,
     \Inertia\InertiaServiceProvider::class,
+
+    // Conditional service provider for Pulse, only loaded if the class exists
+    ...(class_exists(\Spark\Pulse\PulseServiceProvider::class)
+        ? [\Spark\Pulse\PulseServiceProvider::class]
+        : []),
 ];
