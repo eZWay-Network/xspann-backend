@@ -75,6 +75,7 @@ return [
                 'App\Jobs\PromotionMaintenance',
                 'App\Jobs\DeliverAnnouncements',
                 'App\Jobs\BillingMaintenance',
+                'App\Jobs\PublishReleases',
             ], // Job classes or display name
         ],
         'cache' => [
