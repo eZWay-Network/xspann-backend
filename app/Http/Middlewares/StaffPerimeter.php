@@ -5,6 +5,7 @@ namespace App\Http\Middlewares;
 use App\Services\Staff\{Sessions, StaffException};
 use Inertia\Facades\Inertia;
 use Spark\Exceptions\Http\ResponseException;
+use Spark\Foundation\Application;
 use Spark\Foundation\Exceptions\{InvalidCsrfTokenException, ThrottleException, ValidationException};
 use Spark\Http\{Request, Response};
 use function get_class;
@@ -19,8 +20,8 @@ final class StaffPerimeter
             return $next($request);
         }
 
-        app()->forgetInstance('auth.staff_web');
-        app()->instance(\Inertia\Inertia::class, new \Inertia\Inertia($request));
+        Application::$app->forgetInstance('auth.staff_web');
+        Application::$app->instance(\Inertia\Inertia::class, new \Inertia\Inertia($request));
 
         Inertia::flushShared();
         Inertia::setRootView('app');
@@ -35,7 +36,7 @@ final class StaffPerimeter
             'urls' => ['login' => (string) route('staff.login'), 'logout' => (string) route('staff.logout')],
         ]);
 
-        app()->prepareResponseUsing(function (Response $response): void {
+        Application::$app->prepareResponseUsing(function (Response $response): void {
             $response->withHeaders([
                 'Cache-Control' => 'no-store, private, max-age=0',
                 'Pragma' => 'no-cache',
@@ -52,9 +53,11 @@ final class StaffPerimeter
             ) {
                 return $this->error(404);
             }
-            if (preg_match('~^(?:users|artists|content/(?:videos|audios|playlists)|moderation/(?:reports|appeals)|promotions/(?:boosts|placements)|billing/(?:subscriptions|invoices|checkouts|adjustments|webhooks)|releases|exports|settings/taxonomy/genres|operations/media/(?:videos|audios)|operations/(?:privacy|actions|communications))/([^/]+)(?:/|$)~D', trim($request->getPath(), '/'), $match)
+            if (
+                preg_match('~^(?:users|artists|content/(?:videos|audios|playlists)|moderation/(?:reports|appeals)|promotions/(?:boosts|placements)|billing/(?:subscriptions|invoices|checkouts|adjustments|webhooks)|releases|exports|settings/taxonomy/genres|operations/media/(?:videos|audios)|operations/(?:privacy|actions|communications))/([^/]+)(?:/|$)~D', trim($request->getPath(), '/'), $match)
                 && trim($request->getPath(), '/') !== 'promotions/placements/create'
-                && !preg_match('/^[1-9][0-9]{0,14}$/D', $match[1])) {
+                && !preg_match('/^[1-9][0-9]{0,14}$/D', $match[1])
+            ) {
                 return $this->error(404);
             }
             $response = $next($request);
@@ -86,9 +89,11 @@ final class StaffPerimeter
             $status = $exception->response->getStatusCode();
             if ($request->isPostBack() && $request->header('X-Inertia') && in_array($status, [409, 422], true)) {
                 return Inertia::redirect($this->returnUrl($request), 303)->withErrors([
-                    'form' => [$status === 409
+                    'form' => [
+                        $status === 409
                         ? 'This record changed or is no longer eligible. Review the refreshed record before submitting again.'
-                        : 'The action could not be applied. Check the values, dates and current eligibility before trying again.'],
+                        : 'The action could not be applied. Check the values, dates and current eligibility before trying again.'
+                    ],
                 ]);
             }
 
@@ -96,7 +101,7 @@ final class StaffPerimeter
                 ? $this->error($exception->response->getStatusCode())
                 : $exception->response;
         } catch (\Throwable $exception) {
-            if (app()->isTesting()) {
+            if (Application::$app->isTesting()) {
                 throw $exception;
             }
             tracer_log('Staff request failed: ' . get_class($exception));
