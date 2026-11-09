@@ -160,8 +160,11 @@ async function run() {
       .getByText("journey after restart", { exact: false })
       .first()
       .waitFor({ timeout: 8000 });
+    const persisted = page.waitForResponse((r) => r.ok() && r.request().method() === "POST" &&
+      new URL(r.url()).pathname.endsWith("/conversations/1/messages"));
     await page.getByPlaceholder("Write a message…").fill("journey outgoing");
     await page.getByRole("button", { name: "Send message" }).click();
+    await persisted;
     await page
       .getByText("journey outgoing", { exact: false })
       .first()
@@ -185,6 +188,13 @@ async function run() {
       .waitFor({ timeout: 8000 });
     await delay(650);
     assert.ok((await request("/conversations/1", bob.token)).unread_count > 0);
+    let readAttempts = 0;
+    await page.route("**/conversations/1/read", (route) => {
+      readAttempts++;
+      return readAttempts === 1
+        ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
+        : route.continue();
+    });
     await page.evaluate(() => {
       delete document.hasFocus;
       window.dispatchEvent(new Event("focus"));
@@ -199,6 +209,32 @@ async function run() {
       (await request("/conversations/1", bob.token)).unread_count,
       0,
     );
+    assert.ok(readAttempts >= 2, "A still-visible message retries a failed automatic read");
+    await page.unroute("**/conversations/1/read");
+    // Keep the reader on an older bubble inside a short, genuinely scrollable chat.
+    const viewport = page.locator("div.overflow-y-auto").filter({ has: page.locator("[data-incoming]") }).last();
+    await viewport.evaluate(async (el) => {
+      el.style.maxHeight = "65px";
+      el.scrollTop = el.scrollHeight;
+      await new Promise(requestAnimationFrame);
+      el.scrollTop = 0;
+      await new Promise(requestAnimationFrame);
+    });
+    await page.waitForFunction(() => {
+      const el = document.querySelector("[data-incoming]")?.closest(".overflow-y-auto");
+      return el && el.scrollHeight - el.clientHeight - el.scrollTop > 48;
+    });
+    const offscreen = await send(1, "journey offscreen unread", alice.token);
+    const bubble = page.locator(`[data-incoming="${offscreen.id}"]`);
+    await bubble.waitFor({ state: "attached" });
+    await delay(500);
+    assert.ok(await bubble.evaluate((el) => el.getBoundingClientRect().top >= el.closest(".overflow-y-auto").getBoundingClientRect().bottom));
+    assert.ok((await request("/conversations/1", bob.token)).last_read_message_id < offscreen.id);
+    await bubble.scrollIntoViewIfNeeded();
+    for (let i = 0; i < 40 && (await request("/conversations/1", bob.token)).unread_count; i++)
+      await delay(150);
+    assert.equal((await request("/conversations/1", bob.token)).last_read_message_id, offscreen.id);
+
     await page.goto(web + "/activity");
     await page.getByRole("button", { name: "Mark all as read" }).waitFor();
     await page.waitForLoadState("networkidle");
