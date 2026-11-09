@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Artists\{PutArtistLinksRequest, PutArtistRequest};
-use App\Http\Resources\{ArtistResource, UserResource, VideoResource};
-use App\Models\{Artist, ArtistGenre, Follow, User, Video};
+use App\Http\Resources\{ArtistPlaylistResource, ArtistResource, UserResource, VideoResource};
+use App\Models\{Artist, ArtistGenre, ArtistPlaylist, Follow, User, Video};
 use App\Services\{ArtistCapabilities, Artists, ArtistStatistics, SocialNotifications};
 use Spark\Http\{Request, Response};
 use Spark\Http\Resources\JsonResource;
@@ -14,15 +14,17 @@ class ArtistController extends Controller
 {
     public function taxonomy(): Response
     {
-        return json(['data' => [
-            'genres' => ArtistGenre::where('archived', false)->orderByRaw('position ASC, id ASC')->get()->map(fn($genre) => [
-                'id' => $genre->id,
-                'name' => $genre->name,
-                'slug' => $genre->slug,
-            ])->all(),
-            'playlist_categories' => config('artists.playlist_categories'),
-            'link_types' => config('artists.link_types'),
-        ]]);
+        return json([
+            'data' => [
+                'genres' => ArtistGenre::where('archived', false)->orderByRaw('position ASC, id ASC')->get()->map(fn($genre) => [
+                    'id' => $genre->id,
+                    'name' => $genre->name,
+                    'slug' => $genre->slug,
+                ])->all(),
+                'playlist_categories' => config('artists.playlist_categories'),
+                'link_types' => config('artists.link_types'),
+            ]
+        ]);
     }
 
     public function index(Request $request): JsonResource
@@ -56,6 +58,50 @@ class ArtistController extends Controller
         }
 
         return ArtistResource::collection($query->orderByRaw($order)->paginate((int) ($filters['limit'] ?? 20)));
+    }
+
+    public function highlights(Request $request): Response
+    {
+        $viewer = $request->user();
+        $listed = Artist::visibleTo($viewer)->where('artists.listed', true);
+
+        $videos = Video::select('videos.*')
+            ->published()
+            ->visibleTo($viewer)
+            ->where('videos.visibility', 'public')
+            ->whereNotNull('videos.storage_path')
+            ->whereIn('videos.user_id', (clone $listed)->select('artists.user_id'))
+            ->withApiData($viewer)
+            ->selectSub(Artist::select('stage_name')->whereColumn('artists.user_id', 'videos.user_id'), 'stage_name')
+            ->selectSub(Artist::select('id')->whereColumn('artists.user_id', 'videos.user_id'), 'artist_id')
+            ->orderByRaw('COALESCE(videos.published_at, videos.created_at) DESC, videos.id DESC')
+            ->limit(12)
+            ->get();
+
+        $playlists = ArtistPlaylist::visibleTo($viewer)
+            ->whereIn('artist_playlists.artist_id', (clone $listed)->select('artists.id'))
+            ->whereHas('videos', fn($query) => $query->published()->visibleTo($viewer)->where('videos.visibility', 'public'))
+            ->withApiData($viewer, publicVideosOnly: true)
+            ->selectSub(Artist::select('stage_name')->whereColumn('artists.id', 'artist_playlists.artist_id'), 'stage_name')
+            ->selectSub(Artist::select('user_id')->whereColumn('artists.id', 'artist_playlists.artist_id'), 'artist_user_id')
+            ->orderByRaw('artist_playlists.created_at DESC, artist_playlists.id DESC')
+            ->limit(8)
+            ->get();
+
+        return json([
+            'data' => [
+                'releases' => $videos->map(fn(Video $video) => [
+                    'artist_id' => (int) $video->artist_id,
+                    'artist_name' => $video->stage_name,
+                    'video' => VideoResource::make($video)->resolve($request),
+                ])->values()->all(),
+                'playlists' => $playlists->map(fn(ArtistPlaylist $playlist) => [
+                    'artist_user_id' => (int) $playlist->artist_user_id,
+                    'artist_name' => $playlist->stage_name,
+                    'playlist' => ArtistPlaylistResource::make($playlist)->resolve($request),
+                ])->values()->all(),
+            ]
+        ])->setHeader('Cache-Control', 'private, no-store');
     }
 
     public function show(Request $request, Artist $artist): JsonResource

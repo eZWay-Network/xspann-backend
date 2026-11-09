@@ -41,6 +41,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/webhooks/stripe', [BillingController::class, 'webhook']);
     Route::get('/media/{token}', [MediaController::class, 'show']);
     Route::get('/artist-taxonomy', [ArtistController::class, 'taxonomy']);
+    Route::get('/artist-highlights', [ArtistController::class, 'highlights']);
     Route::get('/artists/featured', [PromotionController::class, 'featured']);
     Route::get('/artists', [ArtistController::class, 'index']);
     Route::get('/artists/by-slug/{slug}', [ArtistController::class, 'bySlug']);

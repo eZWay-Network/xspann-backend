@@ -17,29 +17,57 @@ class ArtistApiReference
         };
         $date = '2026-10-31T12:00:00.000000Z';
         $artist = [
-            'id' => 1, 'user_id' => 1, 'stage_name' => 'Alex Band', 'slug' => 'alex-band',
-            'bio' => 'Independent music', 'location' => null, 'image_url' => null, 'listed' => true,
+            'id' => 1,
+            'user_id' => 1,
+            'stage_name' => 'Alex Band',
+            'slug' => 'alex-band',
+            'bio' => 'Independent music',
+            'location' => null,
+            'image_url' => null,
+            'listed' => true,
             'genres' => [['id' => 1, 'name' => 'Alternative', 'slug' => 'alternative']],
             'links' => [['label' => 'Listen', 'type' => 'music', 'url' => 'https://example.com/music']],
             'featured_release' => null,
             'presentation' => ['enhanced_profile' => false, 'enhanced_directory_card' => false],
-            'followers_count' => 0, 'announcement_subscribers_count' => 0,
+            'followers_count' => 0,
+            'announcement_subscribers_count' => 0,
             'viewer' => ['following' => false, 'updates_subscribed' => false, 'update_subscriptions_available' => false],
-            'created_at' => $date, 'updated_at' => $date,
+            'created_at' => $date,
+            'updated_at' => $date,
         ];
         $ownArtist = $artist + [
-            'image' => null, 'featured_video_id' => null, 'moderation_status' => 'approved',
-            'capabilities' => ['plan' => 'free', ...config('artists.plans.free')], 'data_since' => $date,
+            'image' => null,
+            'featured_video_id' => null,
+            'moderation_status' => 'approved',
+            'capabilities' => ['plan' => 'free', ...config('artists.plans.free')],
+            'data_since' => $date,
         ];
         $playlist = [
-            'id' => 1, 'artist_id' => 1, 'title' => 'Debut', 'description' => null, 'genre_id' => 1,
-            'category' => 'release', 'visibility' => 'public', 'videos_count' => 1,
-            'cover_url' => null, 'created_at' => $date, 'updated_at' => $date,
+            'id' => 1,
+            'artist_id' => 1,
+            'title' => 'Debut',
+            'description' => null,
+            'genre_id' => 1,
+            'category' => 'release',
+            'visibility' => 'public',
+            'videos_count' => 1,
+            'cover_url' => null,
+            'created_at' => $date,
+            'updated_at' => $date,
         ];
         $ownPlaylist = $playlist + ['version' => 1, 'read_only' => false, 'moderation_status' => 'approved'];
-        $ownDetail = $ownPlaylist + ['videos' => ['$Video'], 'items' => [[
-            'video_id' => 1, 'position' => 0, 'status' => 'published', 'visibility' => 'public', 'moderation_status' => 'approved',
-        ]]];
+        $ownDetail = $ownPlaylist + [
+            'videos' => ['$Video'],
+            'items' => [
+                [
+                    'video_id' => 1,
+                    'position' => 0,
+                    'status' => 'published',
+                    'visibility' => 'public',
+                    'moderation_status' => 'approved',
+                ]
+            ]
+        ];
         $metadata = [
             'title' => ['required', 'string', 'max:120'],
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
@@ -56,10 +84,38 @@ class ArtistApiReference
         $public = 'Active, verified, onboarded accounts only; blocks in either direction hide the artist. Public resources contain no email or age evidence. ';
 
         $add('ArtistController@taxonomy', 'Artist taxonomy', 'Seeded genre IDs, playlist categories and supported link types. Genre IDs are shared by profiles and playlists.', [
-            'genres' => $artist['genres'], 'playlist_categories' => config('artists.playlist_categories'), 'link_types' => config('artists.link_types'),
+            'genres' => $artist['genres'],
+            'playlist_categories' => config('artists.playlist_categories'),
+            'link_types' => config('artists.link_types'),
         ]);
+        $add(
+            'ArtistController@highlights',
+            'Browse artist releases and playlists',
+            'Returns two independently populated arrays for Home discovery. Guests can browse and an optional bearer token applies viewer visibility and blocks. '
+            . 'Both collections use listed, visible artists. Releases include up to 12 public, approved, published and ready videos with media, newest publication first (creation time is the fallback). '
+            . 'Playlists include up to 8 public, approved collections, newest creation first. Only eligible public videos contribute to inclusion, cover and count. '
+            . 'Ties use descending ID. Either array can be empty. This endpoint has no pagination. Responses use Cache-Control: private, no-store.',
+            [
+                'releases' => [
+                    [
+                        'artist_id' => $artist['id'],
+                        'artist_name' => $artist['stage_name'],
+                        'video' => '$Video',
+                    ]
+                ],
+                'playlists' => [
+                    [
+                        'artist_user_id' => $artist['user_id'],
+                        'artist_name' => $artist['stage_name'],
+                        'playlist' => $playlist,
+                    ]
+                ],
+            ],
+        );
         $add('ArtistController@index', 'Browse artists', $public . 'Organic listed artists. q searches stage name/slug, with literal SQL wildcards. Filter genre_id; sort=latest (default) or popular by existing follower totals, then creation time and ID descending. No paid ranking or featured-artist placement.', $artist, '200', [
-            'q' => ['sometimes', 'nullable', 'string', 'max:100'], 'genre_id' => $filter['genre_id'], 'sort' => ['sometimes', 'required', 'string', 'in:latest,popular'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'genre_id' => $filter['genre_id'],
+            'sort' => ['sometimes', 'required', 'string', 'in:latest,popular'],
         ], [], 20);
         $add('ArtistController@show', 'Read an artist', $public . 'listed=false removes organic directory discovery but the known profile remains accessible. Public links and featured_release use current capabilities. featured_release is an owned public video, not an operator placement or identity verification. Artist update consent is separate from following and is managed through the update-subscription endpoints.', $artist);
         $add('ArtistController@bySlug', 'Resolve an artist slug', $public . 'Lowercase ASCII slug resolves the same resource/ID. Slugs persist across name edits unless explicitly changed; old slugs return 404 after a change.', $artist);
@@ -84,14 +140,24 @@ class ArtistApiReference
 
         $totals = ['followers' => 0, 'videos' => 1, 'views' => 10, 'likes' => 2, 'comments' => 0, 'saves' => 0, 'shares' => 0];
         $add('ArtistController@analytics', 'Your artist statistics', 'Current totals are free. Starter/Pro fixtures unlock last 30 UTC days of collected cumulative snapshots; daily=[] for free. Collection begins at enrollment, runs hourly and refreshes on owner reads. Missing days are absent; no backfill. Totals include approved published owned videos of all visibilities. Existing views are six-hour deduplicated records, not unique people, watch time or billable impressions. Deletion/moderation can lower totals.', [
-            'totals' => $totals, 'data_since' => $date, 'timezone' => 'UTC', 'trends_available' => false,
-            'period' => ['from' => '2026-10-02', 'to' => '2026-10-31'], 'daily' => [],
+            'totals' => $totals,
+            'data_since' => $date,
+            'timezone' => 'UTC',
+            'trends_available' => false,
+            'period' => ['from' => '2026-10-02', 'to' => '2026-10-31'],
+            'daily' => [],
             'metric_definitions' => ['followers' => 'Current account follow relationships, not consent.', 'videos' => 'Currently published approved owned videos.', 'views' => 'Six-hour deduplicated records.', 'engagement' => 'Current stored engagement totals.', 'daily' => 'Last collected cumulative snapshot per UTC day, not daily events.'],
         ], errors: $errors);
         $add('ArtistController@fans', 'Your fan summary', 'Existing follow total and separate consent total. Consent count is the currently eligible in-app audience; follows never create consent. Paid observed_follower_change compares first and last observed snapshots in the 30-day window and returns their timestamps; null when unavailable or insufficient observations. No private contact list.', [
-            'followers_count' => 0, 'announcement_subscribers_count' => 0, 'announcement_subscriptions_available' => true,
-            'data_since' => $date, 'trends_available' => false, 'period' => ['from' => '2026-10-02', 'to' => '2026-10-31'],
-            'observed_follower_change' => null, 'change_from' => null, 'change_to' => null,
+            'followers_count' => 0,
+            'announcement_subscribers_count' => 0,
+            'announcement_subscriptions_available' => true,
+            'data_since' => $date,
+            'trends_available' => false,
+            'period' => ['from' => '2026-10-02', 'to' => '2026-10-31'],
+            'observed_follower_change' => null,
+            'change_from' => null,
+            'change_to' => null,
         ], errors: $errors);
 
         return $result;

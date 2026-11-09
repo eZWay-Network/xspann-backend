@@ -68,6 +68,7 @@ class ApiContractTest extends TestCase
         'POST /api/v1/me/videos/{video}/retry',
         'GET /api/v1/me/videos/{video}/preview/{asset}',
         'GET /api/v1/artist-taxonomy',
+        'GET /api/v1/artist-highlights',
         'GET /api/v1/artists',
         'GET /api/v1/artists/by-slug/{slug}',
         'GET /api/v1/artists/{artist}',
@@ -232,7 +233,12 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(159, count($entries));
+        $this->assertSame(160, count($entries));
+        $highlights = $entries['artistcontroller-highlights'];
+        $this->assertFalse($highlights['auth']);
+        $this->assertSame([], $highlights['parameters']);
+        $this->assertSame(['artist_id', 'artist_name', 'video'], array_keys($highlights['response']['data']['releases'][0]));
+        $this->assertSame(['artist_user_id', 'artist_name', 'playlist'], array_keys($highlights['response']['data']['playlists'][0]));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
         $reportParameters = array_column($entries['reportcontroller-store']['parameters'], null, 'name');
         foreach (\App\Services\Moderation::TARGETS as $field => $type) {

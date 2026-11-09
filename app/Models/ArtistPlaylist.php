@@ -35,15 +35,24 @@ class ArtistPlaylist extends Model
             ->whereIn('artist_playlists.artist_id', Artist::select('artists.id')->visibleTo($viewer));
     }
 
-    public function scopeWithApiData(QueryBuilder $query, ?User $viewer): QueryBuilder
+    public function scopeWithApiData(QueryBuilder $query, ?User $viewer, bool $publicVideosOnly = false): QueryBuilder
     {
+        $visibleVideos = function (QueryBuilder $videos) use ($viewer, $publicVideosOnly): QueryBuilder {
+            $videos->published()->visibleTo($viewer);
+
+            if ($publicVideosOnly) {
+                $videos->where('videos.visibility', 'public');
+            }
+
+            return $videos;
+        };
+
         return $query->select('artist_playlists.*')
-            ->withCount('videos', fn($query) => $query->published()->visibleTo($viewer))
+            ->withCount('videos', $visibleVideos)
             ->selectSub(
-                Video::select('videos.thumbnail_url')
+                $visibleVideos(Video::select('videos.thumbnail_url'))
                     ->join('artist_playlist_items', 'artist_playlist_items.video_id', '=', 'videos.id')
                     ->whereColumn('artist_playlist_items.playlist_id', 'artist_playlists.id')
-                    ->published()->visibleTo($viewer)
                     ->orderBy('artist_playlist_items.position')
                     ->limit(1),
                 'cover_url',

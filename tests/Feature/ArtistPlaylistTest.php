@@ -10,6 +10,41 @@ class ArtistPlaylistTest extends TestCase
 {
     use ArtistFixtures;
 
+    public function testHomeHighlightsContainPlayableListedArtistsAndPublicPlaylistArt(): void
+    {
+        $owner = $this->makeUser();
+        $artist = $this->makeArtist($owner, ['stage_name' => 'North']);
+        $hidden = $this->makeUser('hidden');
+        $this->makeArtist($hidden, ['listed' => false]);
+        $this->makeVideo($hidden);
+        $this->makeVideo($this->makeUser('listener'));
+        $private = $this->makeVideo($owner, ['visibility' => 'private', 'thumbnail_url' => 'thumbnails/1/private.jpg']);
+        $this->makeVideo($owner, ['visibility' => 'followers']);
+        $this->makeVideo($owner, ['processing_state' => 'processing']);
+        $this->makeVideo($owner, ['publication_state' => 'scheduled']);
+        $this->makeVideo($owner, ['moderation_status' => 'restricted']);
+        $public = $this->makeVideo($owner, ['thumbnail_url' => 'thumbnails/1/public.jpg']);
+
+        $path = '/api/v1/artist-highlights';
+        $this->getJson($path)->assertOk()->assertJsonCount(1, 'data.releases')
+            ->assertJsonPath('data.releases.0.video.id', $public->id)
+            ->assertJsonPath('data.releases.0.artist_id', $artist->id)
+            ->assertJsonPath('data.releases.0.artist_name', 'North');
+
+        $this->asUser($owner);
+        $id = $this->postJson('/api/v1/me/artist/playlists', ['title' => 'Live'])->assertStatus(201)->json('data.id');
+        $this->putJson("/api/v1/me/artist/playlists/$id/items", ['video_ids' => [$private->id, $public->id], 'version' => 1])->assertOk();
+        $this->getJson($path)->assertOk()->assertJsonCount(1, 'data.releases')->assertJsonCount(1, 'data.playlists')
+            ->assertJsonPath('data.playlists.0.artist_user_id', $owner->id)
+            ->assertJsonPath('data.playlists.0.artist_name', 'North')
+            ->assertJsonPath('data.playlists.0.playlist.id', $id)
+            ->assertJsonPath('data.playlists.0.playlist.videos_count', 1)
+            ->assertJsonPath('data.playlists.0.playlist.cover_url', media_url('thumbnails/1/public.jpg'));
+
+        $this->asUser($hidden)->postJson("/api/v1/users/$owner->id/block")->assertStatus(201);
+        $this->getJson($path)->assertOk()->assertJsonPath('data.releases', [])->assertJsonPath('data.playlists', []);
+    }
+
     public function testOwnedReorderingConflictsAndForeignItemsAreAtomic(): void
     {
         $owner = $this->makeUser();
