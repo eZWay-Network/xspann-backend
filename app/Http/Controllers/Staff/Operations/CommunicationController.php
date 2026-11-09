@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Staff\Operations;
 
 use App\Http\Requests\Staff\{ListFilters, RecoveryRequest};
 use App\Http\Resources\Staff\Records;
+use App\Services\Billing\Billing;
 use App\Services\Staff\{Context, Operations};
 use Inertia\Facades\Inertia;
 use Spark\Facades\DB;
@@ -24,11 +25,24 @@ final class CommunicationController
         }
         $context = Context::from($request);
         $canRetry = $context->can('communications.retry');
-        $listing = Records::listing($query, $filters, fn ($row) => Records::row($row, 'Announcement #' . $row->id, null, $row->status,
-            $row->recipient_count . ' accepted recipients · period #' . ($row->paid_period_id ?? '—'), 'UTC')
-            + ['recovery' => $canRetry && $row->status === 'queued'
-                ? ['label' => 'Recover pending recipients', 'url' => (string) route('staff.communications.retry', ['record' => $row->id]), 'key' => bin2hex(random_bytes(16))] : null],
-            'staff.communications', $choices);
+        $listing = Records::listing(
+            $query,
+            $filters,
+            fn($row) => Records::row(
+                $row,
+                'Announcement #' . $row->id,
+                null,
+                $row->status,
+                $row->recipient_count . ' accepted recipients · period #' . ($row->paid_period_id ?? '—'),
+                'UTC'
+            )
+                + [
+                    'recovery' => $canRetry && $row->status === 'queued'
+                        ? ['label' => 'Recover pending recipients', 'url' => (string) route('staff.communications.retry', ['record' => $row->id]), 'key' => bin2hex(random_bytes(16))] : null
+                ],
+            'staff.communications',
+            $choices
+        );
         $ids = array_column($listing['rows'], 'id');
         $counts = $ids ? DB::table('announcement_deliveries')->whereIn('announcement_id', $ids)
             ->selectRaw('announcement_id, status, COUNT(*) AS total')->groupBy(['announcement_id', 'status'])->get()->all() : [];
@@ -43,16 +57,36 @@ final class CommunicationController
         $pending = DB::table('announcement_deliveries as d')->join('announcements as a', 'a.id', '=', 'd.announcement_id')
             ->where('d.status', 'pending')->selectRaw('COUNT(*) AS recipients, MIN(a.accepted_at) AS oldest')->first();
 
+        $outbox = DB::table('realtime_outbox')
+            ->whereNull('completed_at')
+            ->selectRaw(
+                'COUNT(*) AS pending, MIN(created_at) AS oldest, '
+                . 'SUM(CASE WHEN available_at <= ? THEN 1 ELSE 0 END) AS due_count, '
+                . 'SUM(CASE WHEN attempts > 0 THEN 1 ELSE 0 END) AS retry_count',
+                [Billing::timestamp()]
+            )
+            ->first();
+
         return Inertia::render('operations/communications', $listing + [
             'page' => ['title' => 'Communications', 'breadcrumbs' => []],
             'description' => 'Aggregate in-app delivery only. Retries recheck consent and paid periods; suppressed recipients stay suppressed.',
             'delivery' => ['pending' => (int) $pending->recipients, 'oldest_at' => \App\Services\Billing\Billing::date($pending->oldest)],
-            'outbox' => ['pending' => DB::table('realtime_outbox')->whereNull('completed_at')->count(),
-                'oldest_at' => \App\Services\Billing\Billing::date(DB::table('realtime_outbox')->whereNull('completed_at')->selectRaw('MIN(created_at) AS earliest')->first()?->earliest)],
-            'quota' => ['announcements' => (int) config('artists.plans.artist_pro.fan_announcements'),
-                'recipients' => (int) config('artists.plans.artist_pro.announcement_recipients')],
-            'realtime_action' => $canRetry ? ['label' => 'Recover up to 100 due realtime hints',
-                'url' => (string) route('staff.realtime.recover'), 'key' => bin2hex(random_bytes(16))] : null,
+            'outbox' => [
+                'pending' => (int) $outbox->pending,
+                'oldest_at' => Billing::date($outbox->oldest),
+                'due' => (int) $outbox->due_count,
+                'retrying' => (int) $outbox->retry_count,
+                'delayed' => $outbox->oldest !== null && $outbox->oldest < Billing::timestamp(time() - 300),
+            ],
+            'quota' => [
+                'announcements' => (int) config('artists.plans.artist_pro.fan_announcements'),
+                'recipients' => (int) config('artists.plans.artist_pro.announcement_recipients')
+            ],
+            'realtime_action' => $canRetry ? [
+                'label' => 'Recover up to 100 due realtime hints',
+                'url' => (string) route('staff.realtime.recover'),
+                'key' => bin2hex(random_bytes(16))
+            ] : null,
         ]);
     }
 

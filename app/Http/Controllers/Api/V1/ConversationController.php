@@ -13,12 +13,13 @@ class ConversationController extends Controller
     public function index(Request $request): Response
     {
         $userId = $request->user('id');
-        $result = Communications::page(Conversations::inboxQuery($userId), $request,
-            fn($row) => CommunicationResource::conversation($row, $userId), [Conversations::class, 'hydrate']);
-        $result['meta']['unread_count'] = DB::table('messages as m')
-            ->join('conversation_participants as p', 'p.conversation_id', '=', 'm.conversation_id')
-            ->where('p.user_id', $userId)->where('m.user_id', '!=', $userId)
-            ->whereColumn('m.id', '>', 'p.last_read_message_id')->where('m.moderation_status', 'approved')->count();
+        $result = Communications::page(
+            Conversations::inboxQuery($userId),
+            $request,
+            fn($row) => CommunicationResource::conversation($row, $userId),
+            [Conversations::class, 'hydrate']
+        );
+        $result['meta']['unread_count'] = Conversations::unreadCount($userId);
 
         return $this->privateJson($result);
     }

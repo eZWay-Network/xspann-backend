@@ -2,7 +2,7 @@
 
 return [
 
-    'enabled' => env('PULSE_ENABLED', true),
+    'enabled' => env('PULSE_ENABLED', false),
 
     'path' => env('PULSE_PATH', 'pulse'),
 
@@ -14,7 +14,10 @@ return [
     ],
 
     'storage' => [
-        'driver' => env('PULSE_STORAGE_DRIVER', 'database'),
+        // TinyCore emits query telemetry before reading the business insert ID.
+        'driver' => env('PULSE_DB_CONNECTION') && env('PULSE_DB_CONNECTION') !== env('DB_CONNECTION', 'sqlite')
+            ? env('PULSE_STORAGE_DRIVER', 'memory')
+            : 'memory',
         'table' => 'pulse_entries',
         'connection' => env('PULSE_DB_CONNECTION', null),
         'prune_hours' => 24,
@@ -29,6 +32,10 @@ return [
 
     'ignore_paths' => [
         'favicon.ico',
+        'api/v1/conversations*',
+        'api/v1/notifications*',
+        'api/v1/realtime/*',
+        'api/v1/broadcasting/*',
     ],
 
     'ignore_commands' => [
@@ -54,6 +61,10 @@ return [
         '_token',
         'refresh_token',
         'client_secret',
+        'body',
+        'channel_name',
+        'socket_id',
+        'auth',
     ],
 
     // Exclusions match complete, case-sensitive identifiers. Use * as a wildcard.
@@ -96,7 +107,7 @@ return [
         ],
         'http_client' => [
             'enabled' => true,
-            'exclude' => [], // Host or URL without query string
+            'exclude' => ['*/apps/*'], // Signed private Relay publication
         ],
         'logs' => [
             'enabled' => true,

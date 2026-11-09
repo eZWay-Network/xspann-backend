@@ -7,6 +7,7 @@ use App\Services\Billing\Billing;
 use Spark\Facades\{Auth, Cache, DB};
 use Spark\Relay\Facades\Relay;
 use Spark\Relay\Protocol;
+use Spark\Telemetry;
 
 class Realtime
 {
@@ -96,7 +97,7 @@ class Realtime
         DB::table('realtime_sessions')->where('user_id', $userId)->whereNull('retired_at')->update(['retired_at' => Billing::timestamp()]);
     }
 
-    public static function permitted(object $event): bool
+    public static function permitted(object $event, ?int &$conversationId = null): bool
     {
         if (!Communications::eligible($event->user_id)) {
             return false;
@@ -104,6 +105,7 @@ class Realtime
         if ($event->type === 'message.created' || $event->type === 'conversation.updated') {
             $message = $event->type === 'message.created' ? DB::table('messages')->where('id', $event->resource_id)->first() : null;
             $id = $event->type === 'message.created' ? $message?->conversation_id : $event->resource_id;
+            $conversationId = $id === null ? null : (int) $id;
             $conversation = $id ? DB::table('conversations')->where('id', $id)->first() : null;
             return $conversation && (!$message || $message->moderation_status === 'approved')
                 && in_array((int) $event->user_id, [(int) $conversation->low_user_id, (int) $conversation->high_user_id], true)
@@ -175,8 +177,13 @@ class Realtime
             if (!$event) {
                 return;
             }
+            $started = hrtime(true);
+            $sent = 0;
+            $outcome = 'suppressed';
+            $retryAfter = null;
             try {
-                if (self::permitted($event)) {
+                if (self::permitted($event, $conversationId)) {
+                    $outcome = 'no_targets';
                     $hint = [
                         'event_id' => (string) $event->id,
                         'type' => $event->type,
@@ -184,6 +191,9 @@ class Realtime
                         'resource_id' => (int) $event->resource_id,
                         'version' => (int) $event->version,
                     ];
+                    if ($event->type === 'message.created') {
+                        $hint['conversation_id'] = $conversationId;
+                    }
                     foreach (self::sessions($event->user_id)->get() as $session) {
                         // Refresh immediately before each network call; an already in-flight hint contains no content.
                         if (!self::sessions($event->user_id)->where('r.id', $session->id)->exists() || !self::permitted($event)) {
@@ -191,15 +201,28 @@ class Realtime
                         }
                         self::configured();
                         Relay::trigger('private-session.' . $session->channel_key, $event->type, $hint);
+                        $sent++;
+                        $outcome = 'published';
                     }
                 }
                 DB::table('realtime_outbox')->where('id', $id)->update(['completed_at' => Billing::timestamp()]);
             } catch (\Throwable) {
+                $outcome = 'retry';
+                $retryAfter = min(300, 5 * (2 ** min(6, (int) $event->attempts)));
                 DB::table('realtime_outbox')->where('id', $id)->update([
                     'attempts' => $event->attempts + 1,
-                    'available_at' => Billing::timestamp(time() + min(300, 5 * (2 ** min(6, (int) $event->attempts)))),
+                    'available_at' => Billing::timestamp(time() + $retryAfter),
                 ]);
             }
+            Telemetry::emit('realtime.publish', static fn(): array => [
+                'event_id' => (string) $id,
+                'type' => $event->type,
+                'outcome' => $outcome,
+                'session_publishes' => $sent,
+                'attempt' => (int) $event->attempts + 1,
+                'retry_after_seconds' => $retryAfter,
+                'duration_ms' => (hrtime(true) - $started) / 1_000_000,
+            ]);
         });
     }
 }

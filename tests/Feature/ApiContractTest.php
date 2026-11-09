@@ -25,6 +25,7 @@ class ApiContractTest extends TestCase
         'GET /api/v1/me/artist/placements',
         'POST /api/v1/me/artist/placements/{placement}/extension-consent',
         'GET /api/v1/me/communication-preferences',
+        'GET /api/v1/me/communication-summary',
         'PATCH /api/v1/me/communication-preferences',
         'GET /api/v1/conversations',
         'POST /api/v1/conversations',
@@ -231,7 +232,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(158, count($entries));
+        $this->assertSame(159, count($entries));
         $this->assertSame('<unique-purchase-key>', $entries['billingcontroller-checkout']['headers']['Idempotency-Key']);
         $reportParameters = array_column($entries['reportcontroller-store']['parameters'], null, 'name');
         foreach (\App\Services\Moderation::TARGETS as $field => $type) {

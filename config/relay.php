@@ -12,7 +12,7 @@ return [
             'app_id' => env('RELAY_APP_ID', '1'),
             'key' => env('RELAY_APP_KEY'),
             'secret' => env('RELAY_APP_SECRET'),
-            'allowed_origins' => [env('RELAY_ALLOWED_ORIGIN', 'http://localhost:8080')],
+            'allowed_origins' => array_map('trim', explode(',', env('RELAY_ALLOWED_ORIGINS', env('RELAY_ALLOWED_ORIGIN', 'http://localhost:8080')))),
             'max_connections' => 500,
             'max_message_size' => 16384,
             'client_events' => false,

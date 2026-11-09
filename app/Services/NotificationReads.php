@@ -8,6 +8,11 @@ use Spark\Facades\DB;
 
 class NotificationReads
 {
+    public static function unreadCount(int $userId): int
+    {
+        return Notification::where('user_id', $userId)->whereNull('read_at')->count();
+    }
+
     public static function read(int $userId, ?int $id = null): void
     {
         Communications::transaction(function () use ($userId, $id): void {
@@ -39,16 +44,29 @@ class NotificationReads
     public static function conversation(int $userId, int $conversationId, int $messageId): void
     {
         // Historical notification data is JSON; bound the scan with a key cursor.
+        $changed = 0;
         $lastId = 0;
         do {
             $rows = Notification::where('user_id', $userId)->where('type', 'direct_message')->whereNull('read_at')
                 ->where('id', '>', $lastId)->orderBy('id')->limit(200)->get();
+            $ids = [];
             foreach ($rows as $row) {
                 $lastId = $row->id;
                 if (($row->data['conversation_id'] ?? null) === $conversationId && ($row->data['message_id'] ?? PHP_INT_MAX) <= $messageId) {
-                    self::read($userId, $row->id);
+                    $ids[] = $row->id;
                 }
             }
+            if ($ids) {
+                $changed += Notification::where('user_id', $userId)
+                    ->where('type', 'direct_message')
+                    ->whereNull('read_at')
+                    ->whereIn('id', $ids)
+                    ->update(['read_at' => now()]);
+            }
         } while (count($rows) === 200);
+
+        if ($changed > 0) {
+            Realtime::record($userId, 'notifications.updated', $userId, 0);
+        }
     }
 }

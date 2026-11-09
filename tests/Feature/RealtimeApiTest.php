@@ -63,6 +63,10 @@ class RealtimeApiTest extends TestCase
 
     public function testOfflineRelayDoesNotFailSendAndRetryHasOnlyHints(): void
     {
+        $samples = [];
+        \Spark\Telemetry::listen('realtime.publish', static function (array $sample) use (&$samples): void {
+            $samples[] = $sample;
+        });
         $relay = new class extends \Spark\Relay\Relay {
             public bool $offline = true;
             public array $events = [];
@@ -93,7 +97,12 @@ class RealtimeApiTest extends TestCase
         Realtime::publish($event->id);
         Realtime::publish($event->id);
         $this->assertCount(2, $relay->events);
-        $this->assertSame(['event_id', 'type', 'occurred_at', 'resource_id', 'version'], array_keys($relay->events[0][2]));
+        $this->assertSame(['retry', 'published'], array_column($samples, 'outcome'));
+        $this->assertSame(5, $samples[0]['retry_after_seconds']);
+        $this->assertSame(2, $samples[1]['session_publishes']);
+        $this->assertFalse(str_contains(json_encode($samples), 'Secret body'));
+        $this->assertSame(['event_id', 'type', 'occurred_at', 'resource_id', 'version', 'conversation_id'], array_keys($relay->events[0][2]));
+        $this->assertSame((int) $id, $relay->events[0][2]['conversation_id']);
         $this->assertFalse(str_contains(json_encode($relay->events), 'Secret body'));
         $this->assertSame($relay->events[0][2]['event_id'], $relay->events[1][2]['event_id']);
     }

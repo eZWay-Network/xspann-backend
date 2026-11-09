@@ -19,6 +19,7 @@ class StaffRouteContractTest extends TestCase
             }
         }
         $expected[] = 'POST /api/v1/me/uploads/resolve';
+        $expected[] = 'GET /api/v1/me/communication-summary';
         sort($actual);
         sort($expected);
         $this->assertSame(157, count($fixture['customer_routes']));

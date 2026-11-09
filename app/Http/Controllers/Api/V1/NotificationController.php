@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\NotificationResource;
 use App\Models\Notification;
-use App\Services\SocialNotifications;
+use App\Services\{NotificationReads, SocialNotifications};
 use Spark\Http\{Request, Resources\JsonResource, Response};
 
 class NotificationController extends Controller
@@ -14,9 +14,7 @@ class NotificationController extends Controller
     {
         $request->validate(['unread' => ['sometimes', 'boolean']]);
 
-        $unreadCount = Notification::where('user_id', $request->user('id'))
-            ->whereNull('read_at')
-            ->count();
+        $unreadCount = NotificationReads::unreadCount($request->user('id'));
 
         $notifications = Notification::where('user_id', $request->user('id'))
             ->when(
@@ -54,7 +52,7 @@ class NotificationController extends Controller
 
     public function unreadCount(Request $request): Response
     {
-        return json(['data' => ['unread_count' => Notification::where('user_id', $request->user('id'))->whereNull('read_at')->count()]]);
+        return json(['data' => ['unread_count' => NotificationReads::unreadCount($request->user('id'))]]);
     }
 
     public function clearAll(Request $request): Response

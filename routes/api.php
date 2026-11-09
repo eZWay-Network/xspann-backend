@@ -116,6 +116,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/me/artist/placements/{placement}/extension-consent', [PromotionController::class, 'consent'])->middleware('throttle:30');
         Route::get('/me/communication-preferences', [CommunicationController::class, 'preferences']);
         Route::patch('/me/communication-preferences', [CommunicationController::class, 'updatePreferences']);
+        Route::get('/me/communication-summary', [CommunicationController::class, 'summary']);
         Route::get('/conversations', [ConversationController::class, 'index']);
         Route::post('/conversations', [ConversationController::class, 'store']);
         Route::get('/conversations/{conversation}', [ConversationController::class, 'show']);

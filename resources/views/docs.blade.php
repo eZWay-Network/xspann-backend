@@ -456,8 +456,9 @@ Authorization: Bearer &lt;access-token&gt;
                 <code>meta.unread_count</code> for the badge, then mark individual items or all items read using the
                 documented PATCH endpoints and refresh the count.
                 <code>DELETE /api/v1/notifications/clear-all</code> permanently clears your read notifications;
-                unread items are preserved. Delivery is through this inbox API; there are no
-                email, push or WebSocket deliveries.
+                unread items are preserved. A private Relay hint signals a change. Refresh the inbox or
+                <code>GET /api/v1/me/communication-summary</code> for the current unread totals.
+                Reconcile from REST when the subscription resumes.
             </p>
             @foreach ($schemas as $name => $schema)
                 @if (!in_array($name, ['ProcessingVideo', 'ReadNotification']))

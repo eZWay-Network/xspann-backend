@@ -3,12 +3,24 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Services\Communications;
+use App\Services\{Communications, Conversations, NotificationReads};
 use Spark\Facades\DB;
 use Spark\Http\{Request, Response};
 
 class CommunicationController extends Controller
 {
+    public function summary(Request $request): Response
+    {
+        $userId = $request->user('id');
+
+        $counts = DB::transaction(static fn(): array => [
+            'unread_messages' => Conversations::unreadCount($userId),
+            'unread_notifications' => NotificationReads::unreadCount($userId),
+        ]);
+
+        return $this->privateJson(['data' => $counts]);
+    }
+
     public function preferences(Request $request): Response
     {
         return $this->privateJson(['data' => Communications::preferences($request->user('id'))]);

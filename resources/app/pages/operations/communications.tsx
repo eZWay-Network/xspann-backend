@@ -11,7 +11,13 @@ import { useApp } from "@/contexts/app";
 export default function Communications(
   props: RecordsProps & {
     delivery: { pending: number; oldest_at: string | null };
-    outbox: { pending: number; oldest_at: string | null };
+    outbox: {
+      pending: number;
+      oldest_at: string | null;
+      due: number;
+      retrying: number;
+      delayed: boolean;
+    };
     quota: { announcements: number; recipients: number };
     realtime_action: (RecoveryAction & { key: string }) | null;
   },
@@ -36,8 +42,15 @@ export default function Communications(
       </Card>
       <Card className="space-y-3 p-5">
         <h2 className="font-semibold">Realtime outbox</h2>
+        {props.outbox.delayed && (
+          <p role="status" className="text-sm font-medium">
+            Realtime delivery is delayed. The oldest pending event is over five
+            minutes old.
+          </p>
+        )}
         <p className="text-sm text-muted-foreground">
-          {props.outbox.pending} pending hints · Oldest:{" "}
+          {props.outbox.pending} pending hints · {props.outbox.due} due ·{" "}
+          {props.outbox.retrying} retrying · Oldest:{" "}
           {props.outbox.oldest_at
             ? formatDateTime(props.outbox.oldest_at)
             : "none"}

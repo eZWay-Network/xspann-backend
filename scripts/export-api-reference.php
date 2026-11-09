@@ -17,6 +17,8 @@ try {
     $reference['realtime'] = [
         'events' => \App\Services\Realtime::TYPES,
         'fields' => ['event_id', 'type', 'occurred_at', 'resource_id', 'version'],
+        'optional_fields' => ['message.created' => ['conversation_id']],
+        'example' => ['event_id' => '8142', 'type' => 'message.created', 'occurred_at' => '2026-11-08T10:00:00Z', 'resource_id' => 731, 'version' => 12, 'conversation_id' => 4],
         'recovery' => 'Subscribe to the token-bound private channel, then load REST state. Deduplicate event IDs and reload on reconnect/version gaps. Fetch message catch-up with after_id.',
     ];
     echo json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;

@@ -153,6 +153,17 @@ class Conversations
         });
     }
 
+    public static function unreadCount(int $userId): int
+    {
+        return DB::table('messages as m')
+            ->join('conversation_participants as p', 'p.conversation_id', '=', 'm.conversation_id')
+            ->where('p.user_id', $userId)
+            ->where('m.user_id', '!=', $userId)
+            ->whereColumn('m.id', '>', 'p.last_read_message_id')
+            ->where('m.moderation_status', 'approved')
+            ->count();
+    }
+
     public static function read(int $conversationId, int $userId, int $messageId): object
     {
         return Communications::transaction(function () use ($conversationId, $userId, $messageId): object {

@@ -86,6 +86,35 @@ class ConversationApiTest extends TestCase
         $this->getJson('/api/v1/conversations')->assertOk()->assertJsonPath('meta.unread_count', 0);
     }
 
+    public function testSummaryAndBulkReadKeepActivityAndThreadCountsIndependent(): void
+    {
+        $this->getJson('/api/v1/me/communication-summary')->assertUnauthorized();
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $carol = $this->makeUser('carol');
+        $this->mutual($alice, $bob);
+        $this->mutual($carol, $bob);
+        $thread = Conversations::open($alice->id, $bob->id);
+        $other = Conversations::open($carol->id, $bob->id);
+        for ($i = 0; $i < 12; $i++) {
+            [$last] = Conversations::send($thread->id, $alice->id, 'Fixture', $this->messageInput()['client_message_id']);
+        }
+        Conversations::send($other->id, $carol->id, 'Other thread', $this->messageInput()['client_message_id']);
+        $this->asUser($bob)->getJson('/api/v1/me/communication-summary')->assertOk()
+            ->assertJsonPath('data.unread_messages', 13)->assertJsonPath('data.unread_notifications', 13);
+        $activity = fn () => query('realtime_outbox')->where('user_id', $bob->id)->where('type', 'notifications.updated')->count();
+        $before = $activity();
+        Conversations::read($thread->id, $bob->id, $last->id);
+        Conversations::read($thread->id, $bob->id, $last->id);
+        $this->assertSame($before + 1, $activity());
+        $this->getJson('/api/v1/me/communication-summary')->assertOk()
+            ->assertJsonPath('data.unread_messages', 1)->assertJsonPath('data.unread_notifications', 1);
+        $this->patchJson('/api/v1/notifications/read-all')->assertOk();
+        $this->getJson('/api/v1/me/communication-summary')->assertOk()
+            ->assertJsonPath('data.unread_messages', 1)->assertJsonPath('data.unread_notifications', 0);
+        $this->getJson('/api/v1/conversations')->assertOk()->assertJsonPath('meta.unread_count', 1);
+    }
+
     public function testMuteOnlyAffectsOwnAlertsAndDisabledMessagingStopsSends(): void
     {
         $a = $this->makeUser();
