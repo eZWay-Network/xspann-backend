@@ -35,6 +35,43 @@ class ConversationApiTest extends TestCase
         $this->getJson("/api/v1/conversations/$id")->assertOk()->assertJsonPath('data.can_send', false);
     }
 
+    public function testInboxShowsTheVisiblePeerAndPaginatesByLatestActivity(): void
+    {
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $carol = $this->makeUser('carol');
+        $bob->update(['name' => 'Bob Rivers', 'avatar' => 'https://cdn.example.test/bob.png']);
+        $this->mutual($alice, $bob);
+        $this->mutual($alice, $carol);
+        $first = Conversations::open($alice->id, $bob->id);
+        $second = Conversations::open($alice->id, $carol->id);
+        DB::table('conversations')->where('id', $first->id)->update(['created_at' => '2024-01-01 12:00:00']);
+        DB::table('conversations')->where('id', $second->id)->update(['created_at' => '2024-02-01 12:00:00']);
+        Conversations::send($first->id, $bob->id, 'New reply', $this->messageInput()['client_message_id']);
+
+        $page = $this->asUser($alice)->getJson('/api/v1/conversations?limit=1')->assertOk();
+        $page->assertJsonPath('data.0.id', $first->id)
+            ->assertJsonPath('data.0.recipient', [
+                'id' => $bob->id,
+                'name' => 'Bob Rivers',
+                'username' => 'bob',
+                'avatar' => 'https://cdn.example.test/bob.png',
+            ]);
+        $cursor = rawurlencode($page->json('meta.next_cursor'));
+        $this->getJson("/api/v1/conversations?limit=1&cursor=$cursor")->assertOk()
+            ->assertJsonPath('data.0.id', $second->id)
+            ->assertJsonPath('meta.next_cursor', null);
+        $this->asUser($bob)->getJson("/api/v1/conversations/$first->id")->assertOk()
+            ->assertJsonPath('data.recipient.username', 'alice');
+
+        $this->postJson("/api/v1/users/$alice->id/block")->assertCreated();
+        foreach ([$alice, $bob] as $viewer) {
+            $this->asUser($viewer)->getJson("/api/v1/conversations/$first->id")->assertOk()
+                ->assertJsonPath('data.recipient', null)
+                ->assertJsonPath('data.can_send', false);
+        }
+    }
+
     public function testSenderUuidDeduplicationEncryptionAndRollback(): void
     {
         $a = $this->makeUser();

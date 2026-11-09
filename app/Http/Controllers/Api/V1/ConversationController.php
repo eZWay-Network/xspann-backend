@@ -17,7 +17,8 @@ class ConversationController extends Controller
             Conversations::inboxQuery($userId),
             $request,
             fn($row) => CommunicationResource::conversation($row, $userId),
-            [Conversations::class, 'hydrate']
+            fn (array $rows): array => Conversations::hydrate($rows, $request->user()),
+            Conversations::ACTIVITY_TIME
         );
         $result['meta']['unread_count'] = Conversations::unreadCount($userId);
 
@@ -29,14 +30,14 @@ class ConversationController extends Controller
         $input = Communications::input($request, ['recipient_user_id' => ['required', 'integer', 'min:1']]);
         $row = Conversations::open($request->user('id'), (int) $input['recipient_user_id']);
 
-        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($row->id, $request->user('id')), $request->user('id'))]);
+        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($row->id, $request->user()), $request->user('id'))]);
     }
 
     public function show(Request $request, int $conversation): Response
     {
         Conversations::participant($conversation, $request->user('id'));
 
-        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($conversation, $request->user('id')), $request->user('id'))]);
+        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($conversation, $request->user()), $request->user('id'))]);
     }
 
     public function messages(Request $request, int $conversation): Response
@@ -84,7 +85,7 @@ class ConversationController extends Controller
         $input = Communications::input($request, ['last_read_message_id' => ['required', 'integer', 'min:1']]);
         $row = Conversations::read($conversation, $request->user('id'), (int) $input['last_read_message_id']);
 
-        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($row->id, $request->user('id')), $request->user('id'))]);
+        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($row->id, $request->user()), $request->user('id'))]);
     }
 
     public function preferences(Request $request, int $conversation): Response
@@ -92,6 +93,6 @@ class ConversationController extends Controller
         $input = Communications::input($request, ['muted' => ['required', 'boolean']], ['muted']);
         $row = Conversations::mute($conversation, $request->user('id'), $input['muted']);
 
-        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($row->id, $request->user('id')), $request->user('id'))]);
+        return $this->privateJson(['data' => CommunicationResource::conversation(Conversations::state($row->id, $request->user()), $request->user('id'))]);
     }
 }

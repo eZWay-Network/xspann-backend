@@ -26,7 +26,7 @@ return new class {
 
     public function up(): void
     {
-        $password = env('XPN_FIXTURE_PASSWORD');
+        $password = env('XPN_FIXTURE_PASSWORD', 'test@123456');
         if (!is_string($password) || strlen($password) < 8) {
             throw new RuntimeException('Set a dedicated XPN_FIXTURE_PASSWORD of at least 8 characters on the QA deployment before seeding.');
         }

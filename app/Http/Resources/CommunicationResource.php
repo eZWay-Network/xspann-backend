@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Services\Billing\Billing;
+use App\Services\StorageService;
 use Spark\Facades\Hash;
 
 /** Explicit representations; encrypted columns and internal consent snapshots never escape. */
@@ -28,6 +29,12 @@ class CommunicationResource
         return [
             'id' => (int) $row->id,
             'recipient_user_id' => $other,
+            'recipient' => $row->recipient ? [
+                'id' => (int) $row->recipient->id,
+                'name' => $row->recipient->name,
+                'username' => $row->recipient->username,
+                'avatar' => StorageService::publicUrl($row->recipient->avatar),
+            ] : null,
             'version' => (int) $row->version,
             'can_send' => (bool) $row->can_send,
             'last_read_message_id' => (int) $row->last_read_message_id,

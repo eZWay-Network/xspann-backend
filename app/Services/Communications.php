@@ -166,7 +166,7 @@ class Communications
     }
 
     /** Stable creation ordering; cursors are validated data, never SQL fragments. */
-    public static function page(QueryBuilder $query, Request $request, callable $map, ?callable $hydrate = null): array
+    public static function page(QueryBuilder $query, Request $request, callable $map, ?callable $hydrate = null, string $timeExpression = 'created_at'): array
     {
         $input = $request->validate([
             'limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
@@ -178,10 +178,19 @@ class Communications
             abort_unless(is_array($cursor) && count($cursor) === 2 && is_string($cursor[0] ?? null)
                 && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D', $cursor[0])
                 && is_int($cursor[1] ?? null) && $cursor[1] > 0, 422, 'Invalid cursor.');
-            $query->where(fn($q) => $q->where('created_at', '<', $cursor[0])
-                ->orWhere(fn($q) => $q->where('created_at', $cursor[0])->where('id', '<', $cursor[1])));
+            $query->whereRaw(
+                "($timeExpression < :page_before OR ($timeExpression = :page_at AND id < :page_id))",
+                ['page_before' => $cursor[0], 'page_at' => $cursor[0], 'page_id' => $cursor[1]]
+            );
         }
-        $rows = $query->orderByRaw('created_at DESC, id DESC')->limit($limit + 1)->get()->all();
+
+        $clock = 'created_at';
+        if ($timeExpression !== 'created_at') {
+            $clock = 'activity_at';
+            $query->selectSub("SELECT $timeExpression", $clock);
+        }
+
+        $rows = $query->orderBy($clock, 'DESC')->orderBy('id', 'DESC')->limit($limit + 1)->get()->all();
         $more = count($rows) > $limit;
         $rows = array_slice($rows, 0, $limit);
         $last = $rows ? end($rows) : null;
@@ -191,7 +200,7 @@ class Communications
 
         return [
             'data' => array_map($map, $rows),
-            'meta' => ['limit' => $limit, 'next_cursor' => $more ? base64_encode(json_encode([$last->created_at, (int) $last->id])) : null],
+            'meta' => ['limit' => $limit, 'next_cursor' => $more ? base64_encode(json_encode([$last->$clock, (int) $last->id])) : null],
         ];
     }
 }

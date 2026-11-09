@@ -149,7 +149,7 @@ class CommunicationLifecycleTest extends TestCase
             $this->assertTrue($small > 0 && $small <= 12);
             $this->assertSame($small, $queries);
         }
-        $rows = Conversations::hydrate(Conversations::inboxQuery($owner->id)->get()->all());
+        $rows = Conversations::hydrate(Conversations::inboxQuery($owner->id)->get()->all(), $owner);
         $drafts = Announcements::summaries(query('announcements')->where('user_id', $owner->id)->get()->all());
         $queries = 0;
         foreach ($rows as $row) {

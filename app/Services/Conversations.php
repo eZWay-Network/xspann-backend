@@ -2,12 +2,16 @@
 
 namespace App\Services;
 
-use App\Models\Notification;
+use App\Models\{Notification, User};
 use App\Services\Billing\Billing;
 use Spark\Facades\{DB, Hash};
 
 class Conversations
 {
+    // Messages are indexed by conversation and ID. Empty threads use their opening time.
+    public const ACTIVITY_TIME = 'COALESCE((SELECT recent.created_at FROM messages AS recent
+        WHERE recent.conversation_id = conversations.id ORDER BY recent.id DESC LIMIT 1), conversations.created_at)';
+
     public static function participant(int $conversationId, int $userId): object
     {
         $row = DB::table('conversation_participants')->where('conversation_id', $conversationId)->where('user_id', $userId)->first();
@@ -43,7 +47,9 @@ class Conversations
             ->whereColumn('p.conversation_id', 'conversations.id')->where('p.user_id', $viewer);
 
         return DB::table('conversations')->select('conversations.*')
-            ->whereExists($participant()->selectRaw('1'))
+            ->whereIn('conversations.id', DB::table('conversation_participants')
+                ->select('conversation_id')
+                ->where('user_id', $viewer))
             ->selectSub($participant()->select('last_read_message_id'), 'last_read_message_id')
             ->selectSub($participant()->select('muted'), 'muted')
             ->selectSub(self::permissionQuery()->whereColumn('a.id', 'conversations.low_user_id')
@@ -62,23 +68,32 @@ class Conversations
                     ->whereColumn('b.id', 'conversations.high_user_id')))->pluck('id');
     }
 
-    public static function hydrate(array $rows): array
+    public static function hydrate(array $rows, User $viewer): array
     {
         $ids = array_filter(array_map(fn($row) => $row->last_message_id, $rows));
         $messages = $ids ? DB::table('messages')->whereIn('id', $ids)->get()->keyBy('id')->all() : [];
+        $peerId = static fn (object $row): int => (int) ($row->low_user_id == $viewer->id ? $row->high_user_id : $row->low_user_id);
+        $peers = $rows ? User::visibleTo($viewer)
+            ->select('id', 'name', 'username', 'avatar')
+            ->whereIn('id', array_map($peerId, $rows))
+            ->get()
+            ->keyBy('id')
+            ->all() : [];
+
         foreach ($rows as $row) {
+            $row->recipient = $peers[$peerId($row)] ?? null;
             $row->last_message = $messages[$row->last_message_id] ?? null;
         }
 
         return $rows;
     }
 
-    public static function state(int $id, int $viewer): object
+    public static function state(int $id, User $viewer): object
     {
-        $row = self::inboxQuery($viewer)->where('id', $id)->first();
+        $row = self::inboxQuery($viewer->id)->where('id', $id)->first();
         abort_unless($row !== null, 404, 'Conversation not found.');
 
-        return self::hydrate([$row])[0];
+        return self::hydrate([$row], $viewer)[0];
     }
 
     public static function open(int $userId, int $recipient): object

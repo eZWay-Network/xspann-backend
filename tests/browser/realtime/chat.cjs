@@ -73,7 +73,16 @@ async function run() {
     page.on("request", (req) =>
       requests.push(req.method() + " " + new URL(req.url()).pathname),
     );
-    await page.goto(web + "/inbox/1", { timeout: 60000 });
+    await page.goto(web + "/inbox", { timeout: 60000 });
+    const search = page.getByRole("searchbox");
+    await search.fill("@alice");
+    const row = page.getByRole("link", { name: /Alice/ });
+    await row.waitFor();
+    await row.locator("img").evaluate((image) => image.decode());
+    assert.equal(await page.getByRole("link", { name: /Carol/ }).count(), 0);
+    await row.click();
+    await page.getByRole("heading", { name: "Alice", exact: true }).waitFor();
+    await page.locator("header").filter({ has: page.getByRole("heading", { name: "Alice" }) }).locator("img").evaluate((image) => image.decode());
     await page.getByText("Live messaging", { exact: true }).waitFor();
     assert.ok(registrationAttempts >= 2);
     await page.waitForLoadState("networkidle");

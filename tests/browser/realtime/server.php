@@ -43,6 +43,8 @@ final class RealtimeJourneyServer extends Tests\TestCase
             foreach (['alice', 'bob', 'carol'] as $name) {
                 $users[] = $this->makeUser($name);
             }
+            // A same-origin fixture image lets Chrome verify the avatar actually decoded.
+            $users[0]->update(['avatar' => $web . '/images/xpn-logo.png']);
             foreach ([[0, 1], [1, 2], [0, 2]] as [$a, $b]) {
                 $this->mutual($users[$a], $users[$b]);
                 Conversations::open($users[$a]->id, $users[$b]->id);
