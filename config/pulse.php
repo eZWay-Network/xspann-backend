@@ -14,10 +14,7 @@ return [
     ],
 
     'storage' => [
-        // TinyCore emits query telemetry before reading the business insert ID.
-        'driver' => env('PULSE_DB_CONNECTION') && env('PULSE_DB_CONNECTION') !== env('DB_CONNECTION', 'sqlite')
-            ? env('PULSE_STORAGE_DRIVER', 'memory')
-            : 'memory',
+        'driver' => env('PULSE_STORAGE_DRIVER', 'database'),
         'table' => 'pulse_entries',
         'connection' => env('PULSE_DB_CONNECTION', null),
         'prune_hours' => 24,
