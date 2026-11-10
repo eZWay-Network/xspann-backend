@@ -145,7 +145,7 @@ return new class {
                 }
 
                 $posted = $now->copy()->subHours((self::VOLUMES * count(self::PLAYLISTS) - $index) * 8)->toDateTimeString();
-                $playlistId = DB::table('artist_playlists')->insert([
+                DB::table('artist_playlists')->insert([
                     'artist_id' => $artist->id,
                     'title' => "{$series}, Vol. {$volume}",
                     'category' => $category,
@@ -153,6 +153,16 @@ return new class {
                     'created_at' => $posted,
                     'updated_at' => $posted,
                 ]);
+
+                // A query listener can write to the same connection before insert() returns.
+                $playlistId = DB::table('artist_playlists')
+                    ->where('artist_id', $artist->id)
+                    ->where('description', $description)
+                    ->value('id');
+
+                if ($playlistId === null) {
+                    throw new RuntimeException("Could not find the seeded playlist: {$description}");
+                }
 
                 // The latest artist selection spans several pages of tracks.
                 $size = $volume === self::VOLUMES && $category === 'other' ? count($videoIds) : 5 + $index % 8;
