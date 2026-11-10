@@ -76,11 +76,13 @@ class Communications
     public static function subscription(int $userId, int $artistId): array
     {
         $row = DB::table('artist_update_subscriptions')->where('artist_id', $artistId)->where('user_id', $userId)->first();
+        $version = config('communications.consent_version');
 
         return [
             'subscribed' => (bool) ($row?->subscribed ?? false),
             'consent_version' => $row?->consent_version,
-            'current_consent_version' => config('communications.consent_version'),
+            'current_consent_version' => $version,
+            'wording' => config("communications.consent_wording.$version"),
             'revision' => (int) ($row?->revision ?? 0),
             'channel' => 'in_app',
             'artist_updates_enabled' => self::preferences($userId)['artist_updates_enabled'],

@@ -16,7 +16,10 @@ class AnnouncementApiTest extends TestCase
         [$owner, $artist] = $this->paidArtist();
         $fan = $this->makeUser('fan');
         $this->mutual($owner, $fan);
-        $this->asUser($fan)->getJson("/api/v1/artists/$artist->id/update-subscription")->assertOk()->assertJsonPath('data.subscribed', false);
+        $this->asUser($fan)->getJson("/api/v1/artists/$artist->id/update-subscription")
+            ->assertOk()
+            ->assertJsonPath('data.subscribed', false)
+            ->assertJsonPath('data.wording', 'Receive updates from this artist');
         $this->putJson("/api/v1/artists/$artist->id/update-subscription", ['subscribed' => true])->assertStatus(422);
         $this->putJson("/api/v1/artists/$artist->id/update-subscription", ['subscribed' => true, 'consent_version' => 'old'])->assertStatus(422);
         $this->putJson("/api/v1/artists/$artist->id/update-subscription", ['subscribed' => true, 'consent_version' => config('communications.consent_version')])->assertOk()->assertJsonPath('data.revision', 1);
@@ -160,10 +163,23 @@ class AnnouncementApiTest extends TestCase
         $users = [];
         $subscriptions = [];
         for ($i = 1; $i <= 1001; $i++) {
-            $users[] = ['id' => $i + 100, 'username' => 'audience' . $i, 'email' => 'audience' . $i . '@example.test',
-                'email_verified_at' => now(), 'onboarded_at' => now(), 'created_at' => now(), 'updated_at' => now()];
-            $subscriptions[] = ['user_id' => $i + 100, 'artist_id' => $artist->id, 'subscribed' => true,
-                'consent_version' => config('communications.consent_version'), 'revision' => 1, 'updated_at' => Billing::timestamp()];
+            $users[] = [
+                'id' => $i + 100,
+                'username' => 'audience' . $i,
+                'email' => 'audience' . $i . '@example.test',
+                'email_verified_at' => now(),
+                'onboarded_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now()
+            ];
+            $subscriptions[] = [
+                'user_id' => $i + 100,
+                'artist_id' => $artist->id,
+                'subscribed' => true,
+                'consent_version' => config('communications.consent_version'),
+                'revision' => 1,
+                'updated_at' => Billing::timestamp()
+            ];
         }
         foreach (array_chunk($users, 100) as $chunk) {
             query('users')->insert($chunk);
