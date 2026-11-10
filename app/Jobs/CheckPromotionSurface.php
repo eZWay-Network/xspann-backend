@@ -33,7 +33,7 @@ class CheckPromotionSurface implements JobInterface
                     'surface' => $surface,
                     'platform' => $platform,
                 ]);
-            $payload = $placements->json();
+            $payload = json_decode($placements->body());
             if (
                 $placements->status() !== 200 || !is_array($payload->data ?? null)
                 || ($payload->meta->surface ?? null) !== $surface || ($payload->meta->platform ?? null) !== $platform

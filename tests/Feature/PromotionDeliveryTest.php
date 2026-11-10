@@ -27,7 +27,6 @@ class PromotionDeliveryTest extends TestCase
             'ends_at' => Billing::timestamp($end),
         ]);
         foreach (Availability::PLATFORMS as $platform) {
-            Availability::setEnabled($platform, true);
             $row = Availability::record(['platform' => $platform, 'available' => true, 'reference' => 'checked-api', 'note' => 'Check fixture']);
             query('promotion_availability')->where('id', $row->id)->update([
                 'starts_at' => Billing::timestamp($start),

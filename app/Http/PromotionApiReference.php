@@ -27,9 +27,9 @@ class PromotionApiReference
             'id' => config('promotions.offer_id'),
             'surface' => config('promotions.surface'),
             'enabled' => false,
-            'configured' => false,
+            'configured' => true,
             'platforms' => ['web', 'android', 'ios'],
-            'enabled_platforms' => [],
+            'enabled_platforms' => ['web', 'android', 'ios'],
             'price_cents' => 500,
             'currency' => 'usd',
             'duration_seconds' => 86400,
@@ -90,7 +90,7 @@ class PromotionApiReference
         ];
         $write = ['video_id' => 1, 'offer_id' => $offer['id'], 'starts_at' => $date, 'rights_confirmed' => true, 'rights_version' => $offer['rights_version']];
         $version = ['version' => ['required', 'integer', 'min:1']];
-        $add('PromotionController@offers', 'Promotion rate card and readiness', 'Bookings are disabled by default. Exposes fixed cents, duration, capacity, surface, advertising declaration version and remedy terms. Readiness requires at least one enabled platform with fresh evidence. Pro credit never expires; no cash withdrawal, transfers or top-ups.', [$offer]);
+        $add('PromotionController@offers', 'Promotion rate card and readiness', 'Bookings open after the worker verifies Discover. Exposes fixed cents, duration, capacity, surface, advertising declaration version and remedy terms. Readiness requires at least one enabled platform with fresh evidence. Pro credit never expires; no cash withdrawal, transfers or top-ups.', [$offer]);
         $add('PromotionController@placements', 'Sponsored Discover videos', 'Specify the shared Discover surface and exactly one platform. At most five active campaigns, equal minute rotation, Sponsored label and sponsor identity. Rechecks current content/account/artist/rights/billing/block eligibility and durable invalidations. No request counts as delivery. Cache-Control: no-store. Signed event tokens expire within five minutes and are bound to platform, viewer, campaign version and environment.', [
             [
                 'boost_id' => 1,

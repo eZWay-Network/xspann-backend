@@ -9,7 +9,7 @@ final class ObservationRequest extends StaffRequest
     public function rules(): array
     {
         return [
-            'platform' => ['required', 'string', 'in:web,android,ios,shared,legacy-web'],
+            'platform' => ['required', 'string', 'in:web,android,ios,shared'],
             'available' => ['required', 'boolean'],
             'reference' => ['required', 'string', 'max:200'],
             'note' => ['required', 'string', 'max:1000'],

@@ -272,7 +272,6 @@ class PromotionAuditTest extends TestCase
         $staff = $this->promotionStaff();
         $boost = $this->activateBoost($owner, $staff);
         $this->app->mergeConfig(['promotions' => ['surface' => 'replacement_surface']]);
-        Availability::setEnabled('web', true);
         Availability::record(['platform' => 'web', 'available' => true, 'reference' => 'replacement-observation', 'note' => 'A different surface.']);
         $this->assertSame([], Delivery::placements(null));
         Promotion::transaction(fn() => Boosts::tick($boost->id));

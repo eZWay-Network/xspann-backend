@@ -73,25 +73,6 @@ class PromotionApiTest extends TestCase
         $this->postJson("/api/v1/me/artist/boosts/$id/submit", ['version' => 1], ['Idempotency-Key' => 'submit-first'])->assertStatus(202)->assertJsonPath('data', $first);
     }
 
-    public function testLegacyDraftRequiresAcceptingDiscoverTermsBeforeSubmission(): void
-    {
-        [$owner] = $this->paidArtist();
-        $this->promotionSetup();
-        $input = $this->boostInput($this->makeVideo($owner)->id);
-        $draft = Boosts::create($owner, $input);
-        query('promotion_boosts')->where('id', $draft->id)->update([
-            'offer_id' => 'boost-24h-usd-500-v1',
-            'surface' => 'web_promoted_videos',
-            'rights_version' => 'advertising-2026-10-31',
-        ]);
-        $this->postJson("/api/v1/me/artist/boosts/$draft->id/submit", ['version' => 1], ['Idempotency-Key' => 'legacy-draft'])->assertStatus(422);
-        $this->assertDatabaseCount('promotion_slots', 0);
-        $accepted = Boosts::edit($owner, $draft->id, [...$input, 'version' => 1]);
-        $this->assertSame('discover_promoted_videos', $accepted->surface);
-        Boosts::submit($owner, $draft->id, $accepted->version, 'accepted-discover');
-        $this->assertSame(500, Credits::balance($owner->id)['reserved_cents']);
-    }
-
     public function testCreativeAllowlistRightsAndDatesAreEnforced(): void
     {
         [$owner] = $this->paidArtist();
@@ -150,7 +131,6 @@ class PromotionApiTest extends TestCase
             $this->getJson($path . $invalid)->assertStatus(422);
         }
         foreach (Availability::PLATFORMS as $platform) {
-            Availability::setEnabled($platform, true);
             Availability::record(['platform' => $platform, 'available' => true, 'reference' => 'client-smoke', 'note' => 'Verified Discover']);
             $response = $this->getJson($path . '&platform=' . $platform)->assertOk()
                 ->assertHeader('Cache-Control', 'private, no-store')

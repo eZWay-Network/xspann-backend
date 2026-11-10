@@ -161,12 +161,12 @@ command('promotions:platform', function (Prompt $prompt, array $args): void {
 
 command('promotions:surface', function (Prompt $prompt, array $args): void {
     if (
-        !in_array($args['platform'] ?? null, [...Availability::PLATFORMS, 'shared', 'legacy-web'], true)
+        !in_array($args['platform'] ?? null, [...Availability::PLATFORMS, 'shared'], true)
         || !in_array($args['available'] ?? null, ['0', '1'], true)
         || !is_string($args['reference'] ?? null) || strlen($args['reference']) < 8 || strlen($args['reference']) > 200
         || !is_string($args['note'] ?? null) || strlen(trim($args['note'])) < 8 || strlen($args['note']) > 1000
     ) {
-        throw new InvalidArgumentException('Use --platform=web|android|ios|shared|legacy-web --available=0|1 --reference=<unique-observation> --note=<verification or incident details>.');
+        throw new InvalidArgumentException('Use --platform=web|android|ios|shared --available=0|1 --reference=<unique-observation> --note=<verification or incident details>.');
     }
     $input = ['platform' => $args['platform'], 'available' => $args['available'] === '1', 'reference' => $args['reference'], 'note' => $args['note']];
     foreach (['starts_at', 'ends_at'] as $key) {

@@ -91,10 +91,7 @@ function Observation({ url }: { url: string }) {
             { value: "android", label: "Android" },
             { value: "ios", label: "iOS" },
             ...(!form.data.available
-              ? [
-                  { value: "shared", label: "Shared outage (all clients)" },
-                  { value: "legacy-web", label: "Legacy web offer outage" },
-                ]
+              ? [{ value: "shared", label: "Shared outage (all clients)" }]
               : []),
           ]}
           onValueChange={(value) => form.setData("platform", value)}
@@ -113,8 +110,7 @@ function Observation({ url }: { url: string }) {
               ...form.data,
               available: value === "yes",
               platform:
-                value === "yes" &&
-                ["shared", "legacy-web"].includes(form.data.platform)
+                value === "yes" && form.data.platform === "shared"
                   ? "web"
                   : form.data.platform,
             })

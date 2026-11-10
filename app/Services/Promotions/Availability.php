@@ -15,11 +15,12 @@ class Availability
 
     public static function enabledPlatforms(): array
     {
-        return Promotion::table('platforms')
+        $disabled = Promotion::table('platforms')
             ->where('surface', config('promotions.surface'))
-            ->where('enabled', true)
-            ->whereIn('platform', self::PLATFORMS)
-            ->orderBy('id')->pluck('platform');
+            ->where('enabled', false)
+            ->pluck('platform');
+
+        return array_values(array_diff(self::PLATFORMS, $disabled));
     }
 
     public static function setEnabled(string $platform, bool $enabled): void
@@ -29,7 +30,7 @@ class Availability
         Promotion::transaction(function () use ($platform, $enabled): void {
             $surface = config('promotions.surface');
             $switch = Promotion::table('platforms')->where('surface', $surface)->where('platform', $platform)->first();
-            if ((bool) ($switch->enabled ?? false) === $enabled) {
+            if ((bool) ($switch->enabled ?? true) === $enabled) {
                 return;
             }
 
@@ -100,13 +101,9 @@ class Availability
     {
         return Promotion::transaction(function () use ($input, $actor): object {
             $platform = $input['platform'] ?? null;
-            abort_unless(in_array($platform, [...self::PLATFORMS, 'shared', 'legacy-web'], true), 422, 'Choose a platform or an outage scope.');
+            abort_unless(in_array($platform, [...self::PLATFORMS, 'shared'], true), 422, 'Choose a platform or an outage scope.');
             $inventory = config('promotions.surface');
-            $surface = match ($platform) {
-                'shared' => $inventory,
-                'legacy-web' => 'web_promoted_videos',
-                default => $inventory . '.' . $platform,
-            };
+            $surface = $platform === 'shared' ? $inventory : $inventory . '.' . $platform;
             $hash = Promotion::hash($input);
             $old = Promotion::table('availability')->where('surface', $surface)->where('reference', $input['reference'])->first();
             if ($old) {
@@ -263,7 +260,6 @@ class Availability
     public static function incidentLoss(string $surface, string $environment, string $start, string $end): array
     {
         $incidents = self::evidence($surface, $environment, $start, $end, incidentsOnly: true);
-        // This is also the complete outage set for the historical, unscoped v1 web surface.
         $shared = $incidents[$surface][0] ?? [];
         $scoped = [];
         foreach (self::PLATFORMS as $platform) {

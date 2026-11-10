@@ -103,7 +103,8 @@ class PromotionConcurrencyTest extends TestCase
     public function testSharedProbeRecoversFromExpiredEvidenceAndRequiresTheRealQuery(): void
     {
         $this->promotionSetup();
-        Availability::setEnabled('android', true);
+        $this->assertDatabaseCount('promotion_platforms', 0);
+        $this->assertSame(['web', 'android', 'ios'], Availability::enabledPlatforms());
         $server = $this->startServer();
         $this->app->mergeConfig(['app' => ['url' => $server->url]]);
         $path = '/api/v1/promotions/placements?surface=discover_promoted_videos&platform=web';
@@ -125,8 +126,8 @@ class PromotionConcurrencyTest extends TestCase
         $probe->handle();
         $this->assertTrue(Availability::offer()['enabled']);
         $this->assertTrue(Availability::healthy('android'));
-        $this->assertFalse(Availability::healthy('ios'));
-        $this->assertDatabaseCount('promotion_availability', 3);
+        $this->assertTrue(Availability::healthy('ios'));
+        $this->assertDatabaseCount('promotion_availability', 4);
     }
 
     public function testTwoCampaignsCannotSpendTheSameCredit(): void
