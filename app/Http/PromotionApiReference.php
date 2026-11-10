@@ -12,39 +12,112 @@ class PromotionApiReference
         $add = function (string $action, string $title, string $description, mixed $response, array $rules = [], array $example = [], string $status = '200', bool $cursor = false) use (&$result): void {
             $group = 'Promotions and placements';
             $limit = null;
-            $errors = ['409' => 'Stale version, conflicting idempotency/evidence, insufficient credit or inventory, or invalid state transition.',
-                '422' => 'Invalid input. Unknown write fields and loose booleans are rejected.', '503' => 'The actual web surface, fresh availability evidence or operator capacity is not configured.'];
+            $errors = [
+                '409' => 'Stale version, conflicting idempotency/evidence, insufficient credit or inventory, or invalid state transition.',
+                '422' => 'Invalid input. Unknown write fields and loose booleans are rejected.',
+                '503' => 'Discover bookings are closed, capacity is unavailable or all enabled platforms lack fresh evidence.'
+            ];
             if ($cursor) {
                 $rules += ['limit' => ['sometimes', 'integer', 'min:1', 'max:50'], 'cursor' => ['sometimes', 'string', 'max:200']];
             }
             $result[$action] = compact('group', 'title', 'description', 'response', 'rules', 'example', 'status', 'cursor', 'limit', 'errors');
         };
         $date = '2026-11-02T12:00:00Z';
-        $offer = ['id' => config('promotions.offer_id'), 'surface' => config('promotions.surface'), 'enabled' => false, 'configured' => false,
-            'price_cents' => 500, 'currency' => 'usd', 'duration_seconds' => 86400, 'capacity' => 5,
-            'rights_version' => config('promotions.rights_version'), 'disclosure' => 'Sponsored',
-            'terms' => 'A 24-hour rotation slot; no guaranteed audience. Unused time returns ceil(500 × undelivered_seconds / 86400) credit cents. Extensions require explicit owner consent.'];
-        $report = ['reserved_cents' => 0, 'charged_cents' => 0, 'returned_cents' => 0, 'delivered_seconds' => 0,
-            'undelivered_seconds' => 86400, 'render_events' => 0, 'click_events' => 0, 'telemetry_is_billable' => false];
-        $boost = ['id' => 1, 'artist_id' => 1, 'video_id' => 1, 'offer_id' => $offer['id'], 'surface' => $offer['surface'],
-            'status' => 'draft', 'version' => 1, 'price_cents' => 500, 'currency' => 'usd', 'duration_seconds' => 86400,
-            'starts_at' => $date, 'ends_at' => '2026-11-03T12:00:00Z', 'activated_at' => null,
-            'rights_version' => $offer['rights_version'], 'rights_confirmed_at' => $date, 'staff_hold' => false, 'stop_reason' => null,
-            'settle_after' => null, 'settled_at' => null, 'report' => $report, 'created_at' => $date];
-        $placement = ['id' => 1, 'artist_id' => 1, 'boost_id' => null, 'type' => 'feature', 'month' => '2026-11',
-            'destination' => 'web_featured_artists', 'status' => 'planned', 'version' => 1, 'starts_at' => null, 'ends_at' => null,
-            'due_at' => '2026-12-01T00:00:00Z', 'reason' => 'Pilot capacity confirmed.',
-            'extension' => ['starts_at' => null, 'ends_at' => null, 'consent' => null, 'consented_at' => null], 'evidence' => null, 'created_at' => $date];
+        $offer = [
+            'id' => config('promotions.offer_id'),
+            'surface' => config('promotions.surface'),
+            'enabled' => false,
+            'configured' => false,
+            'platforms' => ['web', 'android', 'ios'],
+            'enabled_platforms' => [],
+            'price_cents' => 500,
+            'currency' => 'usd',
+            'duration_seconds' => 86400,
+            'capacity' => 5,
+            'rights_version' => config('promotions.rights_version'),
+            'disclosure' => 'Sponsored',
+            'terms' => \App\Services\Promotions\Availability::TERMS
+        ];
+        $report = [
+            'reserved_cents' => 0,
+            'charged_cents' => 0,
+            'returned_cents' => 0,
+            'delivered_seconds' => 0,
+            'undelivered_seconds' => 86400,
+            'render_events' => 0,
+            'click_events' => 0,
+            'telemetry_is_billable' => false
+        ];
+        $boost = [
+            'id' => 1,
+            'artist_id' => 1,
+            'video_id' => 1,
+            'offer_id' => $offer['id'],
+            'surface' => $offer['surface'],
+            'status' => 'draft',
+            'version' => 1,
+            'price_cents' => 500,
+            'currency' => 'usd',
+            'duration_seconds' => 86400,
+            'starts_at' => $date,
+            'ends_at' => '2026-11-03T12:00:00Z',
+            'activated_at' => null,
+            'rights_version' => $offer['rights_version'],
+            'rights_confirmed_at' => $date,
+            'staff_hold' => false,
+            'stop_reason' => null,
+            'settle_after' => null,
+            'settled_at' => null,
+            'report' => $report,
+            'created_at' => $date
+        ];
+        $placement = [
+            'id' => 1,
+            'artist_id' => 1,
+            'boost_id' => null,
+            'type' => 'feature',
+            'month' => '2026-11',
+            'destination' => 'web_featured_artists',
+            'status' => 'planned',
+            'version' => 1,
+            'starts_at' => null,
+            'ends_at' => null,
+            'due_at' => '2026-12-01T00:00:00Z',
+            'reason' => 'Pilot capacity confirmed.',
+            'extension' => ['starts_at' => null, 'ends_at' => null, 'consent' => null, 'consented_at' => null],
+            'evidence' => null,
+            'created_at' => $date
+        ];
         $write = ['video_id' => 1, 'offer_id' => $offer['id'], 'starts_at' => $date, 'rights_confirmed' => true, 'rights_version' => $offer['rights_version']];
         $version = ['version' => ['required', 'integer', 'min:1']];
-        $add('PromotionController@offers', 'Promotion rate card and readiness', 'Bookings are disabled by default. Exposes fixed cents, duration, capacity, surface, advertising declaration version and remedy terms. Availability requires verified web integration and a current trusted observation. Pro credit never expires; no cash withdrawal, transfers or top-ups.', [$offer]);
-        $add('PromotionController@placements', 'Promoted web videos', 'Explicit integration surface only; organic/native feeds are unchanged. At most five active campaigns, equal minute rotation, Sponsored label and sponsor identity. Rechecks current content/account/artist/rights/billing/block eligibility and durable invalidations. No request counts as delivery. Cache-Control: no-store. Signed event tokens expire within five minutes and are bound to viewer, campaign version and environment.', [['boost_id' => 1, 'surface' => $offer['surface'], 'disclosure' => 'Sponsored',
-            'sponsor' => ['artist_id' => 1, 'user_id' => 1, 'name' => 'Artist', 'slug' => 'artist'], 'video' => '$Video', 'expires_at' => $date, 'event_token' => '<signed-token>']], ['surface' => ['required', 'string', 'in:web_promoted_videos']]);
-        $add('PromotionController@event', 'Record informational render or click', 'Issued token and event UUID required. Exact replay is harmless; changed UUID payload conflicts. At most one event per token/type. Expired/withdrawn token returns 410. Counts are retained for 30 days, are not verified views and never settle credit.', ['accepted' => true, 'duplicate' => false, 'billable' => false],
+        $add('PromotionController@offers', 'Promotion rate card and readiness', 'Bookings are disabled by default. Exposes fixed cents, duration, capacity, surface, advertising declaration version and remedy terms. Readiness requires at least one enabled platform with fresh evidence. Pro credit never expires; no cash withdrawal, transfers or top-ups.', [$offer]);
+        $add('PromotionController@placements', 'Sponsored Discover videos', 'Specify the shared Discover surface and exactly one platform. At most five active campaigns, equal minute rotation, Sponsored label and sponsor identity. Rechecks current content/account/artist/rights/billing/block eligibility and durable invalidations. No request counts as delivery. Cache-Control: no-store. Signed event tokens expire within five minutes and are bound to platform, viewer, campaign version and environment.', [
+            [
+                'boost_id' => 1,
+                'surface' => $offer['surface'],
+                'disclosure' => 'Sponsored',
+                'sponsor' => ['artist_id' => 1, 'user_id' => 1, 'name' => 'Artist', 'slug' => 'artist'],
+                'video' => '$Video',
+                'expires_at' => $date,
+                'token_expires_at' => $date,
+                'event_token' => '<signed-token>'
+            ]
+        ], ['surface' => ['required', 'string', 'in:discover_promoted_videos'], 'platform' => ['required', 'string', 'in:web,android,ios']]);
+        $add(
+            'PromotionController@event',
+            'Record informational render or click',
+            'Issued token and event UUID required. Exact replay is harmless; changed UUID payload conflicts. At most one event per token/type. Expired/withdrawn token returns 410. Counts are retained for 30 days, are not verified views and never settle credit.',
+            ['accepted' => true, 'duplicate' => false, 'billable' => false],
             ['token' => ['required', 'string', 'max:4096'], 'event_id' => ['required', 'string', 'max:36'], 'type' => ['required', 'string', 'in:render,click']],
-            ['token' => '<returned-token>', 'event_id' => '87f2a202-f410-41b1-9c4b-2fbe0f8bc222', 'type' => 'render']);
-        $add('PromotionController@featured', 'Active complimentary artist features', 'Separate operator placements, not organic ranking, identity verification or an automatic Pro entitlement. Current account/block/artist eligibility applies. Includes dates and complimentary disclosure.',
-            ['id' => 1, 'artist' => ['id' => 1, 'name' => 'Artist', 'slug' => 'artist'], 'disclosure' => 'Complimentary pilot feature', 'starts_at' => $date, 'ends_at' => '2026-11-09T12:00:00Z'], cursor: true);
+            ['token' => '<returned-token>', 'event_id' => '87f2a202-f410-41b1-9c4b-2fbe0f8bc222', 'type' => 'render']
+        );
+        $add(
+            'PromotionController@featured',
+            'Active complimentary artist features',
+            'Separate operator placements, not organic ranking, identity verification or an automatic Pro entitlement. Current account/block/artist eligibility applies. Includes dates and complimentary disclosure.',
+            ['id' => 1, 'artist' => ['id' => 1, 'name' => 'Artist', 'slug' => 'artist'], 'disclosure' => 'Complimentary pilot feature', 'starts_at' => $date, 'ends_at' => '2026-11-09T12:00:00Z'],
+            cursor: true
+        );
         $add('PromotionController@balance', 'Own boost credit balance', 'Reconciles historical and new verified Pro paid periods once each. Integer cents; available/reserved/net used and held credit. Normal cancellation/downgrade preserves undisputed credit. Refund revocations and unresolved disputes are enforced independently of current plan.', ['available_cents' => 500, 'reserved_cents' => 0, 'used_cents' => 0, 'held_cents' => 0, 'currency' => 'usd', 'spending_held' => false]);
         $add('PromotionController@ledger', 'Own immutable credit ledger', 'Stable created_at/id descending cursor, default 20/max 50. Signed deltas for grant, reservation, debit, release, reversal and revocation. No payment provider identifiers or private contacts.', ['id' => 1, 'boost_id' => null, 'kind' => 'grant', 'available_delta_cents' => 500, 'reserved_delta_cents' => 0, 'used_delta_cents' => 0, 'currency' => 'usd', 'created_at' => $date], cursor: true);
         $add('PromotionController@index', 'Own campaigns', 'Available after downgrade. Stable created_at/id cursor. Delivery report derives from trusted availability and incidents, not elapsed wall time or response fetches.', $boost, cursor: true);

@@ -2,13 +2,20 @@
 
 namespace App\Http\Requests\Staff;
 
+use function is_bool;
+
 final class ObservationRequest extends StaffRequest
 {
     public function rules(): array
     {
-        return ['available' => ['required', 'boolean'], 'reference' => ['required', 'string', 'max:200'],
-            'note' => ['required', 'string', 'max:1000'], 'starts_at' => ['sometimes', 'required', 'string', 'max:40'],
-            'ends_at' => ['sometimes', 'required', 'string', 'max:40']];
+        return [
+            'platform' => ['required', 'string', 'in:web,android,ios,shared,legacy-web'],
+            'available' => ['required', 'boolean'],
+            'reference' => ['required', 'string', 'max:200'],
+            'note' => ['required', 'string', 'max:1000'],
+            'starts_at' => ['sometimes', 'required', 'string', 'max:40'],
+            'ends_at' => ['sometimes', 'required', 'string', 'max:40']
+        ];
     }
     public function passedValidation(): void
     {

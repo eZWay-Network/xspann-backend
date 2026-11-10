@@ -2,7 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Services\Promotions\{Boosts, Credits};
+use App\Jobs\CheckPromotionSurface;
+use App\Services\Promotions\{Availability, Boosts, Credits};
 use Spark\Foundation\Application;
 use Tests\Support\{PromotionFixtures, HttpServer};
 use Tests\TestCase;
@@ -19,8 +20,7 @@ class PromotionConcurrencyTest extends TestCase
         return $app;
     }
 
-    /** Two independent PHP servers contend for the same populated test database. */
-    private function contend(string|array $method, string|array $path, array $inputs, array $tokens, ?array $keys = null): array
+    private function startServer(): HttpServer
     {
         $config = [];
         foreach (['app', 'auth', 'database', 'session', 'cache', 'queue', 'storage', 'cors', 'policies', 'artists', 'billing', 'promotions', 'communications', 'relay', 'testing'] as $key) {
@@ -28,6 +28,12 @@ class PromotionConcurrencyTest extends TestCase
         }
         $file = $this->storagePath . '/concurrent-config.json';
         file_put_contents($file, json_encode($config, JSON_THROW_ON_ERROR));
+        return new HttpServer(dirname(__DIR__) . '/Fixtures/http-router.php', $this->storagePath, ['XSPANN_HTTP_TEST_CONFIG' => $file]);
+    }
+
+    /** Two independent PHP servers contend for the same populated test database. */
+    private function contend(string|array $method, string|array $path, array $inputs, array $tokens, ?array $keys = null): array
+    {
         $servers = [];
         $handles = [];
         $multi = curl_multi_init();
@@ -39,7 +45,7 @@ class PromotionConcurrencyTest extends TestCase
 
         try {
             for ($index = 0; $index < 2; $index++) {
-                $servers[$index] = new HttpServer(dirname(__DIR__) . '/Fixtures/http-router.php', $this->storagePath, ['XSPANN_HTTP_TEST_CONFIG' => $file]);
+                $servers[$index] = $this->startServer();
                 $handles[$index] = curl_init($servers[$index]->url . '/api/v1' . (is_array($path) ? $path[$index] : $path));
                 curl_setopt_array($handles[$index], [
                     CURLOPT_CUSTOMREQUEST => is_array($method) ? $method[$index] : $method,
@@ -93,6 +99,35 @@ class PromotionConcurrencyTest extends TestCase
     }
 
 
+
+    public function testSharedProbeRecoversFromExpiredEvidenceAndRequiresTheRealQuery(): void
+    {
+        $this->promotionSetup();
+        Availability::setEnabled('android', true);
+        $server = $this->startServer();
+        $this->app->mergeConfig(['app' => ['url' => $server->url]]);
+        $path = '/api/v1/promotions/placements?surface=discover_promoted_videos&platform=web';
+        $json = ['Accept' => 'application/json'];
+        $server->request('GET', $path . '&platform=ios', headers: $json)->assertStatus(422);
+        $server->request('GET', $path, headers: $json)->assertOk()->assertJsonPath('data', []);
+
+        query('promotion_availability')->where('available', true)->update(['ends_at' => gmdate('Y-m-d H:i:s', time() - 1)]);
+        $this->assertFalse(Availability::offer()['enabled']);
+        $probe = new CheckPromotionSurface();
+        db()->statement('ALTER TABLE promotion_slots RENAME TO missing_promotion_slots');
+        try {
+            $server->request('GET', $path, headers: $json)->assertStatus(500);
+            $probe->handle();
+            $this->assertDatabaseCount('promotion_availability', 1);
+        } finally {
+            db()->statement('ALTER TABLE missing_promotion_slots RENAME TO promotion_slots');
+        }
+        $probe->handle();
+        $this->assertTrue(Availability::offer()['enabled']);
+        $this->assertTrue(Availability::healthy('android'));
+        $this->assertFalse(Availability::healthy('ios'));
+        $this->assertDatabaseCount('promotion_availability', 3);
+    }
 
     public function testTwoCampaignsCannotSpendTheSameCredit(): void
     {

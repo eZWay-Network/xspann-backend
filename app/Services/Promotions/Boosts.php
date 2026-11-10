@@ -32,9 +32,6 @@ class Boosts
                 'user_id' => $user->id,
                 'artist_id' => $artist->id,
                 'environment' => config('billing.environment'),
-                'surface' => config('promotions.surface'),
-                'price_cents' => config('promotions.price_cents'),
-                'duration_seconds' => config('promotions.duration_seconds'),
                 'created_at' => Billing::timestamp(),
                 'updated_at' => Billing::timestamp(),
             ]);
@@ -57,6 +54,9 @@ class Boosts
             'eligibility_revision' => Invalidations::revision(),
             'video_id' => (int) $input['video_id'],
             'offer_id' => $input['offer_id'],
+            'surface' => config('promotions.surface'),
+            'price_cents' => config('promotions.price_cents'),
+            'duration_seconds' => config('promotions.duration_seconds'),
             'starts_at' => $start,
             'ends_at' => Billing::timestamp(Promotion::seconds($start) + (int) config('promotions.duration_seconds')),
             'rights_version' => $input['rights_version'],
@@ -85,10 +85,10 @@ class Boosts
             Promotion::version($boost, $version);
             abort_unless($boost->status === 'draft', 409, 'Only a draft can be submitted.');
             Promotion::owner($user);
-            abort_unless(Availability::healthy(), 503, 'Bookings are disabled until the web surface has current availability evidence.');
+            abort_unless(Availability::configured() && Availability::healthy(), 503, 'Discover bookings require an open offer and a verified platform.');
             abort_unless(!Invalidations::cutoff($boost) && Promotion::creative($boost->artist_id, $boost->video_id) && $boost->rights_version === config('promotions.rights_version'), 422, 'Creative or advertising rights are no longer eligible.');
             abort_unless($boost->offer_id === config('promotions.offer_id') && (int) $boost->price_cents === (int) config('promotions.price_cents')
-                && (int) $boost->duration_seconds === (int) config('promotions.duration_seconds'), 409, 'The offer changed. Create a draft using the current offer.');
+                && (int) $boost->duration_seconds === (int) config('promotions.duration_seconds'), 409, 'The offer changed. Edit the draft and accept the current offer.');
             Promotion::future($boost->starts_at);
             Credits::reserve($boost);
             Promotion::reserveSlot($boost, $boost->starts_at, $boost->ends_at);
@@ -184,7 +184,7 @@ class Boosts
             $eligible = $inventory && !$cutoff && Promotion::creative($boost->artist_id, $boost->video_id)
                 && Credits::funded($boost) && $boost->rights_version === config('promotions.rights_version');
             if (!$eligible) {
-                if ($inventory && $cutoff && $boost->status === 'active' && Availability::configured()) {
+                if ($inventory && $cutoff && $boost->status === 'active') {
                     Availability::accrue($boost, min($now, $cutoff));
                 }
                 self::stop($boost, 'interrupted', 'eligibility_changed');
@@ -210,9 +210,7 @@ class Boosts
                 $boost = self::find($id);
             }
             if ($boost->status === 'active') {
-                if (Availability::configured()) {
-                    Availability::accrue($boost, $now);
-                }
+                Availability::accrue($boost, $now);
                 DB::table('promotion_boosts')->where('id', $id)->update(['checked_at' => $now]);
                 if ($boost->ends_at <= $now || Availability::delivered($boost) >= $boost->duration_seconds) {
                     $delivered = Availability::delivered($boost);
@@ -240,7 +238,7 @@ class Boosts
 
     public static function deleting(object $boost): void
     {
-        if ($boost->status === 'active' && Promotion::reserved($boost) && Availability::configured()) {
+        if ($boost->status === 'active' && Promotion::reserved($boost)) {
             Availability::accrue($boost, Billing::timestamp());
         }
         if (in_array($boost->status, ['draft', 'pending_review', 'scheduled', 'active', 'interrupted'], true)) {

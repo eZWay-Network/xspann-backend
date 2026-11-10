@@ -73,6 +73,25 @@ class PromotionApiTest extends TestCase
         $this->postJson("/api/v1/me/artist/boosts/$id/submit", ['version' => 1], ['Idempotency-Key' => 'submit-first'])->assertStatus(202)->assertJsonPath('data', $first);
     }
 
+    public function testLegacyDraftRequiresAcceptingDiscoverTermsBeforeSubmission(): void
+    {
+        [$owner] = $this->paidArtist();
+        $this->promotionSetup();
+        $input = $this->boostInput($this->makeVideo($owner)->id);
+        $draft = Boosts::create($owner, $input);
+        query('promotion_boosts')->where('id', $draft->id)->update([
+            'offer_id' => 'boost-24h-usd-500-v1',
+            'surface' => 'web_promoted_videos',
+            'rights_version' => 'advertising-2026-10-31',
+        ]);
+        $this->postJson("/api/v1/me/artist/boosts/$draft->id/submit", ['version' => 1], ['Idempotency-Key' => 'legacy-draft'])->assertStatus(422);
+        $this->assertDatabaseCount('promotion_slots', 0);
+        $accepted = Boosts::edit($owner, $draft->id, [...$input, 'version' => 1]);
+        $this->assertSame('discover_promoted_videos', $accepted->surface);
+        Boosts::submit($owner, $draft->id, $accepted->version, 'accepted-discover');
+        $this->assertSame(500, Credits::balance($owner->id)['reserved_cents']);
+    }
+
     public function testCreativeAllowlistRightsAndDatesAreEnforced(): void
     {
         [$owner] = $this->paidArtist();
@@ -83,8 +102,15 @@ class PromotionApiTest extends TestCase
         foreach ([$foreign->id, $hidden->id] as $id) {
             $this->postJson('/api/v1/me/artist/boosts', $this->boostInput($id))->assertStatus(422);
         }
-        foreach ([['price_cents' => 1], ['rights_confirmed' => 'true'], ['rights_confirmed' => false], ['rights_version' => 'old'],
-            ['starts_at' => '2027-02-30T00:00:00Z'], ['starts_at' => '2027-01-01 12:00:00'], ['starts_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 1)]] as $change) {
+        foreach ([
+            ['price_cents' => 1],
+            ['rights_confirmed' => 'true'],
+            ['rights_confirmed' => false],
+            ['rights_version' => 'old'],
+            ['starts_at' => '2027-02-30T00:00:00Z'],
+            ['starts_at' => '2027-01-01 12:00:00'],
+            ['starts_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 1)]
+        ] as $change) {
             $this->postJson('/api/v1/me/artist/boosts', [...$this->boostInput($public->id), ...$change])->assertStatus(422);
         }
         $this->assertDatabaseCount('promotion_boosts', 0);
@@ -118,8 +144,27 @@ class PromotionApiTest extends TestCase
         $this->assertSame('active', $boost->status);
         Promotion::transaction(fn() => Boosts::tick($boost->id));
         $this->assertSame(1, query('promotion_ledger')->where('kind', 'debit')->count());
-        $response = $this->flushHeaders()->getJson('/api/v1/promotions/placements?surface=web_promoted_videos')->assertOk();
-        $response->assertJsonPath('data.0.disclosure', 'Sponsored')->assertJsonPath('data.0.sponsor.user_id', $owner->id);
+        $path = '/api/v1/promotions/placements?surface=discover_promoted_videos';
+        $this->flushHeaders();
+        foreach (['', '&platform=other', '&platform[]=web'] as $invalid) {
+            $this->getJson($path . $invalid)->assertStatus(422);
+        }
+        foreach (Availability::PLATFORMS as $platform) {
+            Availability::setEnabled($platform, true);
+            Availability::record(['platform' => $platform, 'available' => true, 'reference' => 'client-smoke', 'note' => 'Verified Discover']);
+            $response = $this->getJson($path . '&platform=' . $platform)->assertOk()
+                ->assertHeader('Cache-Control', 'private, no-store')
+                ->assertJsonPath('data.0.boost_id', $boost->id)->assertJsonPath('data.0.video.id', $boost->video_id)
+                ->assertJsonPath('data.0.disclosure', 'Sponsored')->assertJsonPath('data.0.sponsor.user_id', $owner->id);
+        }
+        $this->assertDatabaseCount('promotion_slots', 1);
+        Availability::setEnabled('web', false);
+        $this->getJson($path . '&platform=web')->assertOk()->assertJsonPath('data', []);
+        Availability::setEnabled('web', true);
+        $this->getJson($path . '&platform=web')->assertOk()->assertJsonPath('data', []);
+        $this->app->mergeConfig(['promotions' => ['bookings_enabled' => false]]);
+        $this->getJson('/api/v1/promotion-offers')->assertJsonPath('data.0.enabled', false);
+        $this->getJson($path . '&platform=android')->assertOk()->assertJsonPath('data.0.boost_id', $boost->id);
         $token = $response->json('data.0.event_token');
         $event = ['token' => $token, 'event_id' => $this->messageInput()['client_message_id'], 'type' => 'render'];
         $this->postJson('/api/v1/promotions/events', $event)->assertOk()->assertJsonPath('data.billable', false)->assertJsonPath('data.duplicate', false);
@@ -127,6 +172,13 @@ class PromotionApiTest extends TestCase
         $this->postJson('/api/v1/promotions/events', [...$event, 'type' => 'click'])->assertStatus(409);
         $this->postJson('/api/v1/promotions/events', [...$event, 'token' => $token . 'tampered'])->assertStatus(422);
         $this->assertSame(0, Availability::delivered($boost));
+        Availability::setEnabled('ios', false);
+        $this->postJson('/api/v1/promotions/events', [...$event, 'event_id' => $this->messageInput()['client_message_id'], 'type' => 'click'])->assertStatus(410);
         $this->assertDatabaseCount('promotion_events', 1);
+
+        $viewer = $this->makeUser('blocked-viewer');
+        \App\Models\Block::create(['blocker_id' => $viewer->id, 'blocked_id' => $owner->id]);
+        $this->asUser($viewer)->getJson($path . '&platform=android')->assertOk()->assertJsonPath('data', []);
+        $this->postJson('/api/v1/reports', ['boost_id' => $boost->id, 'reason' => 'Blocked placement'])->assertNotFound();
     }
 }

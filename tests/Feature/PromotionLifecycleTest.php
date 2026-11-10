@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Resources\PromotionResource;
-use App\Jobs\{ProcessPrivacyRequest, PromotionMaintenance};
+use App\Jobs\{CheckPromotionSurface, ProcessPrivacyRequest, PromotionMaintenance};
 use App\Services\Billing\Billing;
 use App\Services\PrivacyRequests;
 use App\Services\Promotions\{Boosts, Credits, Privacy, Promotion, Reports};
@@ -51,7 +51,7 @@ class PromotionLifecycleTest extends TestCase
         $this->assertCount(3, $export['promotions']['ledger']);
         $proof = $this->postJson('/api/v1/auth/reauthenticate', ['purpose' => 'delete_account', 'password' => 'password123'])->assertOk()->json('data.proof');
         $this->postJson('/api/v1/me/deletion-requests', ['proof' => $proof])->assertAccepted();
-        $this->flushHeaders()->getJson('/api/v1/promotions/placements?surface=web_promoted_videos')->assertOk()->assertJsonPath('data', []);
+        $this->flushHeaders()->getJson('/api/v1/promotions/placements?surface=discover_promoted_videos&platform=web')->assertOk()->assertJsonPath('data', []);
         $deletion = query('privacy_requests')->where('kind', 'deletion')->first();
         (new ProcessPrivacyRequest($deletion->id))->handle();
         $this->assertSame(null, query('promotion_boosts')->first()->user_id);
@@ -210,10 +210,13 @@ class PromotionLifecycleTest extends TestCase
         [$owner] = $this->paidArtist();
         $this->app->withQueue(then: require dirname(__DIR__, 2) . '/bootstrap/jobs.php');
         $queue = \Spark\Facades\Queue::connection();
-        $this->assertCount(1, $queue->getJobs(queue: 'promotions'));
+        $this->assertCount(2, $queue->getJobs(queue: 'promotions'));
+        $callbacks = array_map(fn ($job) => $job->getCallback(), $queue->getJobs(queue: 'promotions'));
+        $this->assertContains(CheckPromotionSurface::class, $callbacks);
+        $this->assertContains(PromotionMaintenance::class, $callbacks);
         $queue->work(once: true, timeout: 5, sleep: 0, queue: 'promotions');
         $this->assertSame(1, query('promotion_ledger')->where('kind', 'grant')->count());
-        $this->assertCount(1, $queue->getJobs(queue: 'promotions'));
+        $this->assertCount(2, $queue->getJobs(queue: 'promotions'));
         $this->assertSame([], $queue->getFailedJobs());
     }
 

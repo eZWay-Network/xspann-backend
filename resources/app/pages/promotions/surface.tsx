@@ -17,6 +17,7 @@ type Offer = {
   price_cents: number;
   duration_seconds: number;
   surface: string;
+  enabled_platforms: string[];
 };
 export default function Surface(
   props: RecordsProps & {
@@ -30,7 +31,11 @@ export default function Surface(
       <DetailFields
         title="Current booking gate"
         fields={[
-          { label: "Surface", value: props.offer.surface },
+          { label: "Shared inventory", value: props.offer.surface },
+          {
+            label: "Enabled clients",
+            value: props.offer.enabled_platforms.join(", ") || "None",
+          },
           { label: "Configured", value: props.offer.configured },
           { label: "Bookings available", value: props.offer.enabled },
           { label: "Simultaneous capacity", value: props.offer.capacity },
@@ -49,6 +54,7 @@ export default function Surface(
 function Observation({ url }: { url: string }) {
   const form = useForm({
     available: false,
+    platform: "web",
     reference: "",
     note: "",
     starts_at: "",
@@ -64,6 +70,7 @@ function Observation({ url }: { url: string }) {
       onSubmit={(event) => {
         event.preventDefault();
         form.transform((data) => ({
+          platform: data.platform,
           available: data.available,
           reference: data.reference,
           note: data.note,
@@ -75,6 +82,24 @@ function Observation({ url }: { url: string }) {
         form.post(url, { preserveScroll: true, onSuccess: () => form.reset() });
       }}
     >
+      <Field label="Observation scope">
+        <Select
+          label="Observation scope"
+          value={form.data.platform}
+          options={[
+            { value: "web", label: "Web" },
+            { value: "android", label: "Android" },
+            { value: "ios", label: "iOS" },
+            ...(!form.data.available
+              ? [
+                  { value: "shared", label: "Shared outage (all clients)" },
+                  { value: "legacy-web", label: "Legacy web offer outage" },
+                ]
+              : []),
+          ]}
+          onValueChange={(value) => form.setData("platform", value)}
+        />
+      </Field>
       <Field label="Availability">
         <Select
           label="Availability"
@@ -83,7 +108,17 @@ function Observation({ url }: { url: string }) {
             { value: "no", label: "Incident / unavailable" },
             { value: "yes", label: "Verified available now" },
           ]}
-          onValueChange={(value) => form.setData("available", value === "yes")}
+          onValueChange={(value) =>
+            form.setData({
+              ...form.data,
+              available: value === "yes",
+              platform:
+                value === "yes" &&
+                ["shared", "legacy-web"].includes(form.data.platform)
+                  ? "web"
+                  : form.data.platform,
+            })
+          }
         />
       </Field>
       <Field label="Independent observation or incident reference">

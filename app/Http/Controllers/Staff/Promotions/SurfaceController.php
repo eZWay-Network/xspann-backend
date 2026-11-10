@@ -20,12 +20,12 @@ final class SurfaceController
         }
 
         return Inertia::render('promotions/surface', Records::listing($query, $filters,
-            fn ($row) => Records::row($row, $row->reference, null, $row->available ? 'available' : 'unavailable', $row->note, 'UTC') + [
+            fn ($row) => Records::row($row, $row->reference, null, $row->available ? 'available' : 'unavailable', $row->surface . ' · ' . $row->note, 'UTC') + [
                 'starts_at' => Records::date($row->starts_at, 'UTC'),
                 'ends_at' => Records::date($row->ends_at, 'UTC'),
             ],
             'staff.surface', [], true) + [
-                'page' => ['title' => 'Promotion surface', 'breadcrumbs' => []],
+                'page' => ['title' => 'Discover availability', 'breadcrumbs' => []],
                 'description' => 'Actual observations and incident windows. Visiting this page does not attest availability.',
                 'offer' => Availability::offer(),
                 'lease_seconds' => (int) config('promotions.availability_lease_seconds'),

@@ -12,6 +12,54 @@ class PromotionDeliveryTest extends TestCase
 {
     use PromotionFixtures;
 
+    public function testDiscoverClockUnionsClientWindowsAndCapsLateRemedies(): void
+    {
+        [$owner] = $this->paidArtist();
+        $this->promotionSetup();
+        $staff = $this->promotionStaff();
+        $boost = $this->activateBoost($owner, $staff);
+        $end = time();
+        $start = $end - 86400;
+        query('promotion_boosts')->where('id', $boost->id)->update([
+            'starts_at' => Billing::timestamp($start),
+            'activated_at' => Billing::timestamp($start),
+            'checked_at' => Billing::timestamp($start),
+            'ends_at' => Billing::timestamp($end),
+        ]);
+        foreach (Availability::PLATFORMS as $platform) {
+            Availability::setEnabled($platform, true);
+            $row = Availability::record(['platform' => $platform, 'available' => true, 'reference' => 'checked-api', 'note' => 'Check fixture']);
+            query('promotion_availability')->where('id', $row->id)->update([
+                'starts_at' => Billing::timestamp($start),
+                'ends_at' => Billing::timestamp($end),
+            ]);
+        }
+        $incident = static fn ($platform, $hour, $reference) => Availability::record([
+            'platform' => $platform, 'available' => false, 'reference' => $reference, 'note' => 'Confirmed incident',
+            'starts_at' => gmdate('Y-m-d\TH:i:s\Z', $start + $hour * 3600),
+            'ends_at' => gmdate('Y-m-d\TH:i:s\Z', $end),
+        ]);
+        $incident('web', 12, 'web-outage');
+        $incident('ios', 12, 'ios-outage');
+        $incident('shared', 18, 'shared-outage');
+        Promotion::transaction(fn () => Boosts::tick($boost->id));
+        $boost = Boosts::find($boost->id);
+        $this->assertSame(64800, Availability::delivered($boost));
+        $report = Boosts::remedy($staff, $boost->id, ['version' => $boost->version, 'action' => 'credit',
+            'reason' => 'Return the undelivered six hours.'], 'settle-discover-clock');
+        $this->assertSame(64800, $report['report']['delivered_seconds']);
+        $this->assertSame(125, Credits::balance($owner->id)['available_cents']);
+
+        $incident('web', 6, 'earlier-web-outage');
+        Promotion::transaction(fn () => Boosts::tick($boost->id));
+        $this->assertSame(125, Credits::balance($owner->id)['available_cents']);
+        $incident('android', 15, 'late-android-outage');
+        Promotion::transaction(fn () => Boosts::tick($boost->id));
+        Promotion::transaction(fn () => Boosts::tick($boost->id));
+        $this->assertSame(188, Credits::balance($owner->id)['available_cents']);
+        $this->assertSame(2, query('promotion_ledger')->where('kind', 'reversal')->count());
+    }
+
     public function testNaturalShortfallAndLateIncidentReturnOnlyCumulativeUnusedCents(): void
     {
         [$owner] = $this->paidArtist();
@@ -28,7 +76,7 @@ class PromotionDeliveryTest extends TestCase
         $result = Boosts::remedy($staff, $boost->id, $input, 'half-return-key');
         $this->assertSame(250, Credits::balance($owner->id)['available_cents']);
         $this->assertSame($result, Boosts::remedy($staff, $boost->id, $input, 'half-return-key'));
-        Availability::record(['available' => false, 'reference' => 'outage-retrospective', 'note' => 'Earlier monitor gap confirmed as outage.',
+        Availability::record(['platform' => 'shared', 'available' => false, 'reference' => 'outage-retrospective', 'note' => 'Earlier monitor gap confirmed as outage.',
             'starts_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 43200), 'ends_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 21600)], $staff->id);
         Promotion::transaction(fn() => Boosts::tick($boost->id));
         $this->assertSame(375, Credits::balance($owner->id)['available_cents']);
@@ -60,7 +108,7 @@ class PromotionDeliveryTest extends TestCase
         query('promotion_boosts')->where('id', $boost->id)->update(['starts_at' => Billing::timestamp($now - 600), 'checked_at' => Billing::timestamp($now - 600)]);
         query('promotion_availability')->where('available', true)->update(['starts_at' => Billing::timestamp($now - 300), 'ends_at' => Billing::timestamp($now + 60)]);
         foreach ([[200, 100], [150, 50]] as $index => [$a, $b]) {
-            Availability::record(['available' => false, 'reference' => 'overlap-' . $index, 'note' => 'Overlapping operator incident.',
+            Availability::record(['platform' => 'shared', 'available' => false, 'reference' => 'overlap-' . $index, 'note' => 'Overlapping operator incident.',
                 'starts_at' => gmdate('Y-m-d\TH:i:s\Z', $now - $a), 'ends_at' => gmdate('Y-m-d\TH:i:s\Z', $now - $b)]);
         }
         Promotion::transaction(fn() => Boosts::tick($boost->id));
@@ -77,7 +125,7 @@ class PromotionDeliveryTest extends TestCase
         $boost = $this->activateBoost($owner, $staff);
         $this->asUser($owner)->patchJson('/api/v1/videos/' . $boost->video_id, ['visibility' => 'private'])->assertOk();
         $this->patchJson('/api/v1/videos/' . $boost->video_id, ['visibility' => 'public'])->assertOk();
-        $this->flushHeaders()->getJson('/api/v1/promotions/placements?surface=web_promoted_videos')->assertOk()->assertJsonPath('data', []);
+        $this->flushHeaders()->getJson('/api/v1/promotions/placements?surface=discover_promoted_videos&platform=web')->assertOk()->assertJsonPath('data', []);
         Promotion::transaction(fn() => Boosts::tick($boost->id));
         $this->assertSame('interrupted', Boosts::find($boost->id)->status);
         $this->assertSame(500, Credits::balance($owner->id)['available_cents']);
@@ -177,7 +225,7 @@ class PromotionDeliveryTest extends TestCase
     {
         $this->promotionSetup();
         $this->promotionStaff();
-        $input = ['available' => true, 'reference' => 'one-monitor-observation', 'note' => 'Verified the real rendered placement surface.'];
+        $input = ['platform' => 'web', 'available' => true, 'reference' => 'one-monitor-observation', 'note' => 'Verified the real rendered placement surface.'];
         $this->browserWrite('/promotions/surface/observations', $input)->assertStatus(303);
         $first = query('promotion_availability')->where('reference', $input['reference'])->first();
         $this->browserWrite('/promotions/surface/observations', $input)->assertStatus(303);

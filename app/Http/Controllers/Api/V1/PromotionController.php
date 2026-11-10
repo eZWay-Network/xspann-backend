@@ -16,8 +16,10 @@ class PromotionController extends Controller
     public static function boostRules(bool $edit = false): array
     {
         return [
-            'video_id' => ['required', 'integer', 'min:1'], 'offer_id' => ['required', 'string', 'max:80'],
-            'starts_at' => ['required', 'string', 'max:40'], 'rights_confirmed' => ['required', 'boolean'],
+            'video_id' => ['required', 'integer', 'min:1'],
+            'offer_id' => ['required', 'string', 'max:80'],
+            'starts_at' => ['required', 'string', 'max:40'],
+            'rights_confirmed' => ['required', 'boolean'],
             'rights_version' => ['required', 'string', 'max:80'],
             ...($edit ? ['version' => ['required', 'integer', 'min:1']] : []),
         ];
@@ -30,15 +32,31 @@ class PromotionController extends Controller
 
     public function placements(Request $request): Response
     {
-        $request->validate(['surface' => ['required', 'string', 'in:' . config('promotions.surface')]]);
+        $request->validate([
+            'surface' => ['required', 'string', 'in:' . config('promotions.surface')],
+            'platform' => ['required', 'string', 'in:' . implode(',', Availability::PLATFORMS)],
+        ]);
 
-        return $this->privateJson(['data' => Delivery::placements($request->user()), 'meta' => ['capacity' => (int) config('promotions.capacity')]]);
+        // PHP folds repeated scalar query parameters into the last value.
+        $query = parse_url($request->getUri(), PHP_URL_QUERY) ?? '';
+        $keys = array_map(static fn($pair) => urldecode(explode('=', $pair, 2)[0]), explode('&', $query));
+        $platformKeys = array_filter($keys, static fn($key) => $key === 'platform' || str_starts_with($key, 'platform['));
+        $platform = $request->query('platform');
+        abort_unless(count($platformKeys) === 1 && in_array($platform, Availability::PLATFORMS, true), 422, 'Specify one Discover platform.');
+
+        return $this->privateJson([
+            'data' => Delivery::placements($request->user(), $platform),
+            'meta' => ['capacity' => Promotion::capacity(), 'surface' => config('promotions.surface'), 'platform' => $platform],
+        ])->setHeader('Cache-Control', 'private, no-store');
     }
 
     public function event(Request $request): Response
     {
-        $input = Communications::input($request, ['token' => ['required', 'string', 'max:4096'],
-            'event_id' => ['required', 'string', 'max:36'], 'type' => ['required', 'string', 'in:render,click']]);
+        $input = Communications::input($request, [
+            'token' => ['required', 'string', 'max:4096'],
+            'event_id' => ['required', 'string', 'max:36'],
+            'type' => ['required', 'string', 'in:render,click']
+        ]);
 
         return $this->privateJson(['data' => Delivery::event($input, $request->user())]);
     }
@@ -51,8 +69,11 @@ class PromotionController extends Controller
             ->whereIn('artist_id', Artist::visibleTo($request->user())->where('listed', true)->select('artists.id'));
 
         return $this->privateJson(Communications::page($query, $request, fn($row) => [
-            'id' => (int) $row->id, 'artist' => $row->sponsor, 'disclosure' => 'Complimentary pilot feature',
-            'starts_at' => Billing::date($row->starts_at), 'ends_at' => Billing::date($row->ends_at),
+            'id' => (int) $row->id,
+            'artist' => $row->sponsor,
+            'disclosure' => 'Complimentary pilot feature',
+            'starts_at' => Billing::date($row->starts_at),
+            'ends_at' => Billing::date($row->ends_at),
         ], function ($rows): array {
             $artists = $rows ? Artist::whereIn('id', array_column($rows, 'artist_id'))->get()->keyBy('id') : [];
             foreach ($rows as $row) {
@@ -84,8 +105,12 @@ class PromotionController extends Controller
     {
         Artists::owned($request->user());
 
-        return $this->privateJson(Communications::page(Promotion::table('boosts')->where('user_id', $request->user('id')), $request,
-            [PromotionResource::class, 'boost'], [Reports::class, 'boosts']));
+        return $this->privateJson(Communications::page(
+            Promotion::table('boosts')->where('user_id', $request->user('id')),
+            $request,
+            [PromotionResource::class, 'boost'],
+            [Reports::class, 'boosts']
+        ));
     }
 
     public function store(Request $request): Response
@@ -125,17 +150,23 @@ class PromotionController extends Controller
     {
         Artists::owned($request->user());
 
-        return $this->privateJson(Communications::page(Promotion::table('placements')->where('user_id', $request->user('id')), $request,
-            [PromotionResource::class, 'placement'], [Reports::class, 'placements']));
+        return $this->privateJson(Communications::page(
+            Promotion::table('placements')->where('user_id', $request->user('id')),
+            $request,
+            [PromotionResource::class, 'placement'],
+            [Reports::class, 'placements']
+        ));
     }
 
     public function consent(Request $request, int $placement): Response
     {
         $input = Communications::input($request, ['version' => ['required', 'integer', 'min:1'], 'accepted' => ['required', 'boolean']], booleans: ['accepted']);
 
-        return $this->privateJson(['data' => PromotionResource::placement(Reports::placements([
-            Placements::consent($request->user(), $placement, (int) $input['version'], $input['accepted']),
-        ])[0])]);
+        return $this->privateJson([
+            'data' => PromotionResource::placement(Reports::placements([
+                Placements::consent($request->user(), $placement, (int) $input['version'], $input['accepted']),
+            ])[0])
+        ]);
     }
 
     private function boostResponse(object $row, int $status = Response::STATUS_OK): Response

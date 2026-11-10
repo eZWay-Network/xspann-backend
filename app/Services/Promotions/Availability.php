@@ -5,26 +5,75 @@ namespace App\Services\Promotions;
 use App\Services\AuditTrail;
 use App\Services\Billing\Billing;
 use Spark\Facades\DB;
+use function in_array;
 
 class Availability
 {
-    public static function configured(): bool
-    {
-        $url = config('promotions.surface_url');
+    public const PLATFORMS = ['web', 'android', 'ios'];
 
-        return config('promotions.bookings_enabled') === true && is_string($url)
-            && filter_var($url, FILTER_VALIDATE_URL) && parse_url($url, PHP_URL_SCHEME) === 'https'
-            && !parse_url($url, PHP_URL_USER) && !parse_url($url, PHP_URL_FRAGMENT);
+    public const TERMS = 'One 24-hour Sponsored rotation in Discover on web, Android and iOS. Each second counts once when at least one enabled platform can serve your eligible video. A partial outage can reduce reach. Time unavailable on every platform returns proportional unused credit, rounded up to the next cent. Views, clicks and reach are not guaranteed. Extensions require your consent. Credit has no expiry, top-ups, transfers or cash withdrawal.';
+
+    public static function enabledPlatforms(): array
+    {
+        return Promotion::table('platforms')
+            ->where('surface', config('promotions.surface'))
+            ->where('enabled', true)
+            ->whereIn('platform', self::PLATFORMS)
+            ->orderBy('id')->pluck('platform');
     }
 
-    public static function healthy(): bool
+    public static function setEnabled(string $platform, bool $enabled): void
     {
-        $now = Billing::timestamp();
-        $query = fn() => Promotion::table('availability')->where('surface', config('promotions.surface'))
-            ->where('starts_at', '<=', $now)->where('ends_at', '>', $now);
+        abort_unless(in_array($platform, self::PLATFORMS, true), 422, 'Unknown Discover platform.');
 
-        return self::configured() && Promotion::capacity() > 0
-            && $query()->where('available', true)->exists() && !$query()->where('available', false)->exists();
+        Promotion::transaction(function () use ($platform, $enabled): void {
+            $surface = config('promotions.surface');
+            $switch = Promotion::table('platforms')->where('surface', $surface)->where('platform', $platform)->first();
+            if ((bool) ($switch->enabled ?? false) === $enabled) {
+                return;
+            }
+
+            $now = Billing::timestamp();
+            $change = ['enabled' => $enabled, 'changed_at' => $now];
+            if ($switch) {
+                DB::table('promotion_platforms')->where('id', $switch->id)->update($change);
+            } else {
+                DB::table('promotion_platforms')->insert([
+                    ...$change,
+                    'environment' => config('billing.environment'),
+                    'surface' => $surface,
+                    'platform' => $platform,
+                ]);
+            }
+            if (!$enabled) {
+                // Close every open positive lease under the same mutex as renewals.
+                Promotion::table('availability')->where('surface', $surface . '.' . $platform)
+                    ->where('available', true)->where('ends_at', '>', $now)->update(['ends_at' => $now]);
+            }
+            AuditTrail::record('promotion.platform.changed', ['surface' => $surface, 'platform' => $platform, ...$change], null, 'console');
+        });
+    }
+
+    public static function configured(): bool
+    {
+        return config('promotions.bookings_enabled') === true && Promotion::capacity() > 0;
+    }
+
+    public static function healthy(?string $platform = null): bool
+    {
+        $clients = self::enabledPlatforms();
+        if ($platform !== null) {
+            $clients = array_intersect($clients, [$platform]);
+        }
+        if (!$clients || Promotion::capacity() === 0) {
+            return false;
+        }
+
+        $now = time();
+        $surface = config('promotions.surface');
+        $evidence = self::evidence($surface, config('billing.environment'), Billing::timestamp($now), Billing::timestamp($now + 1));
+
+        return self::eligibleWindows($surface, $evidence, $clients) !== [];
     }
 
     public static function offer(): array
@@ -32,7 +81,9 @@ class Availability
         return [
             'id' => config('promotions.offer_id'),
             'surface' => config('promotions.surface'),
-            'enabled' => self::healthy(),
+            'enabled' => self::configured() && self::healthy(),
+            'platforms' => self::PLATFORMS,
+            'enabled_platforms' => self::enabledPlatforms(),
             'configured' => self::configured(),
             'price_cents' => (int) config('promotions.price_cents'),
             'currency' => 'usd',
@@ -40,7 +91,7 @@ class Availability
             'capacity' => Promotion::capacity(),
             'rights_version' => config('promotions.rights_version'),
             'disclosure' => 'Sponsored',
-            'terms' => 'A 24-hour rotation slot on the web Promoted videos surface. No guaranteed views, followers or sales. No top-ups, transfers, withdrawal or credit expiry. Only independently recorded eligible availability counts. Unused time returns ceil(price_cents × undelivered_seconds / duration_seconds) credit cents; an extension requires explicit owner consent.',
+            'terms' => self::TERMS,
         ];
     }
 
@@ -48,8 +99,16 @@ class Availability
     public static function record(array $input, ?int $actor = null): object
     {
         return Promotion::transaction(function () use ($input, $actor): object {
+            $platform = $input['platform'] ?? null;
+            abort_unless(in_array($platform, [...self::PLATFORMS, 'shared', 'legacy-web'], true), 422, 'Choose a platform or an outage scope.');
+            $inventory = config('promotions.surface');
+            $surface = match ($platform) {
+                'shared' => $inventory,
+                'legacy-web' => 'web_promoted_videos',
+                default => $inventory . '.' . $platform,
+            };
             $hash = Promotion::hash($input);
-            $old = Promotion::table('availability')->where('surface', config('promotions.surface'))->where('reference', $input['reference'])->first();
+            $old = Promotion::table('availability')->where('surface', $surface)->where('reference', $input['reference'])->first();
             if ($old) {
                 abort_unless(hash_equals($old->request_hash, $hash), 409, 'Evidence reference already has different content.');
 
@@ -58,7 +117,7 @@ class Availability
             $now = Billing::timestamp();
             if ($input['available']) {
                 abort_if(isset($input['starts_at']) || isset($input['ends_at']), 422, 'Available observations cannot be backdated or extended by the caller.');
-                abort_unless(self::configured(), 503, 'Verify and configure the actual web surface before recording availability.');
+                abort_unless(in_array($platform, self::enabledPlatforms(), true), 422, 'Positive evidence requires an enabled platform.');
                 $start = $now;
                 $end = Billing::timestamp(time() + min(120, max(1, (int) config('promotions.availability_lease_seconds'))));
             } else {
@@ -68,7 +127,7 @@ class Availability
             }
             $id = DB::table('promotion_availability')->insert([
                 'environment' => config('billing.environment'),
-                'surface' => config('promotions.surface'),
+                'surface' => $surface,
                 'available' => $input['available'],
                 'starts_at' => $start,
                 'ends_at' => $end,
@@ -85,15 +144,44 @@ class Availability
         });
     }
 
-    public static function windows(string $surface, string $start, string $end, bool $available, ?string $environment = null): array
+    /** Group clipped observations by evidence key and polarity. */
+    private static function evidence(string $surface, string $environment, string $start, string $end, bool $incidentsOnly = false): array
     {
-        $windows = [];
-        foreach (DB::table('promotion_availability')->where('environment', $environment ?? config('billing.environment'))->where('surface', $surface)->where('available', $available)
-            ->where('starts_at', '<', $end)->where('ends_at', '>', $start)->get() as $row) {
-            $windows[] = [max(Promotion::seconds($start), Promotion::seconds($row->starts_at)), min(Promotion::seconds($end), Promotion::seconds($row->ends_at))];
+        $keys = [$surface];
+        foreach (self::PLATFORMS as $platform) {
+            $keys[] = "$surface.$platform";
+        }
+        $query = DB::table('promotion_availability')
+            ->where('environment', $environment)
+            ->whereIn('surface', $keys)
+            ->where('starts_at', '<', $end)
+            ->where('ends_at', '>', $start);
+        if ($incidentsOnly) {
+            $query->where('available', false);
+        }
+        $rows = $query->select(['surface', 'available', 'starts_at', 'ends_at'])->get();
+
+        $evidence = [];
+        foreach ($rows as $row) {
+            $evidence[$row->surface][(int) $row->available][] = [
+                Promotion::seconds(max($start, $row->starts_at)),
+                Promotion::seconds(min($end, $row->ends_at)),
+            ];
         }
 
-        return self::merge($windows);
+        return $evidence;
+    }
+
+    private static function eligibleWindows(string $surface, array $evidence, array $platforms = self::PLATFORMS): array
+    {
+        $windows = [];
+        foreach ($platforms as $platform) {
+            $client = $evidence[$surface . '.' . $platform] ?? [];
+            $available = self::subtract(self::merge($client[1] ?? []), self::merge($client[0] ?? []));
+            array_push($windows, ...$available);
+        }
+
+        return self::subtract(self::merge($windows), self::merge($evidence[$surface][0] ?? []));
     }
 
     public static function merge(array $windows): array
@@ -145,7 +233,8 @@ class Availability
         if ($start >= $end) {
             return;
         }
-        foreach (self::subtract(self::windows($boost->surface, $start, $end, true, $boost->environment), self::windows($boost->surface, $start, $end, false, $boost->environment)) as [$a, $b]) {
+        $evidence = self::evidence($boost->surface, $boost->environment, $start, $end);
+        foreach (self::eligibleWindows($boost->surface, $evidence) as [$a, $b]) {
             DB::table('promotion_delivery')->insert(['boost_id' => $boost->id, 'starts_at' => Billing::timestamp($a), 'ends_at' => Billing::timestamp($b)]);
         }
     }
@@ -156,18 +245,54 @@ class Availability
         foreach (DB::table('promotion_delivery')->where('boost_id', $boost->id)->get() as $row) {
             $windows[] = [Promotion::seconds($row->starts_at), Promotion::seconds($row->ends_at)];
         }
-        if ($cutoff = Invalidations::cutoff($boost)) {
-            $windows = self::subtract($windows, [[Promotion::seconds($cutoff), PHP_INT_MAX]]);
-        }
-        $windows = self::merge($windows);
         if (!$windows) {
             return 0;
         }
-        // Late incident evidence can lower delivery and trigger an additional capped reversal.
-        $outages = self::windows($boost->surface, Billing::timestamp($windows[0][0]), Billing::timestamp(end($windows)[1]), false, $boost->environment);
+
+        $lost = self::incidentLoss(
+            $boost->surface,
+            $boost->environment,
+            Billing::timestamp(min(array_column($windows, 0))),
+            Billing::timestamp(max(array_column($windows, 1)))
+        );
+
+        return self::deliveredSeconds($boost, $windows, $lost, Invalidations::cutoff($boost));
+    }
+
+    /** Accrued windows already passed the serving union. Only incident time needs rechecking. */
+    public static function incidentLoss(string $surface, string $environment, string $start, string $end): array
+    {
+        $incidents = self::evidence($surface, $environment, $start, $end, incidentsOnly: true);
+        // This is also the complete outage set for the historical, unscoped v1 web surface.
+        $shared = $incidents[$surface][0] ?? [];
+        $scoped = [];
+        foreach (self::PLATFORMS as $platform) {
+            array_push($scoped, ...($incidents[$surface . '.' . $platform][0] ?? []));
+        }
+        $scoped = self::merge($scoped);
+        if (!$scoped) {
+            return self::merge($shared);
+        }
+
+        $evidence = self::evidence(
+            $surface,
+            $environment,
+            Billing::timestamp($scoped[0][0]),
+            Billing::timestamp(end($scoped)[1])
+        );
+        $uncovered = self::subtract($scoped, self::eligibleWindows($surface, $evidence));
+
+        return self::merge([...$shared, ...$uncovered]);
+    }
+
+    public static function deliveredSeconds(object $boost, array $windows, array $lost, ?string $cutoff): int
+    {
+        if ($cutoff) {
+            $lost[] = [Promotion::seconds($cutoff), PHP_INT_MAX];
+        }
         $seconds = 0;
-        foreach (self::subtract($windows, $outages) as [$a, $b]) {
-            $seconds += $b - $a;
+        foreach (self::subtract(self::merge($windows), $lost) as [$start, $end]) {
+            $seconds += $end - $start;
         }
 
         return min((int) $boost->duration_seconds, $seconds);

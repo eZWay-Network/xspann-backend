@@ -13,11 +13,12 @@ trait PromotionFixtures
 
     protected function promotionSetup(): void
     {
-        $this->app->mergeConfig(['promotions' => ['bookings_enabled' => true, 'surface_url' => 'https://web.example/discover',
+        $this->app->mergeConfig(['promotions' => ['bookings_enabled' => true,
             'pilot_monthly_capacity' => 4, 'feature_capacity' => 1,
             'network_accounts' => ['ezway-instagram' => ['name' => 'eZWay Instagram', 'monthly_capacity' => 4]],
             'proof_hosts' => ['www.instagram.com']]]);
-        Availability::record(['available' => true, 'reference' => 'fixture-' . bin2hex(random_bytes(8)), 'note' => 'Controlled surface verification fixture']);
+        Availability::setEnabled('web', true);
+        Availability::record(['platform' => 'web', 'available' => true, 'reference' => 'fixture-' . bin2hex(random_bytes(8)), 'note' => 'Controlled surface verification fixture']);
     }
 
     protected function promotionStaff(string $name = 'operator'): User

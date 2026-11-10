@@ -1,15 +1,14 @@
 <?php
 
 return [
-    // Enable only after the actual web surface and its availability monitor are verified.
-    'bookings_enabled' => env('PROMOTION_BOOKINGS_ENABLED', false),
-    'surface_url' => env('PROMOTION_SURFACE_URL'),
-    'surface' => 'web_promoted_videos',
-    'offer_id' => 'boost-24h-usd-500-v1',
+    // Open the new offer after the enabled Discover integrations have been verified.
+    'bookings_enabled' => env('PROMOTION_DISCOVER_BOOKINGS_ENABLED', false),
+    'surface' => 'discover_promoted_videos',
+    'offer_id' => 'boost-24h-usd-500-v2',
     'price_cents' => 500,
     'duration_seconds' => 86400,
     'capacity' => 5,
-    'rights_version' => 'advertising-2026-10-31',
+    'rights_version' => 'discover-advertising-2026-11-10',
     'availability_lease_seconds' => 120,
     'remedy_grace_seconds' => 86400,
     'booking_horizon_days' => 90,

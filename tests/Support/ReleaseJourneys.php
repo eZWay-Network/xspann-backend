@@ -241,7 +241,7 @@ trait ReleaseJourneys
         (new PromotionMaintenance())->handle();
         $this->getJson('/api/v1/videos/' . $video->id)->assertNotFound();
         $this->getJson("/api/v1/artists/$artist->id/playlists/$playlist")->assertJsonCount(0, 'data.videos');
-        $this->getJson('/api/v1/promotions/placements?surface=web_promoted_videos')->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/promotions/placements?surface=discover_promoted_videos&platform=web')->assertJsonCount(0, 'data');
         $this->getJson("/api/v1/me/announcements/$announcement")->assertNotFound();
         $this->assertDatabaseHas('announcement_deliveries', ['announcement_id' => $announcement, 'status' => 'suppressed']);
         $this->assertSame('draft', $draft->refresh()->publication_state);
@@ -345,15 +345,15 @@ trait ReleaseJourneys
             $this->staffWire('POST', "/promotions/boosts/$boost/decision", ['version' => 2, 'decision' => 'approve', 'reason' => 'Reviewed original creative and rights.'])->assertStatus(303);
             query('promotion_boosts')->where('id', $boost)->update(['starts_at' => Billing::timestamp(time() - 1), 'ends_at' => Billing::timestamp(time() + 86399)]);
             (new PromotionMaintenance())->handle();
-            $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertOk()->assertJsonCount(1, 'data');
+            $this->wire('GET', '/promotions/placements?surface=discover_promoted_videos&platform=web', $fanToken)->assertOk()->assertJsonCount(1, 'data');
             $report = $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Review sponsored claim.'])->assertCreated()->json('data.id');
             $this->wire('GET', "/admin/reports/$report", $fanToken)->assertNotFound();
             $this->staffWire('GET', "/moderation/reports/$report/evidence", evidence: true)->assertOk()->assertJsonPath('snapshot.video_id', $video);
             $this->staffWire('POST', "/moderation/reports/$report/decision", ['action' => 'dismiss', 'version' => 1, 'reason' => 'Verified the advertising claim.'])->assertStatus(303);
-            $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertJsonCount(1, 'data');
+            $this->wire('GET', '/promotions/placements?surface=discover_promoted_videos&platform=web', $fanToken)->assertJsonCount(1, 'data');
             $this->wire('POST', "/users/$owner->id/block", $fanToken)->assertCreated();
             $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Hidden sponsored claim.'])->assertNotFound();
-            $this->wire('GET', '/promotions/placements?surface=web_promoted_videos', $fanToken)->assertJsonCount(0, 'data');
+            $this->wire('GET', '/promotions/placements?surface=discover_promoted_videos&platform=web', $fanToken)->assertJsonCount(0, 'data');
             $this->wire('GET', "/artists/$artist", $fanToken)->assertNotFound();
             $this->wire('GET', "/me/announcements/$announcement", $fanToken)->assertNotFound();
             $this->wire('POST', "/conversations/$conversation/messages", $fanToken, $this->messageInput())->assertForbidden();

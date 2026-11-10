@@ -7,6 +7,7 @@ return static function (Queue $queue): void {
     foreach ([
         ['staff', job(\App\Jobs\StaffMaintenance::class)->repeatEveryMinutes(1)],
         ['promotions', job(\App\Jobs\PromotionMaintenance::class)->repeatEveryMinutes(1)],
+        ['promotions', job(\App\Jobs\CheckPromotionSurface::class)->repeatEveryMinutes(1)],
         ['realtime', job(\App\Jobs\PublishRealtime::class)->repeat('1 second')],
         ['notifications', job(\App\Jobs\DeliverAnnouncements::class)->repeatEveryMinutes(1)],
         ['releases', job(\App\Jobs\PublishReleases::class)->repeatEveryMinutes(1)],

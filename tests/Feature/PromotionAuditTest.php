@@ -183,6 +183,7 @@ class PromotionAuditTest extends TestCase
         $this->deliveredWindow($boost, 43200);
         $this->app->mergeConfig(['billing' => ['environment' => 'live']]);
         Availability::record([
+            'platform' => 'shared',
             'available' => false,
             'reference' => 'live-only-outage',
             'note' => 'Must not affect test accounting.',
@@ -271,7 +272,8 @@ class PromotionAuditTest extends TestCase
         $staff = $this->promotionStaff();
         $boost = $this->activateBoost($owner, $staff);
         $this->app->mergeConfig(['promotions' => ['surface' => 'replacement_surface']]);
-        Availability::record(['available' => true, 'reference' => 'replacement-observation', 'note' => 'A different surface.']);
+        Availability::setEnabled('web', true);
+        Availability::record(['platform' => 'web', 'available' => true, 'reference' => 'replacement-observation', 'note' => 'A different surface.']);
         $this->assertSame([], Delivery::placements(null));
         Promotion::transaction(fn() => Boosts::tick($boost->id));
         $this->assertSame('interrupted', Boosts::find($boost->id)->status);

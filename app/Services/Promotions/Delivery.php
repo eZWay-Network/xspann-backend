@@ -27,11 +27,9 @@ class Delivery
         return $boost;
     }
 
-    public static function placements(?User $viewer): array
+    public static function placements(?User $viewer, string $platform = 'web'): array
     {
-        if (!Availability::healthy()) {
-            return [];
-        }
+        // The shared probe must exercise the serving query even after all leases expire.
         $rows = Promotion::table('boosts')->where('status', 'active')->where('surface', config('promotions.surface'))
             ->where('starts_at', '<=', Billing::timestamp())->where('ends_at', '>', Billing::timestamp())
             ->whereIn('id', Promotion::table('slots')->select('boost_id')->whereNull('released_at')
@@ -43,7 +41,7 @@ class Delivery
                 $eligible[] = $row;
             }
         }
-        if (!$eligible) {
+        if (!Availability::healthy($platform) || !$eligible) {
             return [];
         }
         $videos = Video::published()->visibleTo($viewer)->where('visibility', 'public')->whereIn('id', array_column($eligible, 'video_id'))
@@ -56,6 +54,7 @@ class Delivery
             if (!$video || !$artist) {
                 continue;
             }
+            $expires = min(time() + 300, Promotion::seconds($row->ends_at));
             $result[] = [
                 'boost_id' => (int) $row->id,
                 'surface' => $row->surface,
@@ -63,14 +62,16 @@ class Delivery
                 'sponsor' => ['artist_id' => $artist->id, 'user_id' => $artist->user_id, 'name' => $artist->stage_name, 'slug' => $artist->slug],
                 'video' => VideoResource::make($video)->resolve(),
                 'expires_at' => Billing::date($row->ends_at),
+                'token_expires_at' => Billing::date(Billing::timestamp($expires)),
                 'event_token' => Hash::encrypt(json_encode([
                     'purpose' => 'promotion_event',
                     'environment' => $row->environment,
                     'boost_id' => $row->id,
                     'version' => $row->version,
+                    'platform' => $platform,
                     'viewer' => $viewer?->id,
                     'nonce' => bin2hex(random_bytes(16)),
-                    'expires' => min(time() + 300, Promotion::seconds($row->ends_at)),
+                    'expires' => $expires,
                 ], JSON_THROW_ON_ERROR)),
             ];
         }
@@ -91,6 +92,7 @@ class Delivery
         }
         abort_unless(is_array($token) && ($token['purpose'] ?? null) === 'promotion_event'
             && ($token['environment'] ?? null) === config('billing.environment')
+            && in_array($token['platform'] ?? null, Availability::PLATFORMS, true)
             && ($token['viewer'] ?? null) === $viewer?->id
             && is_int($token['expires'] ?? null) && is_int($token['boost_id'] ?? null), 422, 'Invalid promotion event token.');
         $id = strtolower($input['event_id']);
@@ -106,7 +108,7 @@ class Delivery
             abort_if($token['expires'] <= time(), 410, 'Promotion token expired.');
             $boost = Boosts::find($token['boost_id']);
             abort_unless((int) $boost->version === $token['version'] && self::eligible($boost, $viewer)
-                && Availability::healthy(), 410, 'Placement is no longer available.');
+                && Availability::healthy($token['platform']), 410, 'Placement is no longer available.');
             if (DB::table('promotion_events')->where('token_hash', $digest)->where('kind', $input['type'])->exists()) {
                 return ['accepted' => true, 'duplicate' => true, 'billable' => false];
             }

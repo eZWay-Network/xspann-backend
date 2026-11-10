@@ -4,6 +4,7 @@ namespace App\Services\Promotions;
 
 use App\Services\Billing\Billing;
 use Spark\Facades\DB;
+use function count;
 
 class Reports
 {
@@ -16,14 +17,12 @@ class Reports
         $cutoffs = Invalidations::cutoffs($rows);
         $reservations = DB::table('promotion_reservations')->whereIn('boost_id', $ids)->get();
         $deliveries = DB::table('promotion_delivery')->whereIn('boost_id', $ids)->get();
-        $outages = [];
+        $lost = [];
         if (count($deliveries)) {
-            $starts = array_column($deliveries->all(), 'starts_at');
-            $ends = array_column($deliveries->all(), 'ends_at');
-            foreach (DB::table('promotion_availability')->whereIn('environment', array_unique(array_column($rows, 'environment')))
-                ->whereIn('surface', array_unique(array_column($rows, 'surface')))->where('available', false)
-                ->where('starts_at', '<', max($ends))->where('ends_at', '>', min($starts))->get() as $outage) {
-                $outages[$outage->environment][$outage->surface][] = [Promotion::seconds($outage->starts_at), Promotion::seconds($outage->ends_at)];
+            $start = min(array_column($deliveries->all(), 'starts_at'));
+            $end = max(array_column($deliveries->all(), 'ends_at'));
+            foreach ($rows as $row) {
+                $lost[$row->environment][$row->surface] ??= Availability::incidentLoss($row->surface, $row->environment, $start, $end);
             }
         }
         $events = DB::table('promotion_events')->whereIn('boost_id', $ids)->select(['boost_id', 'kind'])
@@ -53,13 +52,12 @@ class Reports
                     $windows[] = [Promotion::seconds($delivery->starts_at), Promotion::seconds($delivery->ends_at)];
                 }
             }
-            if ($cutoff = ($cutoffs[$row->id] ?? null)) {
-                $windows = Availability::subtract($windows, [[Promotion::seconds($cutoff), PHP_INT_MAX]]);
-            }
-            foreach (Availability::subtract(Availability::merge($windows), $outages[$row->environment][$row->surface] ?? []) as [$start, $end]) {
-                $report['delivered_seconds'] += $end - $start;
-            }
-            $report['delivered_seconds'] = min((int) $row->duration_seconds, $report['delivered_seconds']);
+            $report['delivered_seconds'] = Availability::deliveredSeconds(
+                $row,
+                $windows,
+                $lost[$row->environment][$row->surface] ?? [],
+                $cutoffs[$row->id] ?? null
+            );
             $report['undelivered_seconds'] -= $report['delivered_seconds'];
             foreach ($events as $event) {
                 if ($event->boost_id === $row->id) {
