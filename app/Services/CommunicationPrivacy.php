@@ -6,6 +6,7 @@ use App\Http\Resources\CommunicationResource;
 use App\Models\Notification;
 use App\Services\Billing\Billing;
 use Spark\Facades\DB;
+use function in_array;
 
 class CommunicationPrivacy
 {
@@ -62,28 +63,31 @@ class CommunicationPrivacy
         });
     }
 
-    private static function pruneNotices(array $conversations, array $announcements, ?string $messageCutoff = null): void
+    public static function pruneNotices(array $conversations, array $announcements, ?string $messageCutoff = null, array $messageIds = []): void
     {
-        if (!$conversations && !$announcements && $messageCutoff === null) {
+        if (!$conversations && !$announcements && $messageCutoff === null && !$messageIds) {
             return;
         }
         $last = 0;
         do {
             $rows = Notification::whereIn('type', ['direct_message', 'artist_announcement'])->where('id', '>', $last)->orderBy('id')->limit(200)->get();
-            $messageIds = [];
+            $noticeMessageIds = [];
             foreach ($rows as $row) {
                 if ($row->type === 'direct_message') {
-                    $messageIds[] = $row->data['message_id'] ?? 0;
+                    $noticeMessageIds[] = $row->data['message_id'] ?? 0;
                 }
             }
-            $expired = $messageCutoff !== null && $messageIds
-                ? DB::table('messages')->whereIn('id', $messageIds)->where('created_at', '<', $messageCutoff)->pluck('id') : [];
+            $expired = $messageCutoff !== null && $noticeMessageIds
+                ? DB::table('messages')->whereIn('id', $noticeMessageIds)->where('created_at', '<', $messageCutoff)->pluck('id') : [];
             $changedUsers = [];
             foreach ($rows as $row) {
                 $last = $row->id;
-                if (in_array($row->data['conversation_id'] ?? null, $conversations, true)
+                if (
+                    in_array($row->data['conversation_id'] ?? null, $conversations, true)
                     || in_array($row->data['announcement_id'] ?? null, $announcements, true)
-                    || in_array($row->data['message_id'] ?? null, $expired, true)) {
+                    || in_array($row->data['message_id'] ?? null, $expired, true)
+                    || ($row->type === 'direct_message' && in_array($row->data['message_id'] ?? null, $messageIds, true))
+                ) {
                     $row->remove();
                     $changedUsers[$row->user_id] = true;
                 }

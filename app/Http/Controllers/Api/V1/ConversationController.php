@@ -17,7 +17,7 @@ class ConversationController extends Controller
             Conversations::inboxQuery($userId),
             $request,
             fn($row) => CommunicationResource::conversation($row, $userId),
-            fn (array $rows): array => Conversations::hydrate($rows, $request->user()),
+            fn(array $rows): array => Conversations::hydrate($rows, $request->user()),
             Conversations::ACTIVITY_TIME
         );
         $result['meta']['unread_count'] = Conversations::unreadCount($userId);
@@ -78,6 +78,24 @@ class ConversationController extends Controller
         [$row, $created] = Conversations::send($conversation, $request->user('id'), $input['body'], $input['client_message_id']);
 
         return $this->privateJson(['data' => CommunicationResource::message($row)], $created ? Response::STATUS_CREATED : Response::STATUS_OK);
+    }
+
+    public function updateMessage(Request $request, int $conversation, int $message): Response
+    {
+        $input = Communications::input($request, [
+            'body' => ['required', 'string', 'max:' . config('communications.message_characters')],
+        ], text: ['body']);
+        $row = Conversations::edit($conversation, $request->user('id'), $message, $input['body']);
+
+        return $this->privateJson(['data' => CommunicationResource::message($row)]);
+    }
+
+    public function destroyMessage(Request $request, int $conversation, int $message): Response
+    {
+        Communications::input($request, []);
+        Conversations::delete($conversation, $request->user('id'), $message);
+
+        return response('', Response::STATUS_NO_CONTENT);
     }
 
     public function read(Request $request, int $conversation): Response

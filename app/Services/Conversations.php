@@ -72,7 +72,7 @@ class Conversations
     {
         $ids = array_filter(array_map(fn($row) => $row->last_message_id, $rows));
         $messages = $ids ? DB::table('messages')->whereIn('id', $ids)->get()->keyBy('id')->all() : [];
-        $peerId = static fn (object $row): int => (int) ($row->low_user_id == $viewer->id ? $row->high_user_id : $row->low_user_id);
+        $peerId = static fn(object $row): int => (int) ($row->low_user_id == $viewer->id ? $row->high_user_id : $row->low_user_id);
         $peers = $rows ? User::visibleTo($viewer)
             ->select('id', 'name', 'username', 'avatar')
             ->whereIn('id', array_map($peerId, $rows))
@@ -166,6 +166,64 @@ class Conversations
 
             return [DB::table('messages')->where('id', $id)->first(), true];
         });
+    }
+
+    public static function edit(int $conversationId, int $userId, int $messageId, string $body): object
+    {
+        return Communications::transaction(function () use ($conversationId, $userId, $messageId, $body): object {
+            $message = self::ownedMessage($conversationId, $userId, $messageId);
+            $conversation = DB::table('conversations')->where('id', $conversationId)->first();
+
+            abort_unless(self::canSend($conversation->low_user_id, $conversation->high_user_id), 403, 'Messaging is no longer permitted.');
+            abort_unless($message->moderation_status === 'approved', 409, 'Restricted messages cannot be edited.');
+            abort_if($message->created_at <= Billing::timestamp(time() - 300), 409, 'Messages can only be edited within 5 minutes of sending.');
+
+            if (Hash::decrypt($message->body) !== $body) {
+                $encrypted = Hash::encrypt($body);
+
+                abort_unless(DB::table('messages')->where('id', $messageId)->update(['body' => $encrypted]) === 1, 500, 'Unable to update the message.');
+                $message->body = $encrypted;
+
+                self::updated($conversationId);
+            }
+
+            return $message;
+        });
+    }
+
+    public static function delete(int $conversationId, int $userId, int $messageId): void
+    {
+        Communications::transaction(function () use ($conversationId, $userId, $messageId): void {
+            self::ownedMessage($conversationId, $userId, $messageId);
+
+            CommunicationPrivacy::pruneNotices([], [], messageIds: [$messageId]);
+
+            abort_unless(DB::table('messages')->where('id', $messageId)->delete() === 1, 500, 'Unable to delete the message.');
+            self::updated($conversationId);
+        });
+    }
+
+    private static function ownedMessage(int $conversationId, int $userId, int $messageId): object
+    {
+        self::participant($conversationId, $userId);
+
+        $message = DB::table('messages')->where('conversation_id', $conversationId)
+            ->where('user_id', $userId)->where('id', $messageId)
+            ->first();
+
+        abort_unless($message !== null, 404, 'Message not found.');
+
+        return $message;
+    }
+
+    private static function updated(int $conversationId): void
+    {
+        DB::table('conversations')->where('id', $conversationId)->update(['version' => DB::raw('version + 1')]);
+
+        $version = (int) DB::table('conversations')->where('id', $conversationId)->value('version');
+        foreach (DB::table('conversation_participants')->where('conversation_id', $conversationId)->pluck('user_id') as $recipient) {
+            Realtime::record((int) $recipient, 'conversation.updated', $conversationId, $version);
+        }
     }
 
     public static function unreadCount(int $userId): int

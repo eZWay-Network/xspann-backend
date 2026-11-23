@@ -98,6 +98,142 @@ class ConversationApiTest extends TestCase
         $this->assertDatabaseCount('realtime_outbox', $count);
     }
 
+    public function testSenderCanEditEncryptedMessageWithoutDuplicatingAlertsOrChangingSendRetry(): void
+    {
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $this->mutual($alice, $bob);
+        $conversation = Conversations::open($alice->id, $bob->id);
+        $input = $this->messageInput();
+        [$message] = Conversations::send($conversation->id, $alice->id, $input['body'], $input['client_message_id']);
+        $url = "/api/v1/conversations/$conversation->id/messages/$message->id";
+
+        $this->asUser($alice)->patchJson($url, ['body' => 'Edited hello'])->assertOk()
+            ->assertHeader('Cache-Control', 'no-store')->assertJsonPath('data.body', 'Edited hello')
+            ->assertJsonPath('data.client_message_id', $input['client_message_id']);
+        $stored = query('messages')->where('id', $message->id)->first();
+        $this->assertFalse(str_contains($stored->body, 'Edited hello'));
+        $this->assertSame($message->request_hash, $stored->request_hash);
+        $this->assertSame($message->created_at, $stored->created_at);
+        $this->assertDatabaseCount('notifications', 1);
+        foreach ([$alice, $bob] as $viewer) {
+            $this->assertDatabaseHas('realtime_outbox', ['user_id' => $viewer->id, 'type' => 'conversation.updated', 'resource_id' => $conversation->id, 'version' => 3]);
+            $this->asUser($viewer)->getJson("/api/v1/conversations/$conversation->id")->assertOk()
+                ->assertJsonPath('data.version', 3)->assertJsonPath('data.last_message.body', 'Edited hello');
+        }
+        $this->asUser($alice)->patchJson($url, ['body' => 'Edited hello'])->assertOk();
+        $this->assertDatabaseHas('conversations', ['id' => $conversation->id, 'version' => 3]);
+        $this->postJson("/api/v1/conversations/$conversation->id/messages", $input)->assertOk()->assertJsonPath('data.body', 'Edited hello');
+        $this->postJson("/api/v1/conversations/$conversation->id/messages", [...$input, 'body' => 'Edited hello'])->assertStatus(409);
+        $this->assertDatabaseCount('messages', 1);
+    }
+
+    public function testMessageEditsExpireFiveMinutesAfterOriginalSend(): void
+    {
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $this->mutual($alice, $bob);
+        $conversation = Conversations::open($alice->id, $bob->id);
+        [$message] = Conversations::send($conversation->id, $alice->id, 'Original', $this->messageInput()['client_message_id']);
+        $url = "/api/v1/conversations/$conversation->id/messages/$message->id";
+        $createdAt = \App\Services\Billing\Billing::timestamp(time() - 240);
+        DB::table('messages')->where('id', $message->id)->update(['created_at' => $createdAt]);
+
+        $this->asUser($alice)->patchJson($url, ['body' => 'Edited in time'])->assertOk()
+            ->assertJsonPath('data.body', 'Edited in time');
+        $this->assertDatabaseHas('messages', ['id' => $message->id, 'created_at' => $createdAt]);
+        $events = query('realtime_outbox')->count();
+        foreach ([300, 301] as $age) {
+            DB::table('messages')->where('id', $message->id)->update([
+                'created_at' => \App\Services\Billing\Billing::timestamp(time() - $age),
+            ]);
+            $this->patchJson($url, ['body' => 'Too late'])->assertStatus(409);
+        }
+        $this->getJson("/api/v1/conversations/$conversation->id/messages")->assertOk()
+            ->assertJsonPath('data.0.body', 'Edited in time');
+        $this->assertDatabaseHas('conversations', ['id' => $conversation->id, 'version' => 3]);
+        $this->assertDatabaseCount('realtime_outbox', $events);
+    }
+
+    public function testMessageChangesRequireSenderAndMatchingConversation(): void
+    {
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $eve = $this->makeUser('eve');
+        $this->mutual($alice, $bob);
+        $this->mutual($alice, $eve);
+        $conversation = Conversations::open($alice->id, $bob->id);
+        $other = Conversations::open($alice->id, $eve->id);
+        [$message] = Conversations::send($conversation->id, $alice->id, 'Original', $this->messageInput()['client_message_id']);
+        $url = "/api/v1/conversations/$conversation->id/messages/$message->id";
+        $this->patchJson($url, ['body' => 'Changed'])->assertUnauthorized();
+        $this->deleteJson($url)->assertUnauthorized();
+        foreach ([$bob, $eve] as $viewer) {
+            $this->asUser($viewer)->patchJson($url, ['body' => 'Changed'])->assertNotFound();
+            $this->deleteJson($url)->assertNotFound();
+        }
+        $this->asUser($alice)->patchJson("/api/v1/conversations/$other->id/messages/$message->id", ['body' => 'Changed'])->assertNotFound();
+        $this->deleteJson("/api/v1/conversations/$other->id/messages/$message->id")->assertNotFound();
+        $this->patchJson("/api/v1/conversations/$conversation->id/messages/99999", ['body' => 'Changed'])->assertNotFound();
+        $this->deleteJson("/api/v1/conversations/$conversation->id/messages/99999")->assertNotFound();
+        $this->getJson("/api/v1/conversations/$conversation->id/messages")->assertOk()->assertJsonPath('data.0.body', 'Original');
+    }
+
+    public function testMessageEditValidationAndCurrentPermission(): void
+    {
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $this->mutual($alice, $bob);
+        $conversation = Conversations::open($alice->id, $bob->id);
+        [$message] = Conversations::send($conversation->id, $alice->id, 'Original', $this->messageInput()['client_message_id']);
+        $url = "/api/v1/conversations/$conversation->id/messages/$message->id";
+        $this->asUser($alice);
+        foreach (['', '   ', str_repeat('a', 2001), "bad\0text", null] as $body) {
+            $this->patchJson($url, ['body' => $body])->assertStatus(422);
+        }
+        $this->patchJson($url, [])->assertStatus(422);
+        $this->patchJson($url, ['body' => 'Changed', 'sender_user_id' => $bob->id])->assertStatus(422);
+        $this->deleteJson($url, ['body' => 'Changed'])->assertStatus(422);
+        DB::table('messages')->where('id', $message->id)->update(['moderation_status' => 'restricted']);
+        $this->patchJson($url, ['body' => 'Changed'])->assertStatus(409);
+        DB::table('messages')->where('id', $message->id)->update(['moderation_status' => 'approved']);
+        $this->deleteJson("/api/v1/users/$bob->id/follow")->assertOk();
+        $this->patchJson($url, ['body' => 'Changed'])->assertForbidden();
+        $this->getJson("/api/v1/conversations/$conversation->id/messages")->assertOk()->assertJsonPath('data.0.body', 'Original');
+    }
+
+    public function testSenderCanDeleteMessageAndLinkedAlertWhilePreservingReportEvidence(): void
+    {
+        $alice = $this->makeUser();
+        $bob = $this->makeUser('bob');
+        $this->mutual($alice, $bob);
+        $conversation = Conversations::open($alice->id, $bob->id);
+        [$first] = Conversations::send($conversation->id, $alice->id, 'Earlier', $this->messageInput()['client_message_id']);
+        [$message] = Conversations::send($conversation->id, $alice->id, 'Reported text', $this->messageInput()['client_message_id']);
+        $url = "/api/v1/conversations/$conversation->id/messages/$message->id";
+        $this->asUser($bob)->postJson('/api/v1/reports', ['message_id' => $message->id, 'reason' => 'Abuse'])->assertCreated();
+        $evidence = query('reports')->first()->evidence;
+        $this->asUser($alice)->patchJson($url, ['body' => 'Edited text'])->assertOk();
+        $this->postJson("/api/v1/users/$bob->id/block")->assertCreated();
+        $this->deleteJson($url)->assertNoContent();
+        $this->deleteJson($url)->assertNotFound();
+        $this->assertDatabaseMissing('messages', ['id' => $message->id]);
+        $this->assertDatabaseCount('notifications', 1);
+        $this->assertSame($first->id, Notification::first()->data['message_id']);
+        $this->assertSame($evidence, query('reports')->first()->evidence);
+        foreach ([$alice, $bob] as $viewer) {
+            $this->assertDatabaseHas('realtime_outbox', ['user_id' => $viewer->id, 'type' => 'conversation.updated', 'resource_id' => $conversation->id, 'version' => 5]);
+            $this->asUser($viewer)->getJson("/api/v1/conversations/$conversation->id/messages")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $first->id);
+            $this->getJson("/api/v1/conversations/$conversation->id")->assertOk()->assertJsonPath('data.last_message.id', $first->id);
+        }
+        $this->getJson('/api/v1/me/communication-summary')->assertOk()
+            ->assertJsonPath('data.unread_messages', 1)->assertJsonPath('data.unread_notifications', 1);
+        $this->asUser($alice)->deleteJson("/api/v1/conversations/$conversation->id/messages/$first->id")->assertNoContent();
+        $this->asUser($bob)->getJson("/api/v1/conversations/$conversation->id")->assertOk()
+            ->assertJsonPath('data.last_message', null)->assertJsonPath('data.unread_count', 0);
+        $this->assertDatabaseCount('notifications', 0);
+    }
+
     public function testMonotonicReadCursorsAndCatchupPagination(): void
     {
         $a = $this->makeUser();
@@ -139,7 +275,7 @@ class ConversationApiTest extends TestCase
         Conversations::send($other->id, $carol->id, 'Other thread', $this->messageInput()['client_message_id']);
         $this->asUser($bob)->getJson('/api/v1/me/communication-summary')->assertOk()
             ->assertJsonPath('data.unread_messages', 13)->assertJsonPath('data.unread_notifications', 13);
-        $activity = fn () => query('realtime_outbox')->where('user_id', $bob->id)->where('type', 'notifications.updated')->count();
+        $activity = fn() => query('realtime_outbox')->where('user_id', $bob->id)->where('type', 'notifications.updated')->count();
         $before = $activity();
         Conversations::read($thread->id, $bob->id, $last->id);
         Conversations::read($thread->id, $bob->id, $last->id);

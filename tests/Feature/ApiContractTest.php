@@ -32,6 +32,8 @@ class ApiContractTest extends TestCase
         'GET /api/v1/conversations/{conversation}',
         'GET /api/v1/conversations/{conversation}/messages',
         'POST /api/v1/conversations/{conversation}/messages',
+        'PATCH /api/v1/conversations/{conversation}/messages/{message}',
+        'DELETE /api/v1/conversations/{conversation}/messages/{message}',
         'PATCH /api/v1/conversations/{conversation}/read',
         'PATCH /api/v1/conversations/{conversation}/preferences',
         'GET /api/v1/artists/{artist}/update-subscription',
@@ -233,7 +235,7 @@ class ApiContractTest extends TestCase
         sort($expected);
         sort($operations);
         $this->assertSame($expected, $operations);
-        $this->assertSame(160, count($entries));
+        $this->assertSame(162, count($entries));
         $highlights = $entries['artistcontroller-highlights'];
         $this->assertFalse($highlights['auth']);
         $this->assertSame([], $highlights['parameters']);
@@ -267,6 +269,13 @@ class ApiContractTest extends TestCase
         $this->assertTrue($entries['notificationcontroller-clearall']['auth']);
         $this->assertSame('DELETE', $entries['notificationcontroller-clearall']['method']);
         $this->assertSame(['data' => ['message' => 'Read notifications cleared.']], $entries['notificationcontroller-clearall']['response']);
+        $this->assertTrue($entries['conversationcontroller-updatemessage']['auth']);
+        $this->assertSame('PATCH', $entries['conversationcontroller-updatemessage']['method']);
+        $parameters = array_column($entries['conversationcontroller-updatemessage']['parameters'], null, 'name');
+        $this->assertTrue($parameters['body']['required']);
+        $this->assertSame('body', $parameters['body']['in']);
+        $this->assertTrue($entries['conversationcontroller-destroymessage']['auth']);
+        $this->assertSame('204', $entries['conversationcontroller-destroymessage']['status']);
         $this->assertFalse($entries['discovercontroller-index']['auth']);
         $this->assertFalse($entries['discovercontroller-people']['auth']);
         $this->assertSame(120, $entries['discovercontroller-index']['rate']);

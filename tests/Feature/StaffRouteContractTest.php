@@ -20,6 +20,8 @@ class StaffRouteContractTest extends TestCase
         }
         $expected[] = 'POST /api/v1/me/uploads/resolve';
         $expected[] = 'GET /api/v1/me/communication-summary';
+        $expected[] = 'PATCH /api/v1/conversations/{conversation}/messages/{message}';
+        $expected[] = 'DELETE /api/v1/conversations/{conversation}/messages/{message}';
         $expected[] = 'GET /api/v1/artist-highlights';
         sort($actual);
         sort($expected);

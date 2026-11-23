@@ -123,6 +123,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/conversations/{conversation}', [ConversationController::class, 'show']);
         Route::get('/conversations/{conversation}/messages', [ConversationController::class, 'messages']);
         Route::post('/conversations/{conversation}/messages', [ConversationController::class, 'send']);
+        Route::patch('/conversations/{conversation}/messages/{message}', [ConversationController::class, 'updateMessage']);
+        Route::delete('/conversations/{conversation}/messages/{message}', [ConversationController::class, 'destroyMessage']);
         Route::patch('/conversations/{conversation}/read', [ConversationController::class, 'read']);
         Route::patch('/conversations/{conversation}/preferences', [ConversationController::class, 'preferences']);
         Route::get('/artists/{artist}/update-subscription', [CommunicationController::class, 'subscription']);
