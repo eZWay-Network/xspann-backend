@@ -14,11 +14,11 @@
     "license": "MIT",
     "require": {
         "php": ">=8.2",
-        "tinymvc/tinycore": "^4.0",
+        "tinymvc/tinycore": "^4.3",
         "phpmailer/phpmailer": "^6.9",
         "voku/portable-ascii": "^2.0",
         "tinymvc/relay": "^1.0",
-        "tinymvc/inertia-php": "2.1.0"
+        "tinymvc/inertia-php": "^2.1"
     },
     "authors": [
         {
@@ -43,6 +43,9 @@
         "ext-redis": "Required for Redis cache, lock, session, and queue drivers."
     },
     "scripts": {
+        "post-autoload-dump": [
+            "@php spark package:discover"
+        ],
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
         ],
@@ -72,6 +75,7 @@
         }
     },
     "require-dev": {
-        "tinymvc/pulse": "^1.0"
+        "tinymvc/pulse": "^1.0",
+        "tinymvc/ember": "^1.0"
     }
 }
