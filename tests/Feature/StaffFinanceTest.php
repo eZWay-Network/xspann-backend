@@ -61,7 +61,7 @@ class StaffFinanceTest extends TestCase
         $this->browserLogin($this->makeUser('moderator'), 'moderator');
         $this->browserPage('/billing/reports')->assertForbidden();
         $this->browserPage('/billing/invoices')->assertForbidden();
-        $this->browserPage('/')->assertOk()->assertJsonPath('props.finance', null);
+        $this->browserPage('/advanced/overview')->assertOk()->assertJsonPath('props.finance', null);
     }
 
     public function testAdjustmentAllocationLocksVersionRequiresFreshConfirmationAndAuditsStaffActor(): void
@@ -76,9 +76,9 @@ class StaffFinanceTest extends TestCase
         $version = $this->browserPage('/billing/adjustments/' . $id)->assertOk()->json('props.allocation.version');
         $input = ['allocation' => 'no_service_change', 'reason' => 'Reviewed partial goodwill refund', 'version' => $version];
         $this->post('/billing/adjustments/' . $id . '/allocation', $input, $this->browserHeaders())->assertStatus(419);
-        DB::table('staff_sessions')->where('user_id', $actor->id)->update(['mfa_at' => Sessions::timestamp(-400)]);
+        DB::table('staff_sessions')->where('user_id', $actor->id)->update(['confirmed_at' => Sessions::timestamp(-400)]);
         $this->assertBrowserRejected($this->browserWrite('/billing/adjustments/' . $id . '/allocation', $input));
-        DB::table('staff_sessions')->where('user_id', $actor->id)->update(['mfa_at' => Sessions::timestamp()]);
+        DB::table('staff_sessions')->where('user_id', $actor->id)->update(['confirmed_at' => Sessions::timestamp()]);
         $this->browserWrite('/billing/adjustments/' . $id . '/allocation', $input)->assertStatus(303);
         $this->assertDatabaseHas('billing_adjustments', ['id' => $id, 'allocation' => 'no_service_change']);
         $this->assertDatabaseHas('audit_events', ['action' => 'billing.adjustment.allocated', 'actor_id' => $actor->id, 'actor_type' => 'staff']);

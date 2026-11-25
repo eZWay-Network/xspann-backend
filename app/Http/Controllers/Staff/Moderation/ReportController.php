@@ -25,7 +25,7 @@ final class ReportController
 
     private function queue(Request $request, bool $rights = false): Response
     {
-        $choices = ['status' => ['open', 'resolved'], 'type' => array_values(Moderation::TARGETS),
+        $choices = ['status' => ['open', 'reviewing', 'resolved', 'dismissed'], 'type' => array_values(Moderation::TARGETS),
             'priority' => ['low', 'normal', 'high', 'urgent'], 'tag' => $rights ? ['rights'] : ['rights', 'safety', 'spam', 'other']];
         $filters = ListFilters::read($request, $choices + ['assignee_id' => []]);
         if ($rights) {
@@ -41,7 +41,12 @@ final class ReportController
             }
         }
         if ($filters['q'] !== '') {
-            $query->where('id', ctype_digit($filters['q']) ? (int) $filters['q'] : 0);
+            $query->where(function ($query) use ($filters): void {
+                $id = ctype_digit($filters['q']) ? (int) $filters['q'] : 0;
+                $query->where('id', $id)->orWhere('target_id', $id)
+                    ->orWhereContains('reason', $filters['q'])->orWhereContains('details', $filters['q'])
+                    ->orWhereIn('subject_user_id', DB::table('users')->select('id')->whereContains('username', $filters['q']));
+            });
         }
         foreach (['priority', 'tag', 'assignee_id'] as $key) {
             if ($key === 'priority' && $filters[$key] === 'normal') {
@@ -76,6 +81,7 @@ final class ReportController
             'user' => ['users.view', 'staff.users.show', 'user'],
             'video' => ['content.view', 'staff.videos.show', 'video'],
             'audio' => ['content.view', 'staff.audios.show', 'audio'],
+            'comment' => ['content.view', 'staff.comments.show', 'comment'],
             'playlist' => ['content.view', 'staff.playlists.show', 'playlist'],
             'boost' => ['boosts.view', 'staff.boosts.show', 'boost'],
             default => null,
@@ -85,19 +91,34 @@ final class ReportController
             foreach (DB::table('staff_accounts')->join('users', 'users.id', '=', 'staff_accounts.user_id')
                 ->where('staff_accounts.enabled', true)->where('users.status', 'active')->whereNotNull('users.email_verified_at')->whereNotNull('users.onboarded_at')
                 ->select(['users.id', 'users.name', 'staff_accounts.role'])->orderBy('users.id')->limit(200)->get() as $member) {
-                if (Permissions::allows($member->role, 'reports.decide') && !in_array((int) $member->id, array_map('intval', [$row->user_id, $row->subject_user_id, $row->initiator_id]), true)) {
+                if (Permissions::allows($member->role, 'reports.decide') && !in_array((int) $member->id, array_map('intval', [$row->user_id, $row->subject_user_id]), true)) {
                     $reviewers[] = ['value' => (string) $member->id, 'label' => $member->name . ' #' . $member->id];
                 }
             }
         }
         $decisions = DB::table('moderation_decisions')->where('report_id', $report)->orderBy('id', 'desc')->limit(50)->get();
-        $canDecide = $row->status === 'open' || DB::table('moderation_decisions')->where('report_id', $report)
-            ->where('action', 'restrict')->where('active', true)->exists();
+        $canDecide = in_array($row->status, ['open', 'reviewing'], true) || DB::table('moderation_decisions')->where('report_id', $report)
+            ->where('active', true)->exists();
         $notes = $canWork ? DB::table('report_notes')->where('report_id', $report)->orderBy('id', 'desc')->limit(50)->all() : [];
 
+        $targetExists = DB::table(Moderation::TABLES[$row->target_type])->where('id', $row->target_id)->exists();
+        $moderation = $targetExists && $independent && $context->can('reports.decide')
+            ? \App\Http\Resources\Staff\ModerationActions::forTarget($context, $row->target_type, (int) $row->target_id, $report) : null;
+        if (!$targetExists && $independent && $context->can('reports.decide') && in_array($row->status, ['open', 'reviewing'], true)) {
+            $moderation = [
+                'url' => (string) route('staff.reports.decision', ['report' => $report]),
+                'type' => $row->target_type, 'target_label' => ucfirst($row->target_type) . ' #' . $row->target_id . ' (unavailable)',
+                'target_version' => 1, 'author_version' => 1, 'choices' => [], 'author_choices' => [], 'restorations' => [], 'confirmation_url' => '',
+            ];
+        }
+        if ($moderation && !in_array($row->status, ['open', 'reviewing'], true)) {
+            $moderation['choices'] = [];
+            $moderation['author_choices'] = [];
+        }
         return Inertia::render('moderation/reports/show', [
+            'moderation' => $moderation,
             'page' => ['title' => 'Case #' . $report, 'breadcrumbs' => []],
-            'target_url' => $target && $context->can($target[0]) ? (string) route($target[1], [$target[2] => $row->target_id]) : null,
+            'target_url' => $targetExists && $target && $context->can($target[0]) ? (string) route($target[1], [$target[2] => $row->target_id]) : null,
             'record' => ['id' => $report, 'version' => (int) $row->version, 'status' => $row->status,
                 'fields' => Records::fields((object) ['target_type' => $row->target_type, 'target_id' => $row->target_id, 'source' => $row->source, 'status' => $row->status, 'version' => $row->version, 'created_at' => (string) $row->created_at], ['target_type', 'target_id', 'source', 'status', 'version', 'created_at']),
                 'reason' => $row->reason],
@@ -106,6 +127,8 @@ final class ReportController
             'reviewers' => $reviewers,
             'notes' => array_map(fn ($note) => ['id' => (int) $note->id, 'actor_id' => $note->actor_id, 'body' => Hash::decrypt($note->body), 'created_at' => Sessions::iso($note->created_at)], $notes),
             'decisions' => array_map(fn ($decision) => ['id' => (int) $decision->id, 'action' => $decision->action, 'reason' => $decision->reason,
+                'reason_code' => $decision->reason_code, 'expires_at' => Sessions::iso($decision->expires_at),
+                'before' => json_decode($decision->before_state ?? 'null', true), 'after' => json_decode($decision->after_state ?? 'null', true),
                 'active' => (bool) $decision->active, 'created_at' => Records::date($decision->created_at)], $decisions->all()),
             'conflict' => $independent ? null : 'An independent staff member must review this case.',
             'actions' => [
@@ -121,7 +144,7 @@ final class ReportController
     {
         $report = Cases::create(Context::from($request), $request->validated()->toArray());
 
-        return $this->redirect($report->id, 'Review case created. An independent reviewer will make the decision.');
+        return $this->redirect($report->id, 'Review case created. You can review the evidence and take an authorized action.');
     }
 
     public function evidence(Request $request, int $report): Response
@@ -152,7 +175,7 @@ final class ReportController
     {
         $input = $request->validated()->toArray();
         $input['version'] = (int) $input['version'];
-        Moderation::decide($report, Context::from($request)->user, $input);
+        Moderation::decide($report, Context::from($request)->user, $input, Context::from($request));
 
         return $this->redirect($report, 'Moderation decision recorded.');
     }

@@ -23,6 +23,7 @@ import { useApp } from "@/contexts/app";
 
 export type RecordRow = {
   id: number;
+  audit?: Record<string, unknown>;
   title: string;
   url: string | null;
   status: string;
@@ -142,8 +143,9 @@ export function RecordsScreen({
                 className="w-32"
                 aria-label={fieldLabel(key)}
                 placeholder={fieldLabel(key)}
-                inputMode="numeric"
-                pattern="[1-9][0-9]{0,14}"
+                type={["from", "to"].includes(key) ? "date" : "text"}
+                inputMode={key.endsWith("_id") ? "numeric" : undefined}
+                pattern={key.endsWith("_id") ? "[1-9][0-9]{0,14}" : undefined}
                 value={String(draft[key] ?? "")}
                 onChange={(event) => update(key, event.target.value)}
               />
@@ -212,6 +214,32 @@ export function RecordsScreen({
                             {row.description}
                           </p>
                         )}
+                        {row.audit && Object.keys(row.audit).length > 0 && (
+                          <details className="mt-3 text-xs">
+                            <summary className="cursor-pointer font-medium">
+                              Decision details
+                            </summary>
+                            <dl className="mt-3 space-y-2">
+                              {Object.entries(row.audit).map(([key, value]) => (
+                                <div key={key}>
+                                  <dt className="font-medium">
+                                    {fieldLabel(key)}
+                                  </dt>
+                                  <dd className="whitespace-pre-wrap break-words">
+                                    {value && typeof value === "object"
+                                      ? Object.entries(value)
+                                          .map(
+                                            ([field, item]) =>
+                                              `${fieldLabel(field)}: ${item ?? "—"}`,
+                                          )
+                                          .join("; ")
+                                      : String(value ?? "—")}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </details>
+                        )}
                         {(row.starts_at || row.ends_at) && (
                           <p className="mt-1 text-xs text-muted-foreground">
                             {row.starts_at && formatDateTime(row.starts_at)}
@@ -231,7 +259,12 @@ export function RecordsScreen({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge>{row.status.replaceAll("_", " ")}</Badge>
+                      <Badge>
+                        {row.status === "approved" &&
+                        list_url.includes("/content/")
+                          ? "Clear"
+                          : row.status.replaceAll("_", " ")}
+                      </Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {row.created_at ? formatDateTime(row.created_at) : "—"}

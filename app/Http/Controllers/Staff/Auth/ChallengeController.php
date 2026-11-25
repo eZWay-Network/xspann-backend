@@ -14,7 +14,7 @@ final class ChallengeController
     {
         $context = Sessions::resolve($request);
 
-        if (!$context && !BrowserAuth::pending()) {
+        if (!$context) {
             return Inertia::redirect((string) route('staff.login'));
         }
 

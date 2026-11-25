@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Services\{AccountSecurity, Totp};
+use App\Services\AccountSecurity;
 use Spark\Facades\Hash;
 use Tests\TestCase;
 
@@ -69,20 +69,19 @@ class AccountFoundationTest extends TestCase
         $this->postJson('/api/v1/me/policy-acceptances', $this->enrollment())->assertOk();
     }
 
-    public function testStaffRequiresMfaOnTheCurrentSessionAndRejectsReplayExpiryAndRevocation(): void
+    public function testStaffUsesPasswordLoginAndRejectsSessionExpiryAndRevocation(): void
     {
         $staff = $this->makeUser();
-        $secret = Totp::secret();
-        AccountSecurity::enrollStaff($staff, 'moderator', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
-        $this->assertFalse(query('staff_accounts')->first()->mfa_secret === $secret);
+        AccountSecurity::enrollStaff($staff, 'moderator');
+        $this->assertSame(null, query('staff_accounts')->first()->mfa_secret);
         $this->asUser($staff)->getJson('/api/v1/admin/reports')->assertNotFound();
         $this->postJson('/api/v1/auth/reauthenticate', ['purpose' => 'staff', 'password' => 'password123'])->assertStatus(422);
         $this->browserPage('/moderation/reports')->assertStatus(409);
         $this->browserLogin($staff, 'moderator');
         $this->browserPage('/moderation/reports')->assertOk();
-        $this->browserWrite('/challenge', ['password' => 'password123', 'mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertStatus(303);
-        $this->browserPage('/challenge')->assertJsonPath('props.errors.mfa_code', 'Enter a fresh six-digit authenticator code.');
-        query('staff_sessions')->where('user_id', $staff->id)->update(['mfa_expires_at' => \App\Services\Staff\Sessions::timestamp(-1)]);
+        $this->browserWrite('/challenge', ['password' => 'password123'])->assertStatus(303);
+        $this->assertTrue(query('staff_sessions')->where('user_id', $staff->id)->value('confirmed_at') !== null);
+        query('staff_sessions')->where('user_id', $staff->id)->update(['expires_at' => \App\Services\Staff\Sessions::timestamp(-1)]);
         $this->browserPage('/moderation/reports')->assertStatus(409);
         AccountSecurity::revokeStaff($staff->id);
         $this->browserPage('/moderation/reports')->assertStatus(409);

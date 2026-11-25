@@ -36,6 +36,7 @@ type Member = {
   username: string;
   role: string;
   enabled: boolean;
+  legacy: boolean;
   version: number;
   action_url: string;
   show_url: string;
@@ -53,6 +54,7 @@ type PageMeta = { current_page: number; last_page: number; total: number };
 type Option = { value: string; label: string };
 export default function Team({
   members,
+  permissions_url,
   invitations,
   roles,
   invite_url,
@@ -60,6 +62,7 @@ export default function Team({
   pagination,
   list_url,
 }: {
+  permissions_url: string;
   members: Member[];
   invitations: Invitation[];
   roles: Option[];
@@ -95,7 +98,7 @@ export default function Team({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Team & access</h2>
+          <h2 className="text-base font-semibold">Admin roles</h2>
           <p className="mt-1 text-description">
             Invite existing accounts and manage fixed staff roles.
           </p>
@@ -105,6 +108,9 @@ export default function Team({
           Invite staff member
         </Button>
       </div>
+      <Link href={permissions_url} className="text-sm underline">
+        View role permissions
+      </Link>
       {invitationUrl && (
         <Alert variant="success">
           <div className="space-y-3">
@@ -172,6 +178,7 @@ export default function Team({
                 </TableCell>
                 <TableCell className="capitalize">
                   {member.role.replaceAll("_", " ")}
+                  {member.legacy ? " · Legacy" : ""}
                 </TableCell>
                 <TableCell>
                   <Badge tone={member.enabled ? "success" : "neutral"}>
@@ -282,9 +289,8 @@ export default function Team({
             Confirm identity
           </Link>
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            The final enabled administrator is protected. A disabled account can
-            be enabled with its retained factor, or invited to enroll a new
-            factor.
+            The final enabled super admin is protected. Re-enabling an eligible
+            account restores access through password sign-in.
           </p>
         </div>
       </SettingsSection>
@@ -293,7 +299,7 @@ export default function Team({
           <DialogTitle>Invite a staff member</DialogTitle>
           <DialogDescription className="mt-2">
             Choose an existing active, verified account. Your colleague sets up
-            their own authenticator.
+            their account password.
           </DialogDescription>
           <DialogDismiss />
           {inviteOpen && (

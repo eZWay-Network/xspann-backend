@@ -53,6 +53,6 @@ final class Context
 
     public function recent(int $seconds): bool
     {
-        return $this->session->mfa_at !== null && strtotime($this->session->mfa_at . ' UTC') > time() - $seconds;
+        return $this->session->confirmed_at !== null && strtotime($this->session->confirmed_at . ' UTC') > time() - $seconds;
     }
 }

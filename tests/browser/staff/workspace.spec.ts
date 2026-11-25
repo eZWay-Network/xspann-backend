@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { createHmac } from "node:crypto";
 const fixture =
   process.env.XPN_STAFF_FIXTURE || "/private/tmp/xpn-staff-browser";
 const control = (action: string, user = "admin") =>
@@ -9,42 +8,22 @@ const control = (action: string, user = "admin") =>
     ["tests/browser/staff/control.php", fixture, action, user],
     { encoding: "utf8" },
   ).trim();
-function totp(secret: string) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  const bits = [...secret]
-    .map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0"))
-    .join("");
-  const key = Buffer.from(
-    bits.match(/.{8}/g)!.map((byte) => parseInt(byte, 2)),
-  );
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
-  const digest = createHmac("sha1", key).update(counter).digest();
-  return String(
-    (digest.readUInt32BE(digest[19] & 15) & 0x7fffffff) % 1000000,
-  ).padStart(6, "0");
-}
 async function login(
   page: Page,
   user = "admin",
   startPath = "/login",
-  heading = "Workspace overview",
+  heading = ["admin", "moderator", "senior_moderator", "support"].includes(user)
+    ? "Dashboard"
+    : "Workspace overview",
   password = "StaffFixturePassword123!",
 ) {
-  control("reset-replay", user);
+  control("reset-login", user);
   await page.goto(startPath);
   await page
     .getByLabel("Email address", { exact: true })
     .fill(`${user}@example.test`);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Continue securely" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Verify it’s you" }),
-  ).toBeVisible();
-  await page
-    .getByLabel("Authenticator code", { exact: true })
-    .fill(control("code", user));
-  await page.getByRole("button", { name: "Verify and continue" }).click();
   await expect(page.getByRole("heading", { name: heading })).toBeVisible();
 }
 
@@ -146,16 +125,14 @@ test("Audio drafts, record ownership, manual collapse and cursor navigation", as
   expect(new URL(page.url()).searchParams.get("q")).toBe("Artist");
 
   await page.goto("/operations/audit?per_page=1");
-  await search.fill("staff.challenge_completed");
+  await search.fill("staff.browser_login");
   await page.getByRole("combobox", { name: "Actor type" }).click();
   await page.getByRole("option", { name: "Staff", exact: true }).click();
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/actor_type=staff/);
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page).toHaveURL(/cursor=/);
-  expect(new URL(page.url()).searchParams.get("q")).toBe(
-    "staff.challenge_completed",
-  );
+  expect(new URL(page.url()).searchParams.get("q")).toBe("staff.browser_login");
   await page.getByRole("button", { name: "Previous", exact: true }).click();
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(page).toHaveURL(/\/operations\/audit$/);
@@ -245,6 +222,7 @@ test("Local chart periods remain visible and reconcile with daily values", async
   isMobile,
 }, info) => {
   await login(page);
+  await page.goto("/advanced/overview");
   for (const days of [7, 30, 90]) {
     await page.getByRole("combobox", { name: "Reporting period" }).click();
     await page.getByRole("option", { name: "Last " + days + " days" }).click();
@@ -282,7 +260,9 @@ test("Local chart periods remain visible and reconcile with daily values", async
     );
     await page.getByRole("button", { name: "Show chart" }).click();
   }
-  await page.goto("/?period=custom&from=2001-01-01&to=2001-01-07");
+  await page.goto(
+    "/advanced/overview?period=custom&from=2001-01-01&to=2001-01-07",
+  );
   await expect(page.getByText("No records in this range.")).toBeVisible();
 });
 
@@ -314,6 +294,7 @@ test("cookie login, overview, keyboard search, date controls and responsive shel
   expect(before?.httpOnly).toBeTruthy();
   expect(before?.sameSite).toBe("Lax");
   await login(page);
+  await page.goto("/advanced/overview");
   const after = (await page.context().cookies()).find(
     (cookie) => cookie.name === "spark_session",
   );
@@ -366,7 +347,7 @@ test("cookie login, overview, keyboard search, date controls and responsive shel
   ).toBeVisible();
 });
 
-test("profile preferences persist and expired MFA blocks page props", async ({
+test("profile preferences persist and expired session blocks page props", async ({
   page,
 }) => {
   await login(page, "moderator");
@@ -428,15 +409,11 @@ test("profile preferences persist and expired MFA blocks page props", async ({
       timestamp,
     ),
   );
-  control("expire-mfa", "moderator");
+  control("expire-session", "moderator");
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Verify it’s you" }),
-  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Workspace overview" }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Cancel and sign out" }).click();
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
@@ -470,13 +447,9 @@ test("team invitation enrollment and role revocation", async ({
   await invited
     .getByLabel("Password", { exact: true })
     .fill("StaffFixturePassword123!");
-  await invited.getByRole("button", { name: "Verify account" }).click();
-  await expect(invited.locator("code")).toBeVisible();
-  const secret = await invited.locator("code").textContent();
-  await invited.getByLabel("New authenticator code").fill(totp(secret!));
-  await invited.getByRole("button", { name: "Activate staff access" }).click();
+  await invited.getByRole("button", { name: "Accept invitation" }).click();
   await expect(
-    invited.getByRole("heading", { name: "Workspace overview" }),
+    invited.getByRole("heading", { name: "Dashboard" }),
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Manage Taylor Brooks" }).click();
@@ -552,7 +525,7 @@ test("staff settings, attention and dialogs fit the shared responsive shell", as
   expect(errors).toEqual([]);
 });
 
-test("identity confirmation, authenticator replacement and password change revoke sessions", async ({
+test("password confirmation and password change revoke sessions", async ({
   page,
   browser,
 }, testInfo) => {
@@ -560,61 +533,18 @@ test("identity confirmation, authenticator replacement and password change revok
   await login(page, "support");
   const other = await browser.newContext();
   const second = await other.newPage();
-
   try {
     await login(second, "support");
     await page.goto("/settings/security");
     await page.getByRole("link", { name: "Confirm identity" }).click();
-    control("reset-replay", "support");
     await page
       .getByLabel("Password", { exact: true })
       .fill("StaffFixturePassword123!");
     await page
-      .getByLabel("Authenticator code", { exact: true })
-      .fill(control("code", "support"));
-    await page.getByRole("button", { name: "Verify and continue" }).click();
+      .getByRole("button", { name: "Verify and continue", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/settings\/security$/);
-
-    control("reset-replay", "support");
-    await page
-      .getByRole("button", { name: "Replace authenticator", exact: true })
-      .click();
-    await page
-      .getByLabel("Password", { exact: true })
-      .fill("StaffFixturePassword123!");
-    await page
-      .getByLabel("Current authenticator code")
-      .fill(control("code", "support"));
-    await page.getByRole("button", { name: "Set up replacement" }).click();
-    const secret = await page.locator("code").textContent();
-    expect(secret).toBeTruthy();
-    const code = page.getByLabel("New authenticator code");
-    await expect(code).toBeFocused();
-    await page.reload();
-    await expect(code).toBeVisible();
-    await expect(page.locator("code")).toHaveCount(0);
-    const invalid = String((Number(totp(secret!)) + 1) % 1000000).padStart(
-      6,
-      "0",
-    );
-    await code.fill(invalid);
-    await page
-      .getByRole("button", { name: "Replace authenticator and sign out" })
-      .click();
-    await expect(code).toHaveAttribute("aria-invalid", "true");
-    await expect(page.getByRole("alert")).toContainText(
-      "Enter the code from your new authenticator.",
-    );
-    await code.fill(totp(secret!));
-    await page
-      .getByRole("button", { name: "Replace authenticator and sign out" })
-      .click();
-    await expect(page).toHaveURL(/\/login$/);
-    await second.goto("/");
-    await expect(second).toHaveURL(/\/login$/);
-
-    await login(page, "support", "/settings/security", "Active sessions");
-    control("reset-replay", "support");
+    await expect(page.getByText(/authenticator/i)).toHaveCount(0);
     await page
       .getByRole("button", { name: "Change password", exact: true })
       .click();
@@ -625,16 +555,11 @@ test("identity confirmation, authenticator replacement and password change revok
       .getByLabel("New password", { exact: true })
       .fill("UpdatedFixturePassword123!");
     await page
-      .getByLabel("Fresh authenticator code")
-      .fill(control("code", "support"));
-    await page
       .getByRole("button", { name: "Change password and sign out" })
       .click();
     await expect(page).toHaveURL(/\/login$/);
-    await page.goBack();
-    await expect(
-      page.getByRole("heading", { name: "Active sessions" }),
-    ).toHaveCount(0);
+    await second.goto("/");
+    await expect(second).toHaveURL(/\/login$/);
     await login(
       page,
       "support",

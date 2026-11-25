@@ -31,7 +31,7 @@ final class ListFilters
                     throw new StaffException('Choose a valid page cursor.', 422, $key);
                 }
             }
-            if (in_array($key, ['page', 'per_page', 'owner_id', 'artist_id', 'assignee_id', 'period_id', 'invoice_id', 'subscription_id'], true)) {
+            if (in_array($key, ['page', 'per_page', 'actor_id', 'affected_user_id', 'target_id', 'report_id', 'owner_id', 'audio_id', 'artist_id', 'assignee_id', 'period_id', 'invoice_id', 'subscription_id'], true)) {
                 $pattern = in_array($key, ['page', 'per_page'], true) ? '/^[1-9][0-9]{0,5}$/D' : '/^[1-9][0-9]{0,14}$/D';
                 if (!preg_match($pattern, (string) $value) || ($key === 'per_page' && (int) $value > 50)) {
                     throw new StaffException('Choose a valid page size or reference.', 422, $key);

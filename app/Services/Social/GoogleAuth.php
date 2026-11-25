@@ -21,7 +21,7 @@ class GoogleAuth
         $claims = $this->verify($token);
         $email = strtolower($claims['email']);
 
-        return Cache::lock('accounts.google.' . hash('sha256', $email), 10)->block(
+        $user = Cache::lock('accounts.google.' . hash('sha256', $email), 10)->block(
             5,
             fn() => DB::transaction(function () use ($claims, $email) {
                 $identity = AuthIdentity::where('provider', 'google')
@@ -71,7 +71,7 @@ class GoogleAuth
                     StorageService::validateOwner($user->avatar, $user->id, 'avatar', 'avatars');
                 }
 
-                abort_unless($user->status === 'active' || ($user->status === 'suspended' && $user->hasVerifiedEmail()), 403, 'This account is not active.');
+                abort_unless($user->status === 'active' || (in_array($user->status, ['suspended', 'banned', 'deleted'], true) && $user->hasVerifiedEmail()), 403, 'This account is not active.');
 
                 if (!$user->hasVerifiedEmail()) {
                     abort_unless(
@@ -107,6 +107,9 @@ class GoogleAuth
                 return $user;
             })
         );
+        \App\Services\Moderation::expireSuspensions($user->id);
+
+        return $user->refresh();
     }
 
     public function verify(string $token): array

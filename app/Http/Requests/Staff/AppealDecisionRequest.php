@@ -9,6 +9,7 @@ final class AppealDecisionRequest extends StaffRequest
         return [
             'version' => 'required|integer|min:1',
             'outcome' => 'required|in:uphold,overturn',
+            'reason_code' => ['required', ['in' => \App\Services\Moderation::REASONS]],
             'reason' => 'required|string|min:5|max:2000',
         ];
     }

@@ -24,7 +24,7 @@ class SendDeletionConfirmation implements JobInterface
         $email = Hash::decrypt($this->encryptedEmail);
 
         Cache::lock('accounts.deletion-email.' . hash('sha256', $email), 30)->block(5, function () use ($email): void {
-            $user = User::where('email', $email)->whereIn('status', ['active', 'suspended'])->first();
+            $user = User::where('email', $email)->whereIn('status', ['active', 'suspended', 'banned'])->first();
             if (
                 !$user || query('account_action_tokens')->where('user_id', $user->id)->where('purpose', 'email_deletion')
                     ->where('created_at', '>', now()->subMinutes(5)->toDateTimeString())->exists()

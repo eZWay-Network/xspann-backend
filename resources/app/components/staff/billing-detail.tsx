@@ -47,7 +47,7 @@ function AllocationForm({ allocation }: { allocation: Allocation }) {
     >
       {!allocation.confirmed && (
         <Alert>
-          Fresh credential and MFA confirmation is required.{" "}
+          Fresh password confirmation is required.{" "}
           <Link
             className={buttonVariants({ variant: "secondary", size: "sm" })}
             href={allocation.confirmation_url}

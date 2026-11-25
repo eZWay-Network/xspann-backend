@@ -12,7 +12,7 @@ final class Cases
 {
     public static function independent(Context $context, Report $report): bool
     {
-        return !in_array((int) $context->user->id, array_map('intval', [$report->user_id, $report->subject_user_id, $report->initiator_id]), true);
+        return !in_array((int) $context->user->id, array_map('intval', [$report->user_id, $report->subject_user_id]), true);
     }
 
     public static function evidence(Context $context, int $id): array
@@ -75,7 +75,7 @@ final class Cases
                 $user = \App\Models\User::find($assignee);
                 abort_unless($member && $user && $user->status === 'active' && $user->email_verified_at && $user->onboarded_at
                     && Permissions::allows($member->role, 'reports.decide')
-                    && !in_array($assignee, array_map('intval', [$report->user_id, $report->subject_user_id, $report->initiator_id]), true), 422, 'Choose an eligible independent reviewer.');
+                    && !in_array($assignee, array_map('intval', [$report->user_id, $report->subject_user_id]), true), 422, 'Choose an eligible independent reviewer.');
             }
             DB::table('report_workflows')->upsert([
                 'report_id' => $id, 'assignee_id' => $assignee, 'priority' => $input['priority'],

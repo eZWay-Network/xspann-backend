@@ -10,14 +10,20 @@ final class Records
         $query->orderBy('id', $filters['sort'] === 'oldest' ? 'asc' : 'desc');
         $page = $cursor ? $query->cursorPaginate($filters['per_page']) : $query->paginate($filters['per_page'], 'page');
 
+        $options = [];
+        foreach ($choices as $field => $values) {
+            $options[$field] = array_map(fn ($value) => ['value' => $value,
+                'label' => $field === 'moderation_status' && $value === 'approved' ? 'Clear' : self::label($value)], $values);
+        }
+
         return [
             'rows' => array_map($project, $page->items()),
             'pagination' => $cursor
                 ? ['kind' => 'cursor', 'next_url' => $page->nextPageUrl(), 'previous_url' => $page->previousPageUrl()]
                 : ['kind' => 'page', ...$page->paginationMeta()],
             'filters' => $filters,
-            'filter_options' => array_map(fn ($values) => array_map(fn ($value) => ['value' => $value, 'label' => self::label($value)], $values), $choices),
-            'filter_fields' => array_values(array_intersect(['owner_id', 'artist_id', 'assignee_id', 'period_id', 'invoice_id', 'subscription_id'], array_keys($filters))),
+            'filter_options' => $options,
+            'filter_fields' => array_values(array_intersect(['actor_id', 'affected_user_id', 'target_id', 'report_id', 'action', 'from', 'to', 'audio_id', 'owner_id', 'artist_id', 'assignee_id', 'period_id', 'invoice_id', 'subscription_id'], array_keys($filters))),
             'list_url' => (string) route($route),
         ];
     }
@@ -33,6 +39,9 @@ final class Records
         $fields = [];
         foreach ($columns as $column) {
             $value = $row->$column ?? null;
+            if ($column === 'moderation_status' && $value === 'approved') {
+                $value = 'Clear';
+            }
             $fields[] = ['label' => self::label($column), 'value' => str_ends_with($column, '_at') ? self::date($value, $timezone) : $value];
         }
 

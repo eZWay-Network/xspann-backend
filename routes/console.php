@@ -68,13 +68,9 @@ command('staff:enroll', function (Prompt $prompt, array $args): void {
         throw new InvalidArgumentException('Staff user not found. Check --user=<id>.');
     }
 
-    $secret = \App\Services\Totp::secret();
-    $prompt->message("Enroll or reset MFA for $user->username ($role). This replaces existing staff MFA.");
-    $prompt->message("Authenticator: XPN Social / $user->username; SHA1; 6 digits; 30 seconds; secret: $secret");
-    $code = $prompt->ask('Enter the six-digit authenticator code to confirm enrollment');
-    \App\Services\AccountSecurity::enrollStaff($user, $role, $secret, $code);
-    $prompt->message('Staff enrolled. Previous MFA sessions have been revoked. Wait for the next code before signing in.', 'success');
-})->description('Enroll or recover staff MFA using a trusted operator terminal');
+    \App\Services\AccountSecurity::enrollStaff($user, $role);
+    $prompt->message('Staff enrolled. Previous staff sessions have been revoked.', 'success');
+})->description('Enroll or recover staff access using a trusted operator terminal');
 
 command('staff:revoke', function (Prompt $prompt, array $args): void {
     $id = is_string($args['user'] ?? null)
@@ -85,7 +81,7 @@ command('staff:revoke', function (Prompt $prompt, array $args): void {
     }
     \App\Services\AccountSecurity::revokeStaff($id);
     $prompt->message('Staff access revoked.');
-})->description('Revoke staff access and recent MFA sessions');
+})->description('Revoke staff access and staff sessions');
 
 command('accounts:maintenance', function (Prompt $prompt): void {
     (new \App\Jobs\FoundationMaintenance())->handle();

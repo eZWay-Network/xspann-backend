@@ -17,6 +17,7 @@ final class StaffMaintenance implements JobInterface
                     ->update(['updated_at' => Sessions::timestamp()]);
                 Operations::run((int) $id);
             }
+            \App\Services\Moderation::expireSuspensions();
             Exports::maintain();
             Sessions::maintain();
             DB::table('staff_operations')->whereIn('status', ['completed', 'no_op', 'failed', 'cancelled'])

@@ -12,6 +12,10 @@ class AuditTrail
             'actor_id' => $actorId,
             'actor_type' => $actorType,
             'action' => $action,
+            'affected_user_id' => $context['subject_user_id'] ?? $context['user_id'] ?? null,
+            'target_type' => $context['target_type'] ?? null,
+            'target_id' => $context['target_id'] ?? null,
+            'report_id' => $context['report_id'] ?? null,
             'context' => json_encode($context, JSON_THROW_ON_ERROR),
             'created_at' => now()->toDateTimeString(),
         ]);

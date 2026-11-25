@@ -91,6 +91,7 @@ class Audio extends Model
     {
         return $query->where('audios.status', 'ready')
             ->where('audios.moderation_status', 'approved')
+            ->where('audios.reuse_blocked', false)
             ->where(function (QueryBuilder $query) use ($viewer): void {
                 $query->where('audios.reuse_allowed', true);
                 if ($viewer) {

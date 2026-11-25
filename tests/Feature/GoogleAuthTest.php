@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\{AuthIdentity, User};
-use App\Services\{AccountSecurity, Totp};
+use App\Services\{AccountSecurity};
 use Spark\Utils\JWT;
 use Spark\Facades\Cache;
 use Spark\Facades\Queue;
@@ -67,8 +67,7 @@ class GoogleAuthTest extends TestCase
         $this->app->mergeConfig(['app' => ['url' => 'http://localhost']]);
         $user = $this->makeUser();
         AuthIdentity::create(['user_id' => $user->id, 'provider' => 'google', 'provider_id' => '123456789']);
-        $secret = Totp::secret();
-        AccountSecurity::enrollStaff($user, 'admin', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
+        AccountSecurity::enrollStaff($user, 'super_admin');
 
         $this->browserPage('/login')->assertOk();
         $this->assertBrowserRejected($this->browserWrite('/login', ['email' => $user->email, 'google_token' => $this->tokenFor()]));

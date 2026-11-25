@@ -1,7 +1,7 @@
 <?php
 
 // Navigation and command search share this permission-scoped catalog.
-return [
+$groups = [
     [
         'label' => 'Workspace',
         'placement' => 'main',
@@ -152,4 +152,40 @@ return [
             ['title' => 'Role permissions', 'route' => 'staff.settings.roles', 'icon' => 'shield', 'ability' => 'staff.view'],
         ],
     ],
+];
+
+$coreRoutes = ['staff.dashboard', 'staff.reports.index', 'staff.users.index', 'staff.videos.index', 'staff.audios.index',
+    'staff.playlists.index', 'staff.appeals.index', 'staff.audit', 'staff.team', 'staff.settings.roles'];
+$advanced = [['title' => 'Analytics overview', 'route' => 'staff.analytics', 'icon' => 'activity', 'ability' => 'dashboard.view']];
+foreach ($groups as $group) {
+    if ($group['placement'] !== 'main') {
+        continue;
+    }
+    foreach ($group['items'] as $item) {
+        foreach ($item['children'] ?? [$item] as $leaf) {
+            if (!in_array($leaf['route'], $coreRoutes, true)) {
+                $advanced[] = $leaf;
+            }
+        }
+    }
+}
+return [
+    ['label' => 'Admin', 'placement' => 'main', 'items' => [
+        ['title' => 'Dashboard', 'route' => 'staff.dashboard', 'icon' => 'dashboard', 'ability' => 'dashboard.view'],
+        ['title' => 'Reports', 'route' => 'staff.reports.index', 'icon' => 'flag', 'ability' => 'reports.view'],
+        ['title' => 'Users', 'route' => 'staff.users.index', 'icon' => 'users', 'ability' => 'users.view'],
+        ['key' => 'content', 'title' => 'Content', 'icon' => 'video', 'children' => [
+            ['title' => 'Videos', 'route' => 'staff.videos.index', 'icon' => 'video', 'ability' => 'content.view'],
+            ['title' => 'Audio', 'route' => 'staff.audios.index', 'icon' => 'artist', 'ability' => 'content.view'],
+            ['title' => 'Comments', 'route' => 'staff.comments.index', 'icon' => 'users', 'ability' => 'content.view'],
+            ['title' => 'Playlists', 'route' => 'staff.playlists.index', 'icon' => 'artist', 'ability' => 'content.view'],
+            ['title' => 'Reported messages', 'route' => 'staff.reported.messages', 'icon' => 'flag', 'ability' => 'reports.view'],
+            ['title' => 'Reported announcements', 'route' => 'staff.reported.announcements', 'icon' => 'bell', 'ability' => 'reports.view'],
+        ]],
+        ['title' => 'Appeals', 'route' => 'staff.appeals.index', 'icon' => 'shield', 'ability' => 'appeals.view'],
+        ['title' => 'Audit log', 'route' => 'staff.audit', 'icon' => 'shield', 'ability' => 'audit.view'],
+        ['title' => 'Admin roles', 'route' => 'staff.team', 'icon' => 'users', 'ability' => 'staff.view'],
+        ['key' => 'advanced', 'title' => 'Advanced', 'icon' => 'settings', 'children' => $advanced],
+    ]],
+    ...array_values(array_filter($groups, fn (array $group) => $group['placement'] !== 'main')),
 ];

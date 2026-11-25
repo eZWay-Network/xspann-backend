@@ -9,7 +9,7 @@ export default function ForgotPassword({ submit_url }: { submit_url: string }) {
   return (
     <AuthLayout
       title="Reset your password"
-      description="Use your verified account email. Your staff role and authenticator remain unchanged."
+      description="Use your verified account email. Your staff role remains unchanged."
     >
       <form
         className="space-y-5"

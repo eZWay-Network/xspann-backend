@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\{Audio, Comment, Report, Video};
-use App\Services\{AccountSecurity, Moderation, Totp};
+use App\Services\{AccountSecurity, Moderation};
 use Tests\TestCase;
 
 class ModerationFoundationTest extends TestCase
@@ -13,7 +13,7 @@ class ModerationFoundationTest extends TestCase
     private function staff(string $name): \App\Models\User
     {
         $user = $this->makeUser($name);
-        $this->browserLogin($user, 'moderator');
+        $this->browserLogin($user, 'senior_moderator');
 
         return $user;
     }
@@ -101,7 +101,7 @@ class ModerationFoundationTest extends TestCase
         $source = $this->makeVideo($owner);
         $report = Moderation::report($fan, ['reported_user_id' => $owner->id, 'reason' => 'Account concern']);
         $this->staff('reviewer');
-        $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Suspended pending review.', 'version' => 1])->assertStatus(303);
+        $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'suspend', 'expires_at' => gmdate('Y-m-d\TH:i:s\Z', time() + 86400), 'reason' => 'Suspended pending review.', 'version' => 1])->assertStatus(303);
         $decision = (int) query('moderation_decisions')->orderBy('id', 'desc')->value('id');
         $this->assertSame('suspended', $owner->refresh()->status);
         $this->asUser($owner)->getJson('/api/v1/auth/me')->assertStatus(403);

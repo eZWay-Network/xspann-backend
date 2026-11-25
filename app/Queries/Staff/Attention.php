@@ -31,7 +31,7 @@ final class Attention
                 $items[] = [
                     'key' => 'invitations',
                     'title' => 'Staff invitations awaiting enrollment',
-                    'description' => 'Invited colleagues must verify their credentials and set up an authenticator before access is enabled.',
+                    'description' => 'Invited colleagues must verify their account password before access is enabled.',
                     'count' => $pending,
                     'severity' => 'info',
                     'url' => (string) route('staff.team'),

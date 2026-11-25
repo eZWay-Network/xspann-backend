@@ -53,7 +53,7 @@ class PrivacyRequests
         }
 
         abort_unless(
-            in_array($user->status, ['active', 'suspended'], true),
+            in_array($user->status, ['active', 'suspended', 'banned'], true),
             403,
             'This account is not available.'
         );

@@ -3,8 +3,7 @@
 namespace App\Services\Staff;
 
 use App\Models\User;
-use App\Services\{AccountSecurity, AuditTrail};
-use Spark\Exceptions\Http\ResponseException;
+use App\Services\AuditTrail;
 use Spark\Facades\{Cache, DB, Hash, Session};
 use Spark\Http\Request;
 
@@ -36,6 +35,10 @@ final class BrowserAuth
         $email = mb_strtolower(trim($input['email']));
         self::throttle($email);
         $user = User::where('email', $email)->first();
+        if ($user?->status === 'suspended') {
+            \App\Services\Moderation::expireSuspensions($user->id);
+            $user->refresh();
+        }
         $member = $user ? DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->first() : null;
 
         if (!Sessions::eligible($user) || !$member || !Permissions::forRole($member->role)) {
@@ -46,15 +49,15 @@ final class BrowserAuth
         }
         self::verifyPassword($user, $input['password']);
 
-        Sessions::logout();
-        Session::regenerate(true);
-        Session::put('staff_pending', [
-            'user_id' => $user->id,
-            'version' => (int) $member->version,
-            'credential_version' => self::credentialVersion($user),
-            'expires' => time() + config('staff.pending_seconds'),
-            'destination' => Sessions::destination($input['destination'] ?? null),
-        ]);
+        Cache::lock("accounts.security.$user->id", 10)->block(5, fn () => DB::transaction(function () use ($user, $member, $request): void {
+            $current = DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->lockForUpdate()->first();
+            $fresh = User::whereKey($user->id)->lockForUpdate()->first();
+            if (!$current || (int) $current->version !== (int) $member->version || !Sessions::eligible($fresh)
+                || !hash_equals(self::credentialVersion($user), self::credentialVersion($fresh))) {
+                throw new StaffException('Staff access changed. Please sign in again.', 403);
+            }
+            Sessions::establish($fresh, $current, $request);
+        }));
     }
 
     public static function credentialVersion(User $user): string
@@ -62,65 +65,19 @@ final class BrowserAuth
         return hash('sha256', (string) $user->password);
     }
 
-    public static function pending(): ?array
-    {
-        $pending = Session::get('staff_pending');
-
-        if (!is_array($pending) || ($pending['expires'] ?? 0) <= time()) {
-            Session::forget('staff_pending');
-
-            return null;
-        }
-
-        return $pending;
-    }
-
     public static function challenge(Request $request, array $input, ?Context $context): string
     {
-        $pending = $context ? null : self::pending();
-        $id = $context?->user->id ?? $pending['user_id'] ?? null;
-
-        if (!$id) {
-            throw new StaffException('Your sign-in challenge expired. Please sign in again.', 401);
+        if (!$context) {
+            throw new StaffException('Please sign in again.', 401);
         }
-        self::throttle('challenge:' . $id);
-        $user = User::find($id);
-
-        if (!Sessions::eligible($user)) {
-            throw new StaffException('This staff account is unavailable.', 403);
-        }
-
-        if ($context) {
-            self::verifyPassword($user, $input['password'] ?? '');
-        }
-
-        Cache::lock("accounts.security.$id", 10)->block(5, fn() => DB::transaction(function () use ($user, $pending, $context, $input, $request): void {
-            $member = DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->lockForUpdate()->first();
-            $version = $context ? (int) $context->membership->version : (int) $pending['version'];
-            $freshUser = User::find($user->id);
-
-            if ($pending && (!$freshUser || !hash_equals($pending['credential_version'] ?? '', self::credentialVersion($freshUser)))) {
-                throw new StaffException('Your credentials changed. Please sign in again.', 403);
-            }
-
-            if (!$member || (int) $member->version !== $version || !Permissions::forRole($member->role) || !Sessions::eligible(User::find($user->id))) {
-                throw new StaffException('Staff access has changed. Please sign in again.', 403);
-            }
-
-            try {
-                AccountSecurity::consumeStaffTotp($member, $input['mfa_code']);
-            } catch (ResponseException) {
-                throw new StaffException('Enter a fresh six-digit authenticator code.', 422, 'mfa_code');
-            }
-
-            if ($context) {
-                Sessions::refreshMfa($context);
-            } else {
-                Sessions::establish($user, $member, $request);
-            }
-            AuditTrail::record('staff.challenge_completed', [], $user->id, 'staff');
+        self::throttle('confirmation:' . $context->user->id);
+        Cache::lock("accounts.security.{$context->user->id}", 10)->block(5, fn () => DB::transaction(function () use ($context, $input): void {
+            $current = Sessions::requireCurrent($context);
+            self::verifyPassword($current->user, $input['password'] ?? '');
+            Sessions::confirm($current);
+            AuditTrail::record('staff.password_confirmed', [], $current->user->id, 'staff');
         }));
 
-        return Sessions::destination($pending['destination'] ?? Session::pull('staff_destination'));
+        return Sessions::destination(Session::pull('staff_destination'));
     }
 }

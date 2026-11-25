@@ -24,7 +24,7 @@ const seed = () =>
     boost: number;
   };
 async function login(page: Page, role: string, path: string) {
-  control("reset-replay", role);
+  control("reset-login", role);
   await page.goto(path);
   await page
     .getByLabel("Email address", { exact: true })
@@ -33,10 +33,6 @@ async function login(page: Page, role: string, path: string) {
     .getByLabel("Password", { exact: true })
     .fill("StaffFixturePassword123!");
   await page.getByRole("button", { name: "Continue securely" }).click();
-  await page
-    .getByLabel("Authenticator code", { exact: true })
-    .fill(control("code", role));
-  await page.getByRole("button", { name: "Verify and continue" }).click();
 }
 test("moderation evidence is explicit and decisions use browser forms", async ({
   page,
@@ -63,12 +59,19 @@ test("moderation evidence is explicit and decisions use browser forms", async ({
   await page.getByRole("option", { name: "high", exact: true }).click();
   await page.getByRole("button", { name: "Update assignment" }).click();
   await expect(page.getByText("Case assignment updated.")).toBeVisible();
-  await page.getByRole("combobox", { name: "Decision", exact: true }).click();
-  await page.getByRole("option", { name: "restrict", exact: true }).click();
+  await page.getByRole("combobox", { name: "Action", exact: true }).click();
   await page
-    .getByLabel("Reason", { exact: true })
+    .getByRole("option", { name: "Restrict / hide", exact: true })
+    .click();
+  await page
+    .getByLabel("Admin explanation", { exact: true })
     .fill("Rights declaration requires correction.");
-  await page.getByRole("button", { name: "Confirm decision" }).click();
+  await page
+    .getByRole("combobox", { name: "Reason code", exact: true })
+    .click();
+  await page.getByRole("option", { name: "Rights", exact: true }).click();
+  await page.getByRole("button", { name: "Review action" }).click();
+  await page.getByRole("button", { name: "Confirm action" }).click();
   await expect(
     page.getByText("Active restriction", { exact: false }),
   ).toBeVisible();
@@ -137,7 +140,7 @@ test("directories, disclosure, pagination and promotion date controls", async ({
   expect(errors).toEqual([]);
 });
 
-test("evidence clears on navigation, history restoration and local MFA expiry", async ({
+test("evidence clears on navigation, history restoration and local session expiry", async ({
   page,
 }) => {
   const record = seed();

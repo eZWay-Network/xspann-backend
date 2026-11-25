@@ -205,7 +205,7 @@ class StaffSettingsExportTest extends TestCase
         $this->assertTrue(str_contains($csv, 'queue:default'));
     }
 
-    public function testMembershipEnableRequiresRetainedValidFactorAndLeavesSessionsRevoked(): void
+    public function testMembershipEnableIgnoresRetiredFactorAndLeavesSessionsRevoked(): void
     {
         $this->browserLogin($member = $this->makeUser('member'), 'support');
         $account = DB::table('staff_accounts')->where('user_id', $member->id)->first();
@@ -217,12 +217,13 @@ class StaffSettingsExportTest extends TestCase
         $this->assertFalse(DB::table('staff_sessions')->where('user_id', $member->id)->whereNull('revoked_at')->exists());
         $this->assertBrowserRejected($this->browserWrite('/settings/team/' . $account->id, [...$input, 'action' => 'enable', 'version' => 2], 'PATCH'));
         DB::table('staff_accounts')->where('id', $account->id)->update(['enabled' => false, 'mfa_secret' => 'invalid-ciphertext']);
-        $this->assertBrowserRejected($this->browserWrite('/settings/team/' . $account->id, [...$input, 'action' => 'enable', 'version' => 3], 'PATCH'));
+        $this->browserWrite('/settings/team/' . $account->id, [...$input, 'action' => 'enable', 'version' => 3], 'PATCH')->assertStatus(303);
+        $this->assertDatabaseHas('staff_accounts', ['id' => $account->id, 'enabled' => true, 'version' => 4]);
         $this->browserPage('/settings/preferences')->assertOk()->assertJsonPath('component', 'settings/preferences');
         $this->browserPage('/settings/team/' . $account->id)->assertOk();
     }
 
-    public function testBrowserPasswordRecoveryIsOneUseAndPreservesMembershipAndMfa(): void
+    public function testBrowserPasswordRecoveryIsOneUseAndPreservesMembership(): void
     {
         $this->browserLogin($actor = $this->makeUser('recovering'), 'support');
         $member = DB::table('staff_accounts')->where('user_id', $actor->id)->first();
@@ -244,7 +245,7 @@ class StaffSettingsExportTest extends TestCase
         $this->browserPage('/login')->assertOk();
         $this->assertBrowserRejected($this->browserWrite('/reset-password', $input));
         $this->browserWrite('/login', ['email' => $actor->email, 'password' => $input['password']])->assertStatus(303);
-        $this->assertSame(null, session('staff_user_id'));
+        $this->assertSame($actor->id, session('staff_user_id'));
         $this->browserPage('/challenge')->assertOk();
     }
 }

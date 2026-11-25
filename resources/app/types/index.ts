@@ -52,7 +52,6 @@ export interface AppPageProps extends PageProps {
     };
     role: StaffRole;
     permissions: string[];
-    mfa_expires_at: string;
     session_expires_at: string;
   } | null;
   navigation: NavigationGroup[];

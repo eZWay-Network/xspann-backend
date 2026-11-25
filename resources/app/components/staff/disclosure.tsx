@@ -70,10 +70,7 @@ export function Disclosure({
     const offBefore = router.on("before", clear);
     const offNavigate = router.on("navigate", clear);
     window.addEventListener("pagehide", clear);
-    const expiry = Math.min(
-      Date.parse(auth?.mfa_expires_at ?? ""),
-      Date.parse(auth?.session_expires_at ?? ""),
-    );
+    const expiry = Date.parse(auth?.session_expires_at ?? "");
     const timer = window.setTimeout(clear, Math.max(0, expiry - Date.now()));
     return () => {
       offBefore();
@@ -83,14 +80,7 @@ export function Disclosure({
       active.current?.abort();
       active.current = null;
     };
-  }, [
-    clear,
-    url,
-    auth?.user.id,
-    auth?.role,
-    auth?.mfa_expires_at,
-    auth?.session_expires_at,
-  ]);
+  }, [clear, url, auth?.user.id, auth?.role, auth?.session_expires_at]);
   async function load() {
     active.current?.abort();
     const controller = new AbortController();

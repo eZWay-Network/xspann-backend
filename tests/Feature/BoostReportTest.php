@@ -95,7 +95,7 @@ class BoostReportTest extends TestCase
             'boost_id' => $boost->id,
             'reason' => 'Review advertising claim',
         ])->assertCreated()->json('data.id');
-        $decision = Moderation::decide($id, $staff, ['action' => 'restrict', 'version' => 1, 'reason' => 'Advertising claim requires correction.']);
+        $decision = Moderation::decide($id, $staff, ['action' => 'restrict', 'reason_code' => 'rights', 'version' => 1, 'reason' => 'Advertising claim requires correction.']);
         $this->assertSame([], Delivery::placements($fan));
         $this->postJson('/api/v1/promotions/events', [
             'token' => $placements[0]['event_token'],
@@ -111,7 +111,8 @@ class BoostReportTest extends TestCase
 
         $appeal = Moderation::appeal($owner, $decision['decision_id'], 'Please independently review the claim.');
         $reviewer = $this->makeUser('independent');
-        Moderation::decideAppeal($appeal['id'], $reviewer, ['outcome' => 'overturn', 'version' => 1, 'reason' => 'Reviewed the supporting evidence.']);
+        \App\Services\AccountSecurity::enrollStaff($reviewer, 'senior_moderator');
+        Moderation::decideAppeal($appeal['id'], $reviewer, ['outcome' => 'overturn', 'reason_code' => 'other', 'version' => 1, 'reason' => 'Reviewed the supporting evidence.']);
         (new PromotionMaintenance())->handle();
         $this->assertSame([], Delivery::placements($fan));
         $this->assertSame(500, Credits::balance($owner->id)['available_cents']);

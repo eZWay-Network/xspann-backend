@@ -71,7 +71,7 @@ final class Sessions
         $member = DB::table('staff_accounts')->where('user_id', $context->user->id)->where('enabled', true)->lockForUpdate()->first();
         $record = DB::table('staff_sessions')->where('id', $context->session->id)->whereNull('revoked_at')
             ->where('expires_at', '>', self::timestamp())->where('absolute_expires_at', '>', self::timestamp())
-            ->where('mfa_expires_at', '>', self::timestamp())->lockForUpdate()->first();
+            ->lockForUpdate()->first();
         $user = User::where('id', $context->user->id)->lockForUpdate()->first();
 
         if (!$member || !$record || !self::eligible($user) || (int) $member->version !== (int) $context->membership->version
@@ -99,8 +99,7 @@ final class Sessions
             'session_hash' => self::hash(),
             'membership_version' => (int) $member->version,
             'authenticated_at' => self::timestamp(),
-            'mfa_at' => self::timestamp(),
-            'mfa_expires_at' => self::timestamp(config('staff.mfa_seconds')),
+            'confirmed_at' => self::timestamp(),
             'last_activity_at' => self::timestamp(),
             'expires_at' => self::timestamp(config('staff.idle_seconds')),
             'absolute_expires_at' => self::timestamp(config('staff.absolute_seconds')),
@@ -110,14 +109,13 @@ final class Sessions
         AuditTrail::record('staff.browser_login', [], $user->id, 'staff');
     }
 
-    public static function refreshMfa(Context $context): void
+    public static function confirm(Context $context): void
     {
-        $updated = DB::table('staff_sessions')->where('id', $context->session->id)->whereNull('revoked_at')->update([
-            'mfa_at' => self::timestamp(),
-            'mfa_expires_at' => self::timestamp(config('staff.mfa_seconds')),
-        ]);
+        $confirmedAt = self::timestamp();
+        $session = DB::table('staff_sessions')->where('id', $context->session->id)->whereNull('revoked_at');
+        $updated = (clone $session)->update(['confirmed_at' => $confirmedAt]);
 
-        if ($updated !== 1) {
+        if ($updated !== 1 && !(clone $session)->where('confirmed_at', $confirmedAt)->exists()) {
             throw new StaffException('This session has been revoked. Please sign in again.', 401);
         }
         Session::put('staff_clear_history', true);

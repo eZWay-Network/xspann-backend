@@ -8,6 +8,50 @@ use Spark\Facades\Schema;
 
 trait ReleaseUpgrades
 {
+    public function testPasswordOnlyAdminUpgradePreservesHistoryAndRetiresOldSessions(): void
+    {
+        $this->emptyReleaseDatabase();
+        foreach (glob(dirname(__DIR__, 2) . '/database/migrations/migration_*.php') as $path) {
+            if (basename($path) < 'migration_2026_11_25') {
+                (require $path)->up();
+            }
+        }
+        $user = $this->makeUser('upgrade_admin');
+        $owner = $this->makeUser('upgrade_owner');
+        $report = \App\Services\Moderation::report($user, ['reported_user_id' => $owner->id, 'reason' => 'Historical review']);
+        $secret = \Spark\Facades\Hash::encrypt('UNUSED-LEGACY-FACTOR');
+        query('staff_accounts')->insert([
+            'user_id' => $user->id, 'role' => 'admin', 'version' => 7, 'enabled' => true,
+            'mfa_secret' => $secret, 'last_counter' => 123, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        query('staff_sessions')->insert([
+            'user_id' => $user->id, 'session_hash' => hash('sha256', 'before-admin-upgrade'), 'membership_version' => 7,
+            'expires_at' => now()->addMinutes(15), 'created_at' => now(),
+        ]);
+        query('moderation_decisions')->insert([
+            'report_id' => $report->id, 'staff_id' => $user->id, 'subject_user_id' => $owner->id,
+            'action' => 'dismiss', 'reason' => 'Historical decision', 'active' => false, 'created_at' => now(),
+        ]);
+        query('reports')->where('id', $report->id)->update(['status' => 'resolved']);
+        $authentication = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_25_100000_staff_password_authentication.php';
+        $moderation = require dirname(__DIR__, 2) . '/database/migrations/migration_2026_11_25_110000_admin_moderation_actions.php';
+        $authentication->up();
+        $moderation->up();
+        $authentication->up();
+        $moderation->up();
+        $member = query('staff_accounts')->where('user_id', $user->id)->first();
+        $this->assertSame('super_admin', $member->role);
+        $this->assertSame(8, (int) $member->version);
+        $this->assertSame($secret, $member->mfa_secret);
+        $this->assertSame(123, (int) $member->last_counter);
+        $this->assertDatabaseCount('staff_sessions', 0);
+        $this->assertDatabaseHas('reports', ['id' => $report->id, 'status' => 'dismissed']);
+        $this->assertDatabaseHas('moderation_decisions', ['report_id' => $report->id, 'target_type' => 'user', 'target_id' => $owner->id, 'reason_code' => null]);
+        $this->assertSame($report->evidence, $report->refresh()->evidence);
+        \App\Services\AccountSecurity::enrollStaff($owner, 'moderator');
+        $this->assertDatabaseHas('staff_accounts', ['user_id' => $owner->id, 'mfa_secret' => null]);
+    }
+
     public function testStaffFinanceForwardUpgradePreservesPaidHistoryAndMembership(): void
     {
         $this->billingSetup();
@@ -179,11 +223,14 @@ trait ReleaseUpgrades
 
     protected function emptyReleaseDatabase(): void
     {
-        $paths = glob(dirname(__DIR__, 2) . '/database/migrations/migration_*.php');
-        foreach (array_reverse($paths) as $path) {
-            (require $path)->down();
+        if (db()->getDriver() !== 'sqlite') {
+            throw new \LogicException('Use the disposable MySQL database override.');
         }
-        Schema::dropIfExists('migrations');
+        db()->statement('PRAGMA foreign_keys = OFF');
+        foreach (query('sqlite_master')->where('type', 'table')->where('name', 'NOT LIKE', 'sqlite_%')->pluck('name') as $table) {
+            Schema::dropIfExists($table);
+        }
+        db()->statement('PRAGMA foreign_keys = ON');
     }
 
     public function testMigrationRunnerUpgradesPopulatedFrozenBaselineWithoutResetOrDuplicateGrants(): void

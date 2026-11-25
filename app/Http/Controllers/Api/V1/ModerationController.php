@@ -19,7 +19,7 @@ class ModerationController extends Controller
 
     public function ownDecisions(Request $request): Response
     {
-        return ModerationResource::collection(query('moderation_decisions')->select(['id', 'action', 'reason', 'active', 'created_at'])
+        return ModerationResource::collection(query('moderation_decisions')->select(['id', 'action', 'reason', 'reason_code', 'target_type', 'target_id', 'expires_at', 'active', 'created_at'])
             ->where('subject_user_id', $request->user('id'))->orderBy('id', 'DESC')->paginate(max(1, min(100, $request->integer('limit', 20)))))->response();
     }
 

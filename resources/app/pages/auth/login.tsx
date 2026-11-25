@@ -63,7 +63,7 @@ export default function Login({
           Forgot password?
         </Link>
         <p className="text-center text-xs leading-5 text-muted-foreground">
-          You’ll verify an authenticator code next.
+          Use your staff account password to sign in.
         </p>
       </form>
     </AuthLayout>

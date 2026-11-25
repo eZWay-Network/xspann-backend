@@ -83,6 +83,7 @@ class ArtistLifecycleTest extends TestCase
         $owner = $this->makeUser();
         $fan = $this->makeUser('fan');
         $reviewer = $this->makeUser('reviewer');
+        \App\Services\AccountSecurity::enrollStaff($reviewer, 'moderator');
         $artist = $this->makeArtist($owner);
         $playlist = ArtistPlaylist::create(['artist_id' => $artist->id, 'title' => 'Reported collection'])->refresh();
         $path = "/api/v1/artists/$artist->id/playlists/$playlist->id";
@@ -95,10 +96,10 @@ class ArtistLifecycleTest extends TestCase
         $report = Report::findOrFail($id);
         $this->assertSame($owner->id, $report->subject_user_id);
         $this->assertFalse(str_contains(query('reports')->where('id', $id)->first()->evidence, 'Reported collection'));
-        Moderation::decide($id, $reviewer, ['action' => 'restrict', 'reason' => 'Review confirmed', 'version' => 1]);
+        Moderation::decide($id, $reviewer, ['action' => 'restrict', 'reason_code' => 'rights', 'reason' => 'Review confirmed', 'version' => 1]);
         $this->getJson($path)->assertStatus(404);
         $this->getJson("/api/v1/artists/$artist->id/playlists")->assertOk()->assertJsonPath('meta.total', 0);
-        Moderation::decide($id, $reviewer, ['action' => 'restore', 'reason' => 'Restored', 'version' => 2]);
+        Moderation::decide($id, $reviewer, ['action' => 'restore', 'reason_code' => 'other', 'decision_id' => query('moderation_decisions')->where('report_id', $id)->where('active', true)->value('id'), 'reason' => 'Restored', 'version' => 2]);
         $this->getJson($path)->assertOk();
         $this->asUser($owner)->deleteJson("/api/v1/me/artist/playlists/$playlist->id")->assertStatus(204);
         $this->assertSame(null, $report->refresh()->playlist_id);

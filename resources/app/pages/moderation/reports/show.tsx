@@ -1,8 +1,11 @@
+import {
+  ModerationForm,
+  type ModerationProps,
+} from "@/components/staff/moderation-form";
 import { DetailScreen, type DetailField } from "@/components/staff/detail";
 import { Disclosure } from "@/components/staff/disclosure";
 import {
   AssignmentForm,
-  DecisionForm,
   NoteForm,
   type Workflow,
 } from "@/components/staff/review-forms";
@@ -10,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { useApp } from "@/contexts/app";
 type Props = {
+  moderation: ModerationProps | null;
   record: {
     id: number;
     version: number;
@@ -43,6 +47,7 @@ type Props = {
 };
 export default function Report({
   record,
+  moderation,
   workflow,
   reviewers,
   actions,
@@ -94,12 +99,11 @@ export default function Report({
             reviewers={reviewers}
           />
         )}
-        {actions.decision && (
-          <DecisionForm
-            key={`${record.id}:${record.version}`}
-            url={actions.decision}
-            version={record.version}
-            status={record.status}
+        {moderation && (
+          <ModerationForm
+            key={`${record.id}:${record.version}:${moderation.target_version}`}
+            moderation={moderation}
+            report={record}
           />
         )}
       </div>

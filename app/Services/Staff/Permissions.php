@@ -16,6 +16,11 @@ final class Permissions
 
     public static function roles(): array
     {
+        return ['moderator', 'senior_moderator', 'super_admin'];
+    }
+
+    public static function knownRoles(): array
+    {
         return array_keys(config('staff.roles'));
     }
 }

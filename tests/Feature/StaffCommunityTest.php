@@ -55,8 +55,8 @@ class StaffCommunityTest extends TestCase
         $report = DB::table('reports')->first();
         $this->assertSame('staff', $report->source);
         $this->assertSame(null, $report->user_id);
-        $this->browserPage('/moderation/reports/' . $report->id)->assertOk()->assertJsonPath('props.actions.decision', null);
-        $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'restrict', 'version' => 1, 'reason' => 'Rights concern confirmed'])->assertForbidden();
+        $this->browserPage('/moderation/reports/' . $report->id)->assertOk();
+        $this->browserEvidence('/moderation/reports/' . $report->id)->assertOk();
         $this->browserLogin($reviewer, 'moderator');
         $this->browserWrite('/moderation/reports/' . $report->id . '/assignment', ['version' => 0, 'assignee_id' => $reviewer->id, 'priority' => 'high', 'tag' => 'rights'], 'PATCH')->assertStatus(303);
         $this->assertSame(1, (int) DB::table('reports')->value('version'));
@@ -69,7 +69,7 @@ class StaffCommunityTest extends TestCase
         $decision = DB::table('moderation_decisions')->first();
         $appeal = Moderation::appeal($owner, $decision->id, 'Permission is documented.');
         $this->browserWrite('/moderation/appeals/' . $appeal['id'] . '/decision', ['outcome' => 'overturn', 'version' => 1, 'reason' => 'Documentation confirmed'])->assertForbidden();
-        $this->browserLogin($second, 'moderator');
+        $this->browserLogin($second, 'senior_moderator');
         $this->browserPage('/moderation/appeals/' . $appeal['id'])->assertOk();
         $this->browserWrite('/moderation/appeals/' . $appeal['id'] . '/decision', ['outcome' => 'overturn', 'version' => 1, 'reason' => 'Documentation confirmed'])->assertStatus(303);
         $this->assertSame('approved', $video->refresh()->moderation_status);

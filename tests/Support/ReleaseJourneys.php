@@ -4,7 +4,7 @@ namespace Tests\Support;
 
 use App\Jobs\{DeliverAnnouncements, ProcessPrivacyRequest, PromotionMaintenance, PublishReleases};
 use App\Models\{User, Video};
-use App\Services\{AccountSecurity, Releases, Totp};
+use App\Services\{AccountSecurity, Releases};
 use App\Services\Billing\{Billing, PaymentProvider, Webhooks};
 use Spark\Console\Process;
 use Spark\Queue\Queue;
@@ -235,7 +235,7 @@ trait ReleaseJourneys
         $announcement = $this->postJson('/api/v1/me/artist/announcements', ['title' => 'Release update', 'body' => 'New original release', 'video_id' => $video->id])->assertCreated()->json('data.id');
         $this->postJson("/api/v1/me/artist/announcements/$announcement/send", ['version' => 1], ['Idempotency-Key' => 'rights-integration-send'])->assertAccepted();
         $report = $this->asUser($fan)->postJson('/api/v1/reports', ['audio_id' => $audio->id, 'reason' => 'Review conflicting rights'])->assertCreated()->json('data.id');
-        \App\Services\Moderation::decide($report, $staff, ['action' => 'restrict', 'reason' => 'Rights are under review.', 'version' => 1]);
+        \App\Services\Moderation::decide($report, $staff, ['action' => 'restrict', 'reason_code' => 'rights', 'reason' => 'Rights are under review.', 'version' => 1]);
         (new PublishReleases())->handle();
         (new DeliverAnnouncements())->handle();
         (new PromotionMaintenance())->handle();
@@ -256,8 +256,7 @@ trait ReleaseJourneys
         $fan = $this->makeUser('journeyfan');
         $outside = $this->makeUser('journeyoutside');
         $staff = $this->makeUser('journeystaff');
-        $secret = Totp::secret();
-        AccountSecurity::enrollStaff($staff, 'admin', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
+        AccountSecurity::enrollStaff($staff, 'super_admin');
         $this->startJourney();
         try {
             $artistToken = $this->login($owner);
@@ -339,8 +338,6 @@ trait ReleaseJourneys
             $this->wire('GET', '/admin/boosts', $staffToken)->assertNotFound();
             $this->staffWire('GET', '/login')->assertOk();
             $this->staffWire('POST', '/login', ['email' => $staff->email, 'password' => 'password123'])->assertStatus(303);
-            $this->staffWire('GET', '/challenge')->assertOk();
-            $this->staffWire('POST', '/challenge', ['mfa_code' => Totp::code($secret, intdiv(time(), 30))])->assertStatus(303);
             $this->staffWire('GET', '/promotions/boosts')->assertOk();
             $this->staffWire('POST', "/promotions/boosts/$boost/decision", ['version' => 2, 'decision' => 'approve', 'reason' => 'Reviewed original creative and rights.'])->assertStatus(303);
             query('promotion_boosts')->where('id', $boost)->update(['starts_at' => Billing::timestamp(time() - 1), 'ends_at' => Billing::timestamp(time() + 86399)]);
@@ -349,7 +346,7 @@ trait ReleaseJourneys
             $report = $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Review sponsored claim.'])->assertCreated()->json('data.id');
             $this->wire('GET', "/admin/reports/$report", $fanToken)->assertNotFound();
             $this->staffWire('GET', "/moderation/reports/$report/evidence", evidence: true)->assertOk()->assertJsonPath('snapshot.video_id', $video);
-            $this->staffWire('POST', "/moderation/reports/$report/decision", ['action' => 'dismiss', 'version' => 1, 'reason' => 'Verified the advertising claim.'])->assertStatus(303);
+            $this->staffWire('POST', "/moderation/reports/$report/decision", ['action' => 'dismiss', 'version' => 1, 'target_version' => query('promotion_boosts')->where('id', $boost)->value('version'), 'reason_code' => 'other', 'reason' => 'Verified the advertising claim.'])->assertStatus(303);
             $this->wire('GET', '/promotions/placements?surface=discover_promoted_videos&platform=web', $fanToken)->assertJsonCount(1, 'data');
             $this->wire('POST', "/users/$owner->id/block", $fanToken)->assertCreated();
             $this->wire('POST', '/reports', $fanToken, ['boost_id' => $boost, 'reason' => 'Hidden sponsored claim.'])->assertNotFound();

@@ -176,7 +176,7 @@ class Adjustments
             if ($actor instanceof Context) {
                 $current = Sessions::requireCurrent($actor);
                 $current->authorize('billing.adjustments.allocate');
-                abort_unless($current->recent((int) config('staff.confirmation_seconds')), 409, 'Confirm your credentials and MFA before allocating this adjustment.');
+                abort_unless($current->recent((int) config('staff.confirmation_seconds')), 409, 'Confirm your password before allocating this adjustment.');
             }
             $actorId = $actor instanceof Context ? (int) $actor->user->id : $actor;
             if ($subscription->user_id) {

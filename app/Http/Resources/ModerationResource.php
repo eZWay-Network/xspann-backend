@@ -16,6 +16,8 @@ class ModerationResource extends JsonResource
             'target_type',
             'target_id',
             'reason',
+            'reason_code',
+            'expires_at',
             'action',
             'active',
             'status',
@@ -30,9 +32,9 @@ class ModerationResource extends JsonResource
             'created_at',
             'updated_at',
         ]));
-        foreach (['created_at', 'updated_at'] as $field) {
+        foreach (['created_at', 'updated_at', 'expires_at'] as $field) {
             if (isset($data[$field])) {
-                $data[$field] = Carbon::parse($data[$field]);
+                $data[$field] = $field === 'expires_at' ? Carbon::parse($data[$field] . ' UTC') : Carbon::parse($data[$field]);
             }
         }
         foreach (['id', 'target_id', 'version', 'decision_id', 'report_id', 'user_id', 'reviewer_id', 'staff_id'] as $field) {

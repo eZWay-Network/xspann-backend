@@ -25,13 +25,13 @@ class StaffConcurrencyTest extends TestCase
             $user = $this->makeUser($name);
             $ids[] = $user->id;
             query('staff_accounts')->insert([
-                'user_id' => $user->id, 'role' => 'admin', 'version' => 1, 'enabled' => true,
+                'user_id' => $user->id, 'role' => 'super_admin', 'version' => 1, 'enabled' => true,
                 'mfa_secret' => Hash::encrypt('TEST-ONLY-UNUSED'), 'last_counter' => -1,
                 'created_at' => Sessions::timestamp(), 'updated_at' => Sessions::timestamp(),
             ]);
             query('staff_sessions')->insert([
                 'user_id' => $user->id, 'session_hash' => hash('sha256', $name), 'membership_version' => 1,
-                'mfa_at' => Sessions::timestamp(), 'mfa_expires_at' => Sessions::timestamp(900),
+                'confirmed_at' => Sessions::timestamp(),
                 'expires_at' => Sessions::timestamp(1800), 'absolute_expires_at' => Sessions::timestamp(28800),
                 'created_at' => Sessions::timestamp(),
             ]);
@@ -61,7 +61,7 @@ class StaffConcurrencyTest extends TestCase
             }
             sort($statuses);
             $this->assertSame([200, 409], $statuses);
-            $this->assertSame(1, query('staff_accounts')->where('role', 'admin')->where('enabled', true)->count());
+            $this->assertSame(1, query('staff_accounts')->where('role', 'super_admin')->where('enabled', true)->count());
         } finally {
             foreach ($processes as $process) {
                 if (is_resource($process)) {

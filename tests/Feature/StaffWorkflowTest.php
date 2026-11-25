@@ -30,18 +30,18 @@ class StaffWorkflowTest extends TestCase
         $this->post('/users/' . $owner->id . '/contact-reveal', ['reason' => 'Customer requested account support'], ['Accept' => 'application/json', 'X-CSRF-TOKEN' => session('csrf_token')])
             ->assertOk()->assertJsonPath('email', $owner->email)->assertHeader('Cache-Control', 'no-store, private, max-age=0');
         $this->assertDatabaseHas('audit_events', ['action' => 'staff.contact_revealed', 'actor_id' => $support->id]);
-        $this->browserLogin($this->makeUser('moderator'), 'moderator');
-        $this->browserWrite('/users/' . $owner->id . '/contact-reveal', ['reason' => 'Not permitted'])->assertForbidden();
+        $this->browserLogin($this->makeUser('analyst'), 'analyst');
+        $this->post('/users/' . $owner->id . '/contact-reveal', ['reason' => 'Not permitted'], ['Accept' => 'application/json', 'X-CSRF-TOKEN' => session('csrf_token')])->assertForbidden();
     }
 
-    public function testPrivateTargetsCannotEnterStaffIntakeAndEvidenceNeverContainsPaths(): void
+    public function testStaffCanReviewPrivateContentButMessagesRemainReportBound(): void
     {
         $owner = $this->makeUser('owner');
         $video = $this->makeVideo($owner, ['visibility' => 'private']);
         $this->browserLogin($this->makeUser('moderator'), 'moderator');
-        $this->browserWrite('/moderation/cases', ['target_type' => 'video', 'target_id' => $video->id, 'reason' => 'Guessed private video'])->assertNotFound();
+        $this->browserWrite('/moderation/cases', ['target_type' => 'video', 'target_id' => $video->id, 'reason' => 'Review private video'])->assertStatus(303);
         $this->browserWrite('/moderation/cases', ['target_type' => 'message', 'target_id' => 1, 'reason' => 'Guessed private message'])->assertStatus(303);
-        $this->assertDatabaseCount('reports', 0);
+        $this->assertDatabaseCount('reports', 1);
         $report = Report::create(['user_id' => $owner->id, 'subject_user_id' => $owner->id, 'video_id' => $video->id,
             'target_type' => 'video', 'target_id' => $video->id, 'reason' => 'Existing reported snapshot', 'evidence' => json_encode(['caption' => 'Retained caption', 'storage_path' => $video->storage_path]), 'status' => 'open', 'version' => 1]);
         $response = $this->browserEvidence('/moderation/reports/' . $report->id)->assertOk()->assertJsonPath('snapshot.caption', 'Retained caption');

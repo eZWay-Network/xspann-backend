@@ -137,7 +137,7 @@ class Video extends Model
 
     public function scopeVisibleTo(QueryBuilder $query, ?User $viewer): QueryBuilder
     {
-        return $query->where('videos.moderation_status', 'approved')
+        return $query->whereNull('videos.admin_deleted_at')->where('videos.moderation_status', 'approved')
             ->whereIn('videos.user_id', User::select('users.id')->visibleTo($viewer))
             ->where(function (QueryBuilder $query) use ($viewer): void {
                 $query->where('videos.visibility', 'public');

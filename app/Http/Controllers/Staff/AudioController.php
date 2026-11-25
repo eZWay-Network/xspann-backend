@@ -11,8 +11,8 @@ use Spark\Http\{Request, Response};
 
 final class AudioController
 {
-    private const COLUMNS = ['id', 'user_id', 'title', 'origin', 'status', 'source_video_id', 'duration', 'reuse_allowed', 'rights_version', 'rights_confirmed_at', 'moderation_status', 'created_at'];
-    private const FILTERS = ['status' => ['pending', 'processing', 'ready', 'failed', 'deleted'], 'moderation_status' => ['approved', 'restricted']];
+    private const COLUMNS = ['id', 'user_id', 'title', 'origin', 'status', 'source_video_id', 'duration', 'reuse_allowed', 'reuse_blocked', 'rights_version', 'rights_confirmed_at', 'moderation_status', 'created_at'];
+    private const FILTERS = ['status' => ['pending', 'processing', 'ready', 'failed', 'deleted'], 'moderation_status' => ['approved', 'reviewing', 'restricted', 'removed']];
 
     public function index(Request $request): Response
     {
@@ -44,7 +44,7 @@ final class AudioController
             self::FILTERS
         ) + [
             'page' => ['title' => 'Audio', 'breadcrumbs' => []],
-            'description' => 'Content metadata and rights declarations. Private playback requires an authorized review case.'
+            'description' => 'Review audio, rights declarations, reuse status and dependent videos.'
         ]);
     }
 
@@ -54,9 +54,14 @@ final class AudioController
         $context = Context::from($request);
         $row = DB::table('audios')->select(self::COLUMNS)->where('id', $id)->firstOrFail();
         $fields = Records::fields($row, self::COLUMNS);
-        $links = [];
+        $links = $context->can('users.view')
+            ? [['label' => 'Author #' . $row->user_id, 'url' => (string) route('staff.users.show', ['user' => $row->user_id])]] : [];
 
         $fields[] = ['label' => 'Affected videos', 'value' => DB::table('videos')->where('audio_id', $id)->count()];
+        $links[] = ['label' => 'Review all dependent videos before withdrawal', 'url' => (string) route('staff.videos.index')->withQuery(['audio_id' => $id])];
+        foreach (DB::table('videos')->where('audio_id', $id)->select(['id', 'caption'])->orderBy('id')->limit(20)->get() as $dependent) {
+            $links[] = ['label' => '#' . $dependent->id . ' · ' . ($dependent->caption ?: 'Video'), 'url' => (string) route('staff.videos.show', ['video' => $dependent->id])];
+        }
         if ($row->source_video_id) {
             $links[] = ['label' => 'Source video #' . $row->source_video_id, 'url' => (string) route('staff.videos.show', ['video' => $row->source_video_id])];
         }
@@ -68,6 +73,8 @@ final class AudioController
         }
 
         return Inertia::render('content/audios/show', [
+            'preview_url' => $context->can('reports.evidence.view') ? (string) route('staff.content.preview', ['type' => 'audio', 'target' => $id]) : null,
+            'moderation' => \App\Http\Resources\Staff\ModerationActions::forTarget($context, 'audio', $id),
             'page' => ['title' => 'Audio #' . $id, 'breadcrumbs' => []],
             'fields' => $fields,
             'links' => $links,

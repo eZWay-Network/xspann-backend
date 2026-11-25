@@ -12,7 +12,6 @@
 return [
     'staff.perimeter' => \App\Http\Middlewares\StaffPerimeter::class,
     'staff.web' => \App\Http\Middlewares\StaffWeb::class,
-    'staff.mfa' => \App\Http\Middlewares\StaffMfa::class,
     'staff.can' => \App\Http\Middlewares\StaffCan::class,
     'staff.inertia' => \App\Http\Middlewares\StaffInertia::class,
     'staff.disclosure' => \App\Http\Middlewares\StaffDisclosure::class,

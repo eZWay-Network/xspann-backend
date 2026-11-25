@@ -104,10 +104,10 @@ class VideoController extends Controller
     public function update(UpdateVideoRequest $request, Video $video): JsonResource
     {
         authorize('model.update', $video);
-        abort_if($video->status === Video::STATUS_DELETED, 404, 'Video not found.');
+        abort_if($video->admin_deleted_at || $video->status === Video::STATUS_DELETED, 404, 'Video not found.');
 
         PendingUploads::attach($request->user('id'), function () use ($request, $video): void {
-            abort_if($video->refresh()->status === Video::STATUS_DELETED, 404, 'Video not found.');
+            abort_if($video->refresh()->admin_deleted_at || $video->status === Video::STATUS_DELETED, 404, 'Video not found.');
 
             abort_unless($video->publication_intent === 'immediate' && $video->publication_state !== 'scheduled' || $video->publication_state === 'published', 409, 'Use the versioned release endpoint to edit a draft.');
 
@@ -145,6 +145,7 @@ class VideoController extends Controller
         authorize('model.delete', $video);
 
         \App\Services\Releases::transaction($video->id, function (Video $current): void {
+            abort_if($current->admin_deleted_at !== null, 409, 'This video is retained for moderation review.');
             \App\Services\Releases::save($current, ['status' => Video::STATUS_DELETED, 'version' => $current->version + 1, 'publish_at' => null]);
         });
 

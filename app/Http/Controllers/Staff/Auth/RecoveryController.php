@@ -41,7 +41,7 @@ final class RecoveryController
         $input = $request->validated();
         PasswordRecovery::reset(mb_strtolower(trim($input['email'])), $input['token'], $input['password']);
         Sessions::logout();
-        Inertia::flash('success', 'Password reset. Sign in with your authenticator.');
+        Inertia::flash('success', 'Password reset. Sign in with your new password.');
 
         return Inertia::redirect((string) route('staff.login'), 303);
     }

@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Services\{AccountSecurity, Totp};
+use App\Services\AccountSecurity;
 use App\Services\Staff\{Permissions, Sessions};
 use Spark\Facades\{DB, Hash, Session};
 use Tests\TestCase;
@@ -28,7 +28,7 @@ class StaffFoundationTest extends TestCase
         return $app;
     }
 
-    private function staff(string $name = 'operator', string $role = 'admin'): User
+    private function staff(string $name = 'operator', string $role = 'super_admin'): User
     {
         $user = $this->makeUser($name);
         DB::table('staff_accounts')->insert([
@@ -59,7 +59,6 @@ class StaffFoundationTest extends TestCase
     {
         $this->page('/login')->assertOk();
         $this->submit('/login', ['email' => $user->email, 'password' => 'password123'])->assertStatus(303);
-        $this->submit('/challenge', ['mfa_code' => Totp::code(self::SECRET, intdiv(time(), 30))])->assertStatus(303);
     }
 
     public function testInitialHtmlAndInertiaLoginArePrivateAndContainNoIdentity(): void
@@ -78,27 +77,25 @@ class StaffFoundationTest extends TestCase
         }
     }
 
-    public function testPasswordAloneAndCustomerJwtCannotReadProtectedProps(): void
+    public function testPasswordLoginCreatesStaffAccessButCustomerJwtDoesNot(): void
     {
         $user = $this->staff();
         $this->asUser($user)->page()->assertStatus(409)->assertHeader('X-Inertia-Location', 'http://localhost/login');
         $this->flushHeaders();
         $this->page('/login');
         $this->submit('/login', ['email' => $user->email, 'password' => 'password123'])->assertStatus(303);
-        $this->assertSame(null, session('staff_user_id'));
-        $this->assertDatabaseCount('staff_sessions', 0);
-        $this->page()->assertStatus(409);
+        $this->assertDatabaseCount('staff_sessions', 1);
+        $this->page()->assertOk();
     }
 
-    public function testBrowserMfaCreatesANonceBoundSessionAndExplicitOverview(): void
+    public function testPasswordLoginCreatesANonceBoundSessionAndModerationDashboard(): void
     {
         $user = $this->staff();
         $this->makeVideo($user);
         $this->signIn($user);
-        $response = $this->page()->assertOk()->assertJsonPath('component', 'overview')
+        $response = $this->page()->assertOk()->assertJsonPath('component', 'dashboard')
             ->assertJsonPath('props.auth.user.id', $user->id)->assertJsonPath('encryptHistory', true);
-        $this->assertSame(1, $response->json('props.overview.metrics.0.value'));
-        $this->assertSame(1, $response->json('props.overview.metrics.2.value'));
+        $this->assertSame(4, count($response->json('props.queues')));
         $this->assertFalse(str_contains($response->content(), self::SECRET));
         $this->assertFalse(str_contains($response->content(), 'password123'));
         $record = DB::table('staff_sessions')->first();
@@ -107,19 +104,18 @@ class StaffFoundationTest extends TestCase
         $this->assertSame(1, (int) $record->membership_version);
     }
 
-    public function testMfaReplayAndExpiryCannotReadDataButLogoutRemainsAvailable(): void
+    public function testLegacyMfaExpiryDoesNotBlockAccessAndConfirmationRequiresPassword(): void
     {
         $user = $this->staff();
         $this->signIn($user);
-        $usedCounter = (int) DB::table('staff_accounts')->where('user_id', $user->id)->value('last_counter');
-        $this->submit('/challenge', ['password' => 'password123', 'mfa_code' => Totp::code(self::SECRET, $usedCounter)])->assertStatus(303);
-        $this->page('/challenge')->assertJsonPath('props.errors.mfa_code', 'Enter a fresh six-digit authenticator code.');
-        DB::table('staff_sessions')->where('user_id', $user->id)->update(['mfa_expires_at' => Sessions::timestamp(-1)]);
-        $this->page()->assertStatus(409)->assertHeader('X-Inertia-Location', 'http://localhost/challenge');
-        $this->page('/challenge')->assertOk()->assertJsonPath('props.auth', null)->assertJsonPath('props.navigation', []);
+        DB::table('staff_sessions')->where('user_id', $user->id)->update(['mfa_expires_at' => Sessions::timestamp(-1), 'confirmed_at' => Sessions::timestamp(-600)]);
+        $this->page()->assertOk();
+        $this->submit('/challenge', ['password' => 'wrong'])->assertStatus(303);
+        $this->page('/challenge')->assertJsonPath('props.errors.password', 'The credentials or staff access could not be verified.');
+        $this->submit('/challenge', ['password' => 'password123'])->assertStatus(303);
+        $this->assertTrue(DB::table('staff_sessions')->where('confirmed_at', '>', Sessions::timestamp(-5))->exists());
         $this->submit('/logout')->assertStatus(409);
         $this->assertSame(null, session('staff_user_id'));
-        $this->assertTrue(DB::table('staff_sessions')->whereNotNull('revoked_at')->exists());
     }
 
     public function testDisabledRoleChangedIdleAndAbsoluteExpiredSessionsFailClosed(): void
@@ -142,7 +138,7 @@ class StaffFoundationTest extends TestCase
     public function testRolesAreExactAndSequentialUsersDoNotSharePermissions(): void
     {
         $this->assertFalse(Permissions::allows('unknown', 'dashboard.view'));
-        $this->assertFalse(Permissions::allows('admin', 'unknown.ability'));
+        $this->assertFalse(Permissions::allows('super_admin', 'unknown.ability'));
         $this->assertFalse(Permissions::allows('moderator', 'billing.view'));
 
         foreach (Permissions::roles() as $index => $role) {
@@ -152,19 +148,19 @@ class StaffFoundationTest extends TestCase
             $response = $this->page()->assertOk()->assertJsonPath('props.auth.role', $role);
             $this->assertSame(Permissions::forRole($role), $response->json('props.auth.permissions'));
             $this->page('/settings')->assertStatus(302)->assertHeader('Location', (string) route('staff.profile'));
-            $this->page('/settings/team')->assertStatus($role === 'admin' ? 200 : 403);
+            $this->page('/settings/team')->assertStatus($role === 'super_admin' ? 200 : 403);
 
             $groups = $response->json('props.navigation');
             $sections = array_values(array_filter($groups, fn($group) => $group['placement'] === 'settings'));
-            $this->assertSame($role === 'admin' ? ['account', 'workspace', 'team'] : ['account'], array_column($sections, 'key'));
-            $this->assertSame($role === 'admin' ? 10 : 3, count(array_merge(...array_column($sections, 'items'))));
+            $this->assertSame($role === 'super_admin' ? ['account', 'workspace', 'team'] : ['account'], array_column($sections, 'key'));
+            $this->assertSame($role === 'super_admin' ? 10 : 3, count(array_merge(...array_column($sections, 'items'))));
             foreach ($sections as $section) {
                 foreach ($section['items'] as $destination) {
                     $this->page(parse_url($destination['path'], PHP_URL_PATH))->assertOk();
                 }
             }
 
-            if ($role !== 'admin') {
+            if ($role !== 'super_admin') {
                 $this->assertFalse(str_contains(json_encode($response->json('props.navigation')), 'Team & access'));
                 $this->submit('/settings/team/invitations')->assertStatus(403)->assertJsonPath('props.auth', null);
                 $this->submit('/settings/team/1', [], 'PATCH')->assertStatus(403);
@@ -176,7 +172,7 @@ class StaffFoundationTest extends TestCase
     public function testValidationNeverFlashesCredentialsAndRejectsUnknownFields(): void
     {
         $this->page('/login');
-        $this->submit('/login', ['email' => 'bad', 'password' => 'private-password', 'google_token' => 'private-google', 'role' => 'admin'])->assertStatus(303);
+        $this->submit('/login', ['email' => 'bad', 'password' => 'private-password', 'google_token' => 'private-google', 'role' => 'super_admin'])->assertStatus(303);
         $this->assertFalse(str_contains(json_encode($_SESSION), 'private-password'));
         $this->assertFalse(str_contains(json_encode($_SESSION), 'private-google'));
         $this->page('/login')->assertJsonPath('props.auth', null);
@@ -187,22 +183,22 @@ class StaffFoundationTest extends TestCase
         $admin = $this->staff();
         $invitee = $this->makeUser('invitee');
         $this->signIn($admin);
-        $this->submit('/settings/team/invitations', ['email' => $invitee->email, 'role' => 'support', 'reason' => 'Customer support team'])->assertStatus(303);
+        $this->submit('/settings/team/invitations', ['email' => $invitee->email, 'role' => 'moderator', 'reason' => 'Community moderation team'])->assertStatus(303);
         $response = $this->page('/settings/team')->assertOk();
         $link = $response->json('flash.invitation_url');
         $this->assertTrue(str_contains($link, '/enroll/'));
         $this->assertSame(null, $this->page('/settings/team')->json('flash.invitation_url'));
         $this->assertSame(0, DB::table('staff_accounts')->where('user_id', $invitee->id)->count());
         $id = DB::table('staff_accounts')->where('user_id', $admin->id)->value('id');
-        $this->submit('/settings/team/' . $id, ['action' => 'disable', 'role' => 'admin', 'version' => 1, 'reason' => 'Try to remove final admin'], 'PATCH')->assertStatus(303);
+        $this->submit('/settings/team/' . $id, ['action' => 'disable', 'role' => 'super_admin', 'version' => 1, 'reason' => 'Try to remove final admin'], 'PATCH')->assertStatus(303);
         $this->assertDatabaseHas('staff_accounts', ['user_id' => $admin->id, 'enabled' => true, 'version' => 1]);
     }
 
     public function testPartialRequestsKeepCsrfAndPermissionStateFreshAndRejectOldAssets(): void
     {
         $this->signIn($this->staff());
-        $this->get('/', [...self::headers(), 'X-Inertia-Partial-Component' => 'overview', 'X-Inertia-Partial-Data' => 'filters'])->assertOk()
-            ->assertJsonPath('props.auth.role', 'admin')->assertJsonPath('props.csrf_token', session('csrf_token'));
+        $this->get('/', [...self::headers(), 'X-Inertia-Partial-Component' => 'dashboard', 'X-Inertia-Partial-Data' => 'filters'])->assertOk()
+            ->assertJsonPath('props.auth.role', 'super_admin')->assertJsonPath('props.csrf_token', session('csrf_token'));
         $this->get('/', [...self::headers(), 'X-Inertia-Version' => 'stale-version'])->assertStatus(409)->assertHeader('X-Inertia-Location', 'http://localhost/');
     }
 
@@ -220,46 +216,25 @@ class StaffFoundationTest extends TestCase
         $this->assertSame($before->last_counter, $after->last_counter);
         $this->assertSame($before->role, $after->role);
     }
-    public function testPendingSignInCannotSurviveACredentialChange(): void
-    {
-        $user = $this->staff();
-        $this->page('/login');
-        $this->submit('/login', ['email' => $user->email, 'password' => 'password123'])->assertStatus(303);
-        $user->update(['password' => 'ChangedPassword123!']);
-        $this->submit('/challenge', ['mfa_code' => Totp::code(self::SECRET, intdiv(time(), 30))])->assertStatus(403);
-        $this->assertDatabaseCount('staff_sessions', 0);
-    }
-
-    public function testPasswordAndAuthenticatorChangesRevokeEveryBrowserSession(): void
+    public function testOldPasswordCannotConfirmAfterACredentialChange(): void
     {
         $user = $this->staff();
         $this->signIn($user);
-        $this->submit('/settings/security/password', [
-            'password' => 'password123',
-            'mfa_code' => Totp::code(self::SECRET, intdiv(time(), 30) + 1),
-            'new_password' => 'ChangedPassword123!',
-        ])->assertStatus(409);
+        $user->update(['password' => 'ChangedPassword123!']);
+        $this->submit('/challenge', ['password' => 'password123'])->assertStatus(303);
+        $this->page('/challenge')->assertJsonPath('props.errors.password', 'The credentials or staff access could not be verified.');
+    }
+
+    public function testPasswordChangesRevokeSessionsAndAuthenticatorRoutesAreRemoved(): void
+    {
+        $user = $this->staff();
+        $this->signIn($user);
+        $this->submit('/settings/security/password', ['password' => 'password123', 'new_password' => 'ChangedPassword123!'])->assertStatus(409);
         $this->assertTrue(Hash::verify('ChangedPassword123!', User::find($user->id)->password));
         $this->assertDatabaseCount('staff_sessions', 0);
         $this->assertSame(null, session('staff_user_id'));
-
-        Session::flush();
-        $other = $this->staff('factor');
-        $this->signIn($other);
-        $this->submit('/settings/security/factor', [
-            'password' => 'password123',
-            'mfa_code' => Totp::code(self::SECRET, intdiv(time(), 30) + 1),
-        ])->assertStatus(303);
-        $secret = $this->page('/settings/security')->assertOk()->json('props.factor_secret');
-        $this->assertTrue(is_string($secret) && strlen($secret) >= 32);
-        $this->assertSame(null, $this->page('/settings/security')->json('props.factor_secret'));
-        $this->submit('/settings/security/factor/complete', [
-            'mfa_code' => Totp::code($secret, intdiv(time(), 30)),
-        ])->assertStatus(409);
-        $this->assertDatabaseCount('staff_sessions', 0);
-        $member = DB::table('staff_accounts')->where('user_id', $other->id)->first();
-        $this->assertSame(2, (int) $member->version);
-        $this->assertSame($secret, Hash::decrypt($member->mfa_secret));
+        $this->submit('/settings/security/factor')->assertNotFound();
+        $this->submit('/settings/security/factor/complete')->assertNotFound();
     }
 
     public function testTeamPaginationUsesOwnPreferencesAndRejectsInvalidPages(): void

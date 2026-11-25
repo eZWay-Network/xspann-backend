@@ -16,7 +16,7 @@ final class UserController
     public function index(Request $request): Response
     {
         $context = Context::from($request);
-        $choices = ['status' => ['active', 'suspended', 'deleting']];
+        $choices = ['status' => ['active', 'suspended', 'banned', 'deleted', 'deleting']];
         $filters = ListFilters::read($request, $choices);
         $query = DB::table('users')->select(['id', 'username', 'name', 'status', 'email_verified_at', 'onboarded_at', 'created_at'])
             ->selectSub(DB::table('artists')->select('id')->whereColumn('artists.user_id', 'users.id')->limit(1), 'artist_id')
@@ -44,7 +44,8 @@ final class UserController
     public function show(Request $request, int $user): Response
     {
         $context = Context::from($request);
-        $row = DB::table('users')->select(['id', 'username', 'name', 'bio', 'status', 'email_verified_at', 'onboarded_at', 'created_at'])->where('id', $user)->firstOrFail();
+        $row = DB::table('users')->select(['id', 'username', 'name', 'bio', 'status', 'admin_deleted_at', 'email_verified_at', 'onboarded_at', 'created_at'])->where('id', $user)->firstOrFail();
+        $row->admin_deleted_at = Records::date($row->admin_deleted_at, 'UTC');
         $links = [];
         if ($context->can('artists.view')) {
             foreach (DB::table('artists')->where('user_id', $user)->select(['id', 'stage_name'])->get() as $artist) {
@@ -59,8 +60,9 @@ final class UserController
             ->select(['id', 'report_id', 'action', 'created_at'])->orderBy('id', 'desc')->limit(20)->all() : [];
 
         return Inertia::render('users/show', [
+            'moderation' => \App\Http\Resources\Staff\ModerationActions::forTarget($context, 'user', $user),
             'page' => ['title' => $row->name, 'breadcrumbs' => []],
-            'fields' => Records::fields($row, ['id', 'username', 'name', 'bio', 'status', 'email_verified_at', 'onboarded_at', 'created_at']),
+            'fields' => Records::fields($row, ['id', 'username', 'name', 'bio', 'status', 'admin_deleted_at', 'email_verified_at', 'onboarded_at', 'created_at']),
             'links' => $links,
             'history' => array_map(fn ($decision) => ['label' => ucfirst($decision->action) . ' · case #' . $decision->report_id,
                 'url' => (string) route('staff.reports.show', ['report' => $decision->report_id])], $history),

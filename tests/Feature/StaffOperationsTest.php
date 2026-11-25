@@ -376,7 +376,7 @@ class StaffOperationsTest extends TestCase
     {
         $this->browserLogin($this->makeUser('moderator'), 'moderator');
         \App\Services\AuditTrail::record('billing.secret_test', ['email' => 'secret@example.test'], null, 'system');
-        \App\Services\AuditTrail::record('moderation.decided', ['report_id' => 99, 'reason' => 'Private evidence secret'], null, 'system');
+        \App\Services\AuditTrail::record('moderation.decided', ['report_id' => 99, 'reason' => 'Reviewed policy violation', 'evidence' => 'Private evidence secret'], null, 'system');
         $page = $this->browserPage('/operations/audit')->assertOk();
         $this->assertTrue(str_contains($page->content(), 'moderation.decided'));
         foreach (['secret@example.test', 'billing.secret_test', 'Private evidence secret'] as $secret) {

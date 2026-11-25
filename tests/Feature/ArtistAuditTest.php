@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\{DeleteVideo, ProcessVideo};
 use App\Models\{Artist, ArtistPlaylist, Video};
-use App\Services\{AccountSecurity, Totp};
+use App\Services\AccountSecurity;
 use Tests\Support\ArtistFixtures;
 use Tests\TestCase;
 

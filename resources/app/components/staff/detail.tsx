@@ -1,3 +1,7 @@
+import {
+  ModerationForm,
+  type ModerationProps,
+} from "@/components/staff/moderation-form";
 import { FormErrors } from "@/components/form-errors";
 import type { AppPageProps } from "@/types";
 import { Link, usePage } from "@inertiajs/react";
@@ -16,6 +20,8 @@ export type RecordLink = { label: string; url: string };
 export type CaseTarget = { type: string; id: number; url: string };
 export type DetailProps = {
   heading?: "h1" | "h2";
+  moderation?: ModerationProps | null;
+  preview_url?: string | null;
   fields: DetailField[];
   links?: RecordLink[];
   history?: RecordLink[];
@@ -76,6 +82,8 @@ export function RelatedLinks({ links }: { links: RecordLink[] }) {
 }
 export function DetailScreen({
   fields,
+  moderation,
+  preview_url,
   links = [],
   history = [],
   heading,
@@ -117,8 +125,27 @@ export function DetailScreen({
           <RelatedLinks links={history} />
         </Card>
       )}
+      {preview_url && (
+        <Card className="space-y-3 p-5">
+          <h2 className="font-semibold">Media preview</h2>
+          <video
+            className="max-h-96 w-full"
+            controls
+            preload="none"
+            src={preview_url}
+          />
+        </Card>
+      )}
       {children}
-      {case_target && <CaseForm target={case_target} />}
+      {moderation && (
+        <ModerationForm
+          key={`${moderation.type}:${moderation.target_version}`}
+          moderation={moderation}
+        />
+      )}
+      {case_target && !moderation?.choices.length && (
+        <CaseForm target={case_target} />
+      )}
     </div>
   );
 }

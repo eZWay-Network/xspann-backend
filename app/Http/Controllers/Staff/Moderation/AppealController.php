@@ -42,7 +42,8 @@ final class AppealController
             'page' => ['title' => 'Appeal #' . $appeal, 'breadcrumbs' => []],
             'record' => ['id' => $appeal, 'version' => (int) $row->version, 'status' => $row->status,
                 'fields' => Records::fields($row, ['status', 'explanation', 'resolution', 'version', 'created_at'])],
-            'decision' => ['action' => $decision->action, 'reason' => $decision->reason],
+            'decision' => ['action' => $decision->action, 'reason' => $decision->reason, 'target_type' => $decision->target_type, 'target_id' => $decision->target_id, 'reason_code' => $decision->reason_code],
+            'confirmation_url' => (string) route('staff.challenge')->withQuery(['destination' => '/moderation/appeals/' . $appeal]),
             'report_url' => $context->can('reports.view') ? (string) route('staff.reports.show', ['report' => $report->id]) : null,
             'decision_url' => $independent && $row->status === 'open' && $context->can('appeals.decide') ? (string) route('staff.appeals.decision', ['appeal' => $appeal]) : null,
             'conflict' => $independent ? null : 'An independent reviewer other than the original decision maker must handle this appeal.',
@@ -53,7 +54,7 @@ final class AppealController
     {
         $input = $request->validated()->toArray();
         $input['version'] = (int) $input['version'];
-        Moderation::decideAppeal($appeal, Context::from($request)->user, $input);
+        Moderation::decideAppeal($appeal, Context::from($request)->user, $input, Context::from($request));
         Inertia::flash('success', 'Appeal decision recorded.');
 
         return Inertia::redirect((string) route('staff.appeals.show', ['appeal' => $appeal]), 303);

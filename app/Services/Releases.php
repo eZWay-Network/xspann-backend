@@ -28,7 +28,7 @@ class Releases
 
     public static function owned(User $user, int $id): Video
     {
-        return Video::where('user_id', $user->id)->where('status', '!=', Video::STATUS_DELETED)->findOrFail($id);
+        return Video::where('user_id', $user->id)->whereNull('admin_deleted_at')->where('status', '!=', Video::STATUS_DELETED)->findOrFail($id);
     }
 
     public static function eligible(Video $video): bool

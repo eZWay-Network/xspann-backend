@@ -38,7 +38,7 @@ export function CaseForm({ target }: { target: CaseTarget }) {
   return (
     <FormPanel
       title="Create review case"
-      description="Public account or content only. A different staff member must review your case."
+      description="Create a case to review evidence and record a moderation decision."
       busy={form.processing}
       errors={form.errors}
       submit="Create case"
@@ -78,6 +78,7 @@ export function DecisionForm({
     outcome: "uphold",
     version,
     reason: "",
+    reason_code: "",
   });
   const choices = appeal
     ? ["uphold", "overturn"]
@@ -98,6 +99,7 @@ export function DecisionForm({
           [key]: data[key],
           version,
           reason: data.reason,
+          reason_code: data.reason_code,
         }));
         form.post(url, {
           preserveScroll: true,
@@ -116,6 +118,10 @@ export function DecisionForm({
           onValueChange={(value) => form.setData(key, value)}
         />
       </Field>
+      <ReasonCode
+        value={form.data.reason_code}
+        onChange={(value) => form.setData("reason_code", value)}
+      />
       <ReasonField
         value={form.data.reason}
         onChange={(value) => form.setData("reason", value)}
@@ -217,5 +223,30 @@ export function NoteForm({ url }: { url: string }) {
         />
       </Field>
     </FormPanel>
+  );
+}
+
+export function ReasonCode({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field label="Reason code">
+      <Select
+        label="Reason code"
+        value={value}
+        options={[
+          { value: "", label: "Choose a reason" },
+          ...["safety", "rights", "spam", "other"].map((code) => ({
+            value: code,
+            label: code.charAt(0).toUpperCase() + code.slice(1),
+          })),
+        ]}
+        onValueChange={onChange}
+      />
+    </Field>
   );
 }

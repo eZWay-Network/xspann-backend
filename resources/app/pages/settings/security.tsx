@@ -1,11 +1,10 @@
 import { useForm, router, Link } from "@inertiajs/react";
 import { Monitor, Smartphone, ShieldCheck } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { SettingsForm } from "@/components/settings-form";
 import { Card } from "@/components/ui/card";
 import { SettingsSection } from "@/components/settings-section";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/password-input";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +16,6 @@ import {
   DialogDismiss,
 } from "@/components/ui/dialog";
 import { FormErrors } from "@/components/form-errors";
-import { EnrollmentSecret } from "@/components/enrollment-secret";
 import { useApp } from "@/contexts/app";
 type Session = {
   id: number;
@@ -32,24 +30,13 @@ type Props = {
   sessions: Session[];
   has_password: boolean;
   password_url: string;
-  factor_url: string;
-  factor_complete_url: string;
-  factor_pending: boolean;
-  factor_secret: string | null;
   revoke_all_url: string;
   confirmation_url: string;
 };
 export default function Security(props: Props) {
   const { preferences, formatDateTime } = useApp();
-  const password = useForm({ password: "", new_password: "", mfa_code: "" });
-  const factor = useForm({ password: "", mfa_code: "" });
-  const complete = useForm({ mfa_code: "" });
+  const password = useForm({ password: "", new_password: "" });
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [factorOpen, setFactorOpen] = useState(false);
-  const completionCode = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (props.factor_pending) completionCode.current?.focus();
-  }, [props.factor_pending]);
   const [revocation, setRevocation] = useState<{
     url: string;
     title: string;
@@ -59,12 +46,12 @@ export default function Security(props: Props) {
     <div className="space-y-8">
       <SettingsSection
         title="Identity confirmation"
-        description="Sensitive changes require fresh credentials and a new authenticator code."
+        description="Sensitive changes require your password."
       >
         <Card className="p-5 sm:p-6">
           <p className="mb-4 flex items-center gap-2 text-sm">
             <ShieldCheck className="size-4 text-success" />
-            Authenticator protection is enabled.
+            Password confirmation protects sensitive changes.
           </p>
           <Link
             href={props.confirmation_url}
@@ -72,11 +59,6 @@ export default function Security(props: Props) {
           >
             Confirm identity
           </Link>
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            Lost your authenticator? Contact your trusted operator for
-            terminal-based recovery. An administrator cannot view your existing
-            setup key.
-          </p>
         </Card>
       </SettingsSection>
       <SettingsSection
@@ -207,133 +189,11 @@ export default function Security(props: Props) {
                     required
                   />
                 </Field>
-                <Field
-                  label="Fresh authenticator code"
-                  error={password.errors.mfa_code}
-                >
-                  <Input
-                    autoComplete="one-time-code"
-                    inputMode="numeric"
-                    maxLength={6}
-                    pattern="[0-9]{6}"
-                    value={password.data.mfa_code}
-                    onValueChange={(value) =>
-                      password.setData("mfa_code", value)
-                    }
-                    required
-                  />
-                </Field>
               </SettingsForm>
             </div>
           )}
         </SettingsSection>
       )}
-      <SettingsSection
-        title="Replace authenticator"
-        description="Verify your current factor before enrolling a replacement. Completion signs out every staff session."
-      >
-        {!props.factor_pending && (
-          <Button
-            variant="secondary"
-            aria-expanded={factorOpen}
-            onClick={() => {
-              setFactorOpen(!factorOpen);
-              factor.reset();
-              factor.clearErrors();
-            }}
-          >
-            {factorOpen ? "Cancel replacement" : "Replace authenticator"}
-          </Button>
-        )}
-        {props.factor_pending ? (
-          <SettingsForm
-            note="Completing replacement signs out every staff session."
-            action={
-              <Button type="submit" size="sm" loading={complete.processing}>
-                Replace authenticator and sign out
-              </Button>
-            }
-            onSubmit={(event) => {
-              event.preventDefault();
-              complete.post(props.factor_complete_url, {
-                onFinish: () => complete.reset(),
-              });
-            }}
-          >
-            <FormErrors errors={complete.errors} />
-            {props.factor_secret ? (
-              <EnrollmentSecret secret={props.factor_secret} />
-            ) : (
-              <p className="text-description">
-                Use the new setup key you just saved. If it was lost, let this
-                setup expire in five minutes and verify your current
-                authenticator again.
-              </p>
-            )}
-            <Field
-              label="New authenticator code"
-              error={complete.errors.mfa_code}
-            >
-              <Input
-                ref={completionCode}
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                value={complete.data.mfa_code}
-                onValueChange={(value) => complete.setData("mfa_code", value)}
-                required
-              />
-            </Field>
-          </SettingsForm>
-        ) : (
-          factorOpen && (
-            <div className="mt-4">
-              <SettingsForm
-                note="Your current authenticator stays active until you confirm the replacement."
-                action={
-                  <Button type="submit" size="sm" loading={factor.processing}>
-                    Set up replacement
-                  </Button>
-                }
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  factor.post(props.factor_url, {
-                    preserveScroll: true,
-                    onFinish: () => factor.reset(),
-                  });
-                }}
-              >
-                <FormErrors errors={factor.errors} />
-                <Field label="Password" error={factor.errors.password}>
-                  <PasswordInput
-                    name="password"
-                    value={factor.data.password}
-                    onValueChange={(value) => factor.setData("password", value)}
-                    autoComplete="current-password"
-                    disabled={factor.processing}
-                    required
-                  />
-                </Field>
-                <Field
-                  label="Current authenticator code"
-                  error={factor.errors.mfa_code}
-                >
-                  <Input
-                    autoComplete="one-time-code"
-                    inputMode="numeric"
-                    maxLength={6}
-                    pattern="[0-9]{6}"
-                    value={factor.data.mfa_code}
-                    onValueChange={(value) => factor.setData("mfa_code", value)}
-                    required
-                  />
-                </Field>
-              </SettingsForm>
-            </div>
-          )
-        )}
-      </SettingsSection>
       <Dialog
         open={revocation !== null}
         onOpenChange={(open) => {
@@ -344,7 +204,7 @@ export default function Security(props: Props) {
           <DialogTitle>{revocation?.title}</DialogTitle>
           <DialogDescription className="mt-2">
             Access from the selected browser sessions ends immediately. A new
-            sign-in requires credentials and MFA.
+            sign-in requires your password.
           </DialogDescription>
           <DialogDismiss />
           <div className="mt-6 flex justify-end gap-3">

@@ -35,4 +35,12 @@ $boost = query('promotion_boosts')->insert([
 foreach ([120, 60] as $seconds) {
     query('promotion_delivery')->insert(['boost_id' => $boost, 'starts_at' => gmdate('Y-m-d H:i:s', time() - $seconds), 'ends_at' => gmdate('Y-m-d H:i:s', time() - $seconds + 30)]);
 }
-echo json_encode(['report' => $report->id, 'user' => $owner->id, 'video' => $video->id, 'artist' => $artist->id, 'playlist' => $playlist->id, 'boost' => $boost]);
+$appeal = null;
+if (($argv[2] ?? '') === 'appeal') {
+    $reviewer = \App\Models\User::where('username', 'moderator')->firstOrFail();
+    $decision = \App\Services\Moderation::decide($report->id, $reviewer, [
+        'action' => 'remove', 'version' => 1, 'reason_code' => 'rights', 'reason' => 'Rights evidence requires review.',
+    ]);
+    $appeal = \App\Services\Moderation::appeal($owner, $decision['decision_id'], 'I have permission to publish this work.')['id'];
+}
+echo json_encode(['appeal' => $appeal, 'report' => $report->id, 'user' => $owner->id, 'video' => $video->id, 'artist' => $artist->id, 'playlist' => $playlist->id, 'boost' => $boost]);

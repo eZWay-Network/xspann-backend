@@ -52,7 +52,9 @@ class AuthController extends Controller
             ]);
         }
 
-        abort_unless(in_array($user->status, ['active', 'suspended'], true), 403, 'This account is not active.');
+        \App\Services\Moderation::expireSuspensions($user->id);
+        $user->refresh();
+        abort_unless(in_array($user->status, ['active', 'suspended', 'banned', 'deleted'], true), 403, 'This account is not active.');
 
         abort_unless($user->hasVerifiedEmail(), 403, 'Please verify your email address before logging in.');
 

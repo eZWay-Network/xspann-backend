@@ -26,7 +26,7 @@ final class LoginController
     {
         BrowserAuth::begin($request, $request->validated()->toArray());
 
-        return Inertia::redirect((string) route('staff.challenge'), 303);
+        return Inertia::redirect(Sessions::destination($request->validated('destination')), 303);
     }
 
     public function logout(): Response

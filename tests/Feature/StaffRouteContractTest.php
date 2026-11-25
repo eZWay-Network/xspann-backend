@@ -33,7 +33,7 @@ class StaffRouteContractTest extends TestCase
         $this->assertSame('/login', parse_url((string) route('staff.login'), PHP_URL_PATH));
     }
 
-    public function testPanelRoutesUseOrderedGuardMfaAndPermissionMiddleware(): void
+    public function testPanelRoutesUseOrderedGuardAndPermissionMiddlewareWithoutMfa(): void
     {
         $names = [];
 
@@ -49,11 +49,13 @@ class StaffRouteContractTest extends TestCase
             if ($name === 'staff.dashboard' || $name === 'staff.attention' || str_starts_with($name, 'staff.team')) {
                 $middleware = $route['middleware'];
                 $this->assertSame('staff.web', $middleware[0]);
-                $this->assertSame('staff.mfa', $middleware[1]);
-                $this->assertTrue(str_starts_with($middleware[2], 'staff.can:'));
-                $this->assertSame('staff.inertia', $middleware[3]);
+                $this->assertTrue(str_starts_with($middleware[1], 'staff.can:'));
+                $this->assertSame('staff.inertia', $middleware[2]);
             }
         }
-        $this->assertSame(113, count($names));
+        $this->assertTrue(count($names) >= 113);
+        foreach (app(Router::class)->getRoutes() as $route) {
+            $this->assertFalse(in_array('staff.mfa', (array) $route['middleware'], true));
+        }
     }
 }

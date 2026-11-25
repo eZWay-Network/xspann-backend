@@ -48,7 +48,7 @@ class FoundationApiReference
             'AccountController@reauthenticate',
             'Account safety',
             'Confirm a sensitive action',
-            'Use exactly one credential: password or a Google ID token issued within five minutes for the already linked identity. Enabled staff must also supply a fresh six-digit TOTP. Proof expires in five minutes, is bound to the current bearer session and purpose, and can be consumed once. Staff access uses browser login and challenge; purpose=staff is rejected here. Suspended verified users may request privacy proofs.',
+            'Use exactly one credential: password or a Google ID token issued within five minutes for the already linked identity. Proof expires in five minutes, is bound to the current bearer session and purpose, and can be consumed once. Staff access uses browser password login; purpose=staff is rejected here. Suspended verified users may request privacy proofs.',
             ['proof' => '<single-use-proof>', 'purpose' => 'export_data', 'expires_at' => '2026-10-29T12:05:00Z', 'staff_access_expires_at' => null],
             '200',
             ['purpose' => ['required', ['in' => ['delete_account', 'export_data']]], 'password' => ['nullable', 'string', 'max:1024'], 'google_token' => ['nullable', 'string', 'max:8192'], 'mfa_code' => ['nullable', 'string', 'max:6']],

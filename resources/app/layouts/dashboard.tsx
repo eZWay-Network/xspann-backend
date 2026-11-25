@@ -77,23 +77,24 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!auth) return;
     const expire = () => {
-      if (Date.now() >= new Date(auth.mfa_expires_at).getTime()) {
+      if (Date.now() >= new Date(auth.session_expires_at).getTime()) {
         setAttentionOpen(false);
         setSearchOpen(false);
         setMobileOpen(false);
-        window.location.assign(urls.challenge);
+        window.location.assign(urls.login);
       }
     };
     const timer = window.setTimeout(
       expire,
-      Math.max(0, new Date(auth.mfa_expires_at).getTime() - Date.now()) + 100,
+      Math.max(0, new Date(auth.session_expires_at).getTime() - Date.now()) +
+        100,
     );
     window.addEventListener("focus", expire);
     return () => {
       clearTimeout(timer);
       window.removeEventListener("focus", expire);
     };
-  }, [auth, urls.challenge]);
+  }, [auth, urls.login]);
   return (
     <div className="relative h-dvh overflow-hidden">
       <Head title={`${pageTitle} · XPN Social`} />

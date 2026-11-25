@@ -12,7 +12,7 @@ use Spark\Http\{Request, Response};
 final class PlaylistController
 {
     private const COLUMNS = ['id', 'artist_id', 'title', 'description', 'genre_id', 'category', 'visibility', 'moderation_status', 'version', 'created_at'];
-    private const FILTERS = ['visibility' => ['public', 'private'], 'moderation_status' => ['approved', 'restricted']];
+    private const FILTERS = ['visibility' => ['public', 'private'], 'moderation_status' => ['approved', 'reviewing', 'restricted', 'removed']];
 
     public function index(Request $request): Response
     {
@@ -44,7 +44,8 @@ final class PlaylistController
         $row = DB::table('artist_playlists')->select(self::COLUMNS)->where('id', $id)->firstOrFail();
         $fields = Records::fields($row, self::COLUMNS);
         $owner = DB::table('artists')->where('id', $row->artist_id)->value('user_id');
-        $links = [];
+        $links = $context->can('users.view')
+            ? [['label' => 'Author #' . $owner, 'url' => (string) route('staff.users.show', ['user' => $owner])]] : [];
         $filters = ListFilters::read($request);
         $items = DB::table('artist_playlist_items')->join('videos', 'videos.id', '=', 'artist_playlist_items.video_id')
             ->where('artist_playlist_items.playlist_id', $id)->select(['videos.id', 'videos.caption'])
@@ -56,7 +57,9 @@ final class PlaylistController
             }
         }
 
-        return Inertia::render('content/playlists/show', ['page' => ['title' => 'Playlist #' . $id, 'breadcrumbs' => []],
+        return Inertia::render('content/playlists/show', [
+            'moderation' => \App\Http\Resources\Staff\ModerationActions::forTarget($context, 'playlist', $id),
+            'page' => ['title' => 'Playlist #' . $id, 'breadcrumbs' => []],
             'fields' => $fields, 'links' => $links,
             'items' => ['rows' => array_map(fn ($video) => ['label' => $video->caption ?: 'Video #' . $video->id,
                 'url' => (string) route('staff.videos.show', ['video' => $video->id])], $items->items()),

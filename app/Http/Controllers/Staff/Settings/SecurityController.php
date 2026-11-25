@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Staff\Settings;
 
-use App\Http\Requests\Staff\{ChallengeRequest, PasswordRequest};
-use App\Services\{AuditTrail, Totp};
+use App\Http\Requests\Staff\PasswordRequest;
+use App\Services\AuditTrail;
 use App\Services\Staff\{BrowserAuth, Context, Sessions, StaffException, Team};
 use Inertia\Facades\Inertia;
 use Spark\Facades\{DB, Hash, Session};
@@ -17,14 +17,6 @@ final class SecurityController
         $sessions = DB::table('staff_sessions')->where('user_id', $context->user->id)->whereNotNull('membership_version')
             ->whereNull('revoked_at')->where('expires_at', '>', Sessions::timestamp())->where('absolute_expires_at', '>', Sessions::timestamp())
             ->orderBy('id', 'desc')->all(['id', 'device_label', 'authenticated_at', 'last_activity_at', 'expires_at']);
-        $replacement = Session::get('staff_factor_replacement');
-
-        if ($replacement && $replacement['expires'] <= time()) {
-            Session::forget('staff_factor_replacement');
-            Session::forget('staff_factor_secret_once');
-            $replacement = null;
-        }
-
         return Inertia::render('settings/security', [
             'sessions' => array_map(fn($row) => [
                 'id' => (int) $row->id,
@@ -37,10 +29,6 @@ final class SecurityController
             ], $sessions),
             'has_password' => (bool) $context->user->password,
             'password_url' => (string) route('staff.security.password'),
-            'factor_url' => (string) route('staff.security.factor'),
-            'factor_complete_url' => (string) route('staff.security.factor.complete'),
-            'factor_pending' => $replacement !== null,
-            'factor_secret' => Session::pull('staff_factor_secret_once'),
             'revoke_all_url' => (string) route('staff.sessions.revoke_all'),
             'confirmation_url' => (string) route('staff.challenge')->withQuery(['destination' => '/settings/security']),
             'page' => ['title' => 'Security & sessions', 'breadcrumbs' => []],
@@ -79,7 +67,7 @@ final class SecurityController
     public function password(PasswordRequest $request): Response
     {
         $context = Context::from($request);
-        BrowserAuth::challenge($request, $request->validated()->only('password', 'mfa_code')->toArray(), $context);
+        BrowserAuth::challenge($request, $request->validated()->only('password')->toArray(), $context);
         Team::locked(function () use ($request, $context): void {
             $context = Sessions::requireCurrent($context);
 
@@ -97,50 +85,4 @@ final class SecurityController
         return Inertia::location((string) route('staff.login'));
     }
 
-    public function factor(ChallengeRequest $request): Response
-    {
-        $context = Context::from($request);
-        BrowserAuth::challenge($request, $request->validated()->toArray(), $context);
-        $secret = Totp::secret();
-        Session::put('staff_factor_replacement', [
-            'user_id' => $context->user->id,
-            'version' => (int) $context->membership->version,
-            'secret' => Hash::encrypt($secret),
-            'expires' => time() + config('staff.confirmation_seconds'),
-        ]);
-        Session::put('staff_factor_secret_once', $secret);
-
-        return Inertia::redirect((string) route('staff.security'), 303);
-    }
-
-    public function completeFactor(ChallengeRequest $request): Response
-    {
-        $context = Context::from($request);
-        BrowserAuth::throttle('factor:' . $context->user->id);
-        Team::locked(function () use ($request, $context): void {
-            $context = Sessions::requireCurrent($context);
-            $replacement = Session::get('staff_factor_replacement');
-            $member = DB::table('staff_accounts')->where('user_id', $context->user->id)->where('enabled', true)->lockForUpdate()->first();
-
-            if (!$replacement || !$member || $replacement['expires'] <= time() || $replacement['user_id'] !== $context->user->id || $replacement['version'] !== (int) $member->version) {
-                throw new StaffException('Authenticator setup expired. Start again with your current authenticator.', 422);
-            }
-            $counter = Totp::counter(Hash::decrypt($replacement['secret']), $request->validated('mfa_code'));
-
-            if ($counter === null) {
-                throw new StaffException('Enter the code from your new authenticator.', 422, 'mfa_code');
-            }
-            DB::table('staff_accounts')->where('id', $member->id)->update([
-                'mfa_secret' => $replacement['secret'],
-                'last_counter' => $counter,
-                'version' => (int) $member->version + 1,
-                'updated_at' => Sessions::timestamp(),
-            ]);
-            Sessions::revokeAll($context->user->id);
-            AuditTrail::record('staff.authenticator_replaced', [], $context->user->id, 'staff');
-        });
-        Sessions::logout();
-
-        return Inertia::location((string) route('staff.login'));
-    }
 }

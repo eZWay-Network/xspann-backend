@@ -5,13 +5,11 @@ const control = (action: string, role: string) => execFileSync("php", ["tests/Br
 const seed = () => JSON.parse(execFileSync("php", ["tests/Browser/staff/finance-fixture.php", fixture], { encoding: "utf8" })) as { adjustment: number; webhook: number; invoice: number };
 const worker = () => execFileSync("php", ["tests/Browser/staff/finance-fixture.php", fixture, "worker"], { encoding: "utf8" });
 async function login(page: Page, role: string, path: string) {
-  control("reset-replay", role);
+  control("reset-login", role);
   await page.goto(path);
   await page.getByLabel("Email address", { exact: true }).fill(`${role}@example.test`);
   await page.getByLabel("Password", { exact: true }).fill("StaffFixturePassword123!");
   await page.getByRole("button", { name: "Continue securely" }).click();
-  await page.getByLabel("Authenticator code", { exact: true }).fill(control("code", role));
-  await page.getByRole("button", { name: "Verify and continue" }).click();
 }
 test("finance allocates a reviewed adjustment and completes a failed receipt retry", async ({ page }, info) => {
   const records = seed();

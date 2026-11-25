@@ -57,7 +57,6 @@ final class SharedProps
             ],
             'role' => $context->membership->role,
             'permissions' => Permissions::forRole($context->membership->role),
-            'mfa_expires_at' => Sessions::iso($context->session->mfa_expires_at),
             'session_expires_at' => Sessions::iso($context->session->expires_at),
         ];
     }

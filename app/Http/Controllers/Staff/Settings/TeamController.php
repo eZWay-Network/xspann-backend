@@ -31,7 +31,7 @@ final class TeamController
         return Inertia::render('settings/team', [
             'members' => array_map(fn ($row) => [
                 'id' => (int) $row->id, 'user_id' => (int) $row->user_id, 'name' => $row->name, 'username' => $row->username,
-                'role' => $row->role, 'enabled' => (bool) $row->enabled, 'version' => (int) $row->version,
+                'role' => $row->role, 'legacy' => !in_array($row->role, Permissions::roles(), true), 'enabled' => (bool) $row->enabled, 'version' => (int) $row->version,
                 'action_url' => (string) route('staff.team.update', ['member' => $row->id]),
                 'show_url' => (string) route('staff.team.show', ['member' => $row->id]),
                 'can_change_role' => (int) $row->user_id !== Context::from($request)->user->id,
@@ -46,7 +46,8 @@ final class TeamController
             'roles' => array_map(fn ($role) => ['value' => $role, 'label' => ucwords(str_replace('_', ' ', $role))], Permissions::roles()),
             'invite_url' => (string) route('staff.team.invite'),
             'confirmation_url' => (string) route('staff.challenge')->withQuery(['destination' => '/settings/team']),
-            'page' => ['title' => 'Team & access', 'breadcrumbs' => []],
+            'permissions_url' => (string) route('staff.settings.roles'),
+            'page' => ['title' => 'Admin roles', 'breadcrumbs' => []],
         ]);
     }
 

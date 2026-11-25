@@ -3,8 +3,8 @@
 namespace App\Services\Staff;
 
 use App\Models\User;
-use App\Services\{AuditTrail, Totp};
-use Spark\Facades\{Cache, DB, Hash};
+use App\Services\AuditTrail;
+use Spark\Facades\{Cache, DB};
 
 final class Team
 {
@@ -25,11 +25,13 @@ final class Team
 
     public static function protectLastAdmin(object $member, string $role, bool $enabled): void
     {
-        if ($member->role !== 'admin' || !$member->enabled || ($role === 'admin' && $enabled)) {
+        if ($member->role !== 'super_admin' || !$member->enabled || ($role === 'super_admin' && $enabled)) {
             return;
         }
-        $other = DB::table('staff_accounts')->where('role', 'admin')->where('enabled', true)
-            ->where('user_id', '!=', $member->user_id)->lockForUpdate()->first();
+        $other = DB::table('staff_accounts')->where('role', 'super_admin')->where('enabled', true)
+            ->where('user_id', '!=', $member->user_id)
+            ->whereIn('user_id', User::select('id')->where('status', 'active')->whereNotNull('email_verified_at')->whereNotNull('onboarded_at'))
+            ->lockForUpdate()->first();
 
         if (!$other) {
             throw new StaffException('Keep at least one enabled administrator. Enroll another administrator first.', 409);
@@ -89,25 +91,20 @@ final class Team
         return $invitation;
     }
 
-    public static function accept(string $hash, string $secret, string $code, int $expectedUser, string $credentialVersion): User
+    public static function accept(string $hash, int $expectedUser, string $credentialVersion): User
     {
-        return self::locked(function () use ($hash, $secret, $code, $expectedUser, $credentialVersion): User {
+        return self::locked(function () use ($hash, $expectedUser, $credentialVersion): User {
             $invitation = self::invitation($hash);
             $user = User::find($invitation->user_id);
 
             if (!Sessions::eligible($user) || $user->id !== $expectedUser || !hash_equals($credentialVersion, BrowserAuth::credentialVersion($user))) {
                 throw new StaffException('This invitation cannot be accepted by this account.', 403);
             }
-            $counter = Totp::counter($secret, $code);
-
-            if ($counter === null) {
-                throw new StaffException('Enter the code from the authenticator you just set up.', 422, 'mfa_code');
-            }
             DB::table('staff_accounts')->upsert([
                 'user_id' => $user->id,
                 'role' => $invitation->role,
-                'mfa_secret' => Hash::encrypt($secret),
-                'last_counter' => $counter,
+                'mfa_secret' => null,
+                'last_counter' => -1,
                 'enabled' => true,
                 'version' => (int) $invitation->membership_version + 1,
                 'created_at' => Sessions::timestamp(),
@@ -137,16 +134,11 @@ final class Team
                 throw new StaffException('Staff access changed. Reload and review the current role before retrying.', 409);
             }
             $action = $input['action'];
+            abort_if($action === 'role' && !in_array($input['role'], Permissions::roles(), true), 422, 'Choose a core staff role.');
             $role = $action === 'role' ? $input['role'] : $member->role;
             $enabled = $action === 'disable' ? false : ($action === 'enable' ? true : (bool) $member->enabled);
             if ($action === 'enable') {
-                abort_unless(!$member->enabled && Sessions::eligible(User::find($member->user_id)) && $member->mfa_secret, 409, 'This account requires a new enrollment.');
-                // A retained, decryptable enrolled factor is required; enabling never replaces it.
-                try {
-                    Totp::code(Hash::decrypt($member->mfa_secret), (int) $member->last_counter);
-                } catch (\Throwable) {
-                    throw new StaffException('This account requires a new authenticator enrollment.', 409);
-                }
+                abort_unless(!$member->enabled && Sessions::eligible(User::find($member->user_id)), 409, 'This account is not eligible for staff access.');
             }
 
             if ((int) $member->user_id === $context->user->id && $action === 'role') {

@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Http\Resources\CommunicationResource;
 use App\Jobs\ProcessPrivacyRequest;
 use App\Models\Report;
-use App\Services\{AccountSecurity, Announcements, CommunicationPrivacy, Communications, Conversations, Moderation, PrivacyRequests, Totp};
+use App\Services\{AccountSecurity, Announcements, CommunicationPrivacy, Communications, Conversations, Moderation, PrivacyRequests};
 use App\Services\Billing\Billing;
 use Spark\Facades\Hash;
 use Tests\Support\CommunicationFixtures;
@@ -110,8 +110,7 @@ class CommunicationLifecycleTest extends TestCase
         [$message] = Conversations::send($conversation->id, $a->id, 'Reported content', $this->messageInput()['client_message_id']);
         Conversations::send($conversation->id, $a->id, 'Unreported private content', $this->messageInput()['client_message_id']);
         $report = Moderation::report($b, ['message_id' => $message->id, 'reason' => 'Review']);
-        $secret = Totp::secret();
-        AccountSecurity::enrollStaff($staff, 'moderator', $secret, Totp::code($secret, intdiv(time(), 30) - 1));
+        AccountSecurity::enrollStaff($staff, 'moderator');
         $this->asUser($staff)->browserPage('/moderation/reports/' . $report->id)->assertStatus(409);
         $this->browserLogin($staff, 'moderator');
         $response = $this->browserEvidence('/moderation/reports/' . $report->id)->assertOk()
@@ -119,7 +118,7 @@ class CommunicationLifecycleTest extends TestCase
         $this->assertFalse(str_contains($response->content(), 'Unreported private content'));
         $this->asUser($staff)->getJson("/api/v1/conversations/$conversation->id/messages")->assertNotFound();
         $this->assertDatabaseHas('audit_events', ['action' => 'moderation.evidence_viewed']);
-        $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'restrict', 'reason' => 'Restricted message', 'version' => 1])->assertStatus(303);
+        $this->browserWrite('/moderation/reports/' . $report->id . '/decision', ['action' => 'remove', 'reason' => 'Removed message', 'version' => 1])->assertStatus(303);
         $this->asUser($b)->getJson("/api/v1/conversations/$conversation->id/messages?after_id=0")->assertOk()
             ->assertJsonPath('data.0.body', null)->assertJsonPath('data.0.unavailable', true)
             ->assertJsonPath('data.1.body', 'Unreported private content');

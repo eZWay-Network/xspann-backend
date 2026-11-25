@@ -28,11 +28,11 @@ if (file_exists($directory . '/database.sqlite')) {
 foreach (glob(dirname(__DIR__, 3) . '/database/migrations/migration_*.php') as $path) {
     (require $path)->up();
 }
-$secret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
 foreach ([
     'admin' => 'Alex Morgan',
     'moderator' => 'Jamie Rivera',
+    'senior_moderator' => 'Jordan Bell',
     'analyst' => 'Sam Chen',
     'support' => 'Casey Jordan',
     'finance' => 'Drew Taylor',
@@ -44,7 +44,7 @@ foreach ([
         'email_verified_at' => now(), 'onboarded_at' => now(), 'date_of_birth' => '1990-01-01',
     ]);
     query('staff_accounts')->insert([
-        'user_id' => $user->id, 'role' => $role, 'mfa_secret' => \Spark\Facades\Hash::encrypt($secret),
+        'user_id' => $user->id, 'role' => $role === 'admin' ? 'super_admin' : $role, 'mfa_secret' => null,
         'last_counter' => -1, 'enabled' => true, 'version' => 1, 'created_at' => now(), 'updated_at' => now(),
     ]);
 }

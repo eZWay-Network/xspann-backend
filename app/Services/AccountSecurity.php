@@ -74,15 +74,6 @@ class AccountSecurity
         }
     }
 
-    /** Caller holds the account security lock and database transaction. */
-    public static function consumeStaffTotp(object $staff, string $code): void
-    {
-        $counter = Totp::counter(Hash::decrypt($staff->mfa_secret), $code, (int) $staff->last_counter);
-        abort_unless($counter !== null, 422, 'A fresh authenticator code is required.');
-        abort_unless(DB::table('staff_accounts')->where('id', $staff->id)->where('last_counter', $staff->last_counter)
-            ->update(['last_counter' => $counter, 'updated_at' => now()->toDateTimeString()]) === 1, 409, 'Retry with a fresh authenticator code.');
-    }
-
     public static function reauthenticate(User $user, array $input): array
     {
         $purpose = $input['purpose'];
@@ -90,12 +81,6 @@ class AccountSecurity
         self::verifyCredential($user, $input);
 
         return Cache::lock("accounts.security.$user->id", 10)->block(5, fn() => DB::transaction(function () use ($user, $input, $purpose): array {
-            $staff = DB::table('staff_accounts')->where('user_id', $user->id)->where('enabled', true)->lockForUpdate()->first();
-
-            if ($staff) {
-                self::consumeStaffTotp($staff, $input['mfa_code'] ?? '');
-            }
-
             AuditTrail::record('account.reauthenticated', ['purpose' => $purpose], $user->id);
 
             return [
@@ -107,7 +92,7 @@ class AccountSecurity
         }));
     }
 
-    public static function enrollStaff(User $user, string $role, string $secret, string $code): void
+    public static function enrollStaff(User $user, string $role): void
     {
         if (!in_array($role, \App\Services\Staff\Permissions::roles(), true)) {
             throw new StaffException('Invalid staff role.');
@@ -117,13 +102,7 @@ class AccountSecurity
             throw new StaffException('Staff must have an active verified adult account.');
         }
 
-        $counter = Totp::counter($secret, $code);
-
-        if ($counter === null) {
-            throw new StaffException('Authenticator enrollment failed. Enter the current six-digit code from the authenticator configured with this secret.');
-        }
-
-        \App\Services\Staff\Team::locked(function () use ($user, $role, $secret, $counter): void {
+        \App\Services\Staff\Team::locked(function () use ($user, $role): void {
             $existing = DB::table('staff_accounts')->where('user_id', $user->id)->lockForUpdate()->first();
             if ($existing) {
                 \App\Services\Staff\Team::protectLastAdmin($existing, $role, true);
@@ -131,9 +110,9 @@ class AccountSecurity
             DB::table('staff_accounts')->upsert([
                 'user_id' => $user->id,
                 'role' => $role,
-                'mfa_secret' => Hash::encrypt($secret),
+                'mfa_secret' => null,
                 'version' => (int) ($existing->version ?? 0) + 1,
-                'last_counter' => $counter,
+                'last_counter' => -1,
                 'enabled' => true,
                 'created_at' => now()->toDateTimeString(),
                 'updated_at' => now()->toDateTimeString(),

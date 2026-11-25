@@ -51,7 +51,7 @@ class FoundationMaintenance implements JobInterface
             DB::table('audit_events')->where('created_at', '<', now()->subDays(config('policies.audit_retention_days', 365))->toDateTimeString())->delete();
 
             // Keep active restrictions and open appeals; closed unneeded evidence has a finite lifetime.
-            Report::where('status', 'resolved')->where('updated_at', '<', now()->subDays(config('policies.closed_report_retention_days', 365))->toDateTimeString())
+            Report::whereIn('status', ['resolved', 'dismissed'])->where('updated_at', '<', now()->subDays(config('policies.closed_report_retention_days', 365))->toDateTimeString())
                 ->whereNotIn('id', DB::table('moderation_decisions')->select('report_id')->where('active', true))
                 ->whereNotIn('id', DB::table('moderation_decisions')->select('report_id')->whereIn('id', DB::table('moderation_appeals')->select('decision_id')->where('status', 'open')))
                 ->delete();

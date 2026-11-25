@@ -70,7 +70,8 @@ final class RealtimeJourneyServer extends Tests\TestCase
                     unlink($control . '/restrict');
                     $message = query('messages')->where('conversation_id', 1)->first();
                     $report = Moderation::report($users[1], ['message_id' => $message->id, 'reason' => 'Fixture review']);
-                    Moderation::decide($report->id, $users[2], ['action' => 'restrict', 'version' => $report->version, 'reason' => 'Fixture restriction']);
+                    \App\Services\AccountSecurity::enrollStaff($users[2], 'moderator');
+                    Moderation::decide($report->id, $users[2], ['action' => 'restrict', 'reason_code' => 'other', 'version' => $report->version, 'reason' => 'Fixture restriction']);
                 }
                 if (is_file($control . '/restart')) {
                     unlink($control . '/restart');
