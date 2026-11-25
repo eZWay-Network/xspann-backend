@@ -7,7 +7,7 @@ Read `.agents/skills/tinymvc-ember/SKILL.md` and only the relevant topic referen
 
 ## Application & Stack Context
 
-- **Framework**: TinyMVC Spark (`tinymvc/tinycore` 4.3.7)
+- **Framework**: TinyMVC Spark (`tinymvc/tinycore` 4.3.9)
 - **PHP Version**: 8.4.27 (required >= 8.2)
 - **Database**: mysql
 - **Cache Store**: database
