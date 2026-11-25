@@ -67,7 +67,7 @@ async function restore(page: Page, prefix: string, reason: string) {
   await action(page, name, reason);
 }
 
-test("password login, seven primary pages and direct content removal", async ({
+test("password login, grouped navigation and direct content removal", async ({
   page,
   isMobile,
 }) => {
@@ -78,19 +78,25 @@ test("password login, seven primary pages and direct content removal", async ({
   if (isMobile)
     await page.getByRole("button", { name: "Open navigation" }).click();
   const nav = page.getByRole("navigation", { name: "Main navigation" });
-  for (const name of [
-    "Dashboard",
-    "Reports",
-    "Users",
-    "Appeals",
-    "Audit log",
-    "Admin roles",
-  ]) {
+  for (const name of ["Dashboard", "Analytics", "Attention"]) {
     await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
   }
+  for (const name of [
+    "Community",
+    "Content",
+    "Moderation",
+    "Promotions",
+    "Billing",
+    "Operations",
+  ]) {
+    await expect(nav.getByRole("button", { name, exact: true })).toBeVisible();
+  }
   await expect(
-    nav.getByRole("button", { name: "Content", exact: true }),
-  ).toBeVisible();
+    nav.getByRole("button", { name: "Advanced", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    nav.getByRole("link", { name: "Admin roles", exact: true }),
+  ).toHaveCount(0);
   if (isMobile) await page.keyboard.press("Escape");
   await page.goto(`/content/videos/${record.video}`);
   await action(
