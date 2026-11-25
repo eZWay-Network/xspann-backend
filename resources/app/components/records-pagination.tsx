@@ -15,30 +15,44 @@ export function RecordsPagination({
   busy?: boolean;
 }) {
   if (!total) return null;
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
-      <p aria-live="polite">
-        {total.toLocaleString()} {total === 1 ? "record" : "records"}{" "}
-        <span className="mx-1.5">·</span> Page {page} of {Math.max(1, lastPage)}
-      </p>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
+        <span className="font-semibold text-foreground tabular-nums">
+          {total.toLocaleString()}
+        </span>
+        <span>{total === 1 ? "record found" : "records found"}</span>
+        <span className="text-border">·</span>
+        <span>
+          Page <strong className="font-semibold text-foreground">{page}</strong>{" "}
+          of{" "}
+          <strong className="font-semibold text-foreground">
+            {Math.max(1, lastPage)}
+          </strong>
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2">
         <Button
           size="sm"
           variant="secondary"
           disabled={page <= 1 || busy}
           onClick={() => onChange(page - 1)}
+          className="gap-1 shadow-xs"
         >
-          <ChevronLeft />
-          Previous
+          <ChevronLeft className="size-3.5" />
+          <span>Previous</span>
         </Button>
         <Button
           size="sm"
           variant="secondary"
           disabled={page >= lastPage || busy}
           onClick={() => onChange(page + 1)}
+          className="gap-1 shadow-xs"
         >
-          Next
-          <ChevronRight />
+          <span>Next</span>
+          <ChevronRight className="size-3.5" />
         </Button>
       </div>
     </div>
@@ -58,6 +72,7 @@ export function CursorPagination({
   busy?: boolean;
 }) {
   if (!previous && !next) return null;
+
   return (
     <div className="flex justify-end gap-2">
       <Button
@@ -65,18 +80,20 @@ export function CursorPagination({
         variant="secondary"
         disabled={!previous || busy}
         onClick={() => previous && onNavigate(previous)}
+        className="gap-1 shadow-xs"
       >
-        <ChevronLeft />
-        Previous
+        <ChevronLeft className="size-3.5" />
+        <span>Previous</span>
       </Button>
       <Button
         size="sm"
         variant="secondary"
         disabled={!next || busy}
         onClick={() => next && onNavigate(next)}
+        className="gap-1 shadow-xs"
       >
-        Next
-        <ChevronRight />
+        <span>Next</span>
+        <ChevronRight className="size-3.5" />
       </Button>
     </div>
   );

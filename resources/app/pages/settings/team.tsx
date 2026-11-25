@@ -54,7 +54,7 @@ type PageMeta = { current_page: number; last_page: number; total: number };
 type Option = { value: string; label: string };
 export default function Team({
   members,
-  permissions_url,
+  permissions_url: _permissions_url,
   invitations,
   roles,
   invite_url,
@@ -108,9 +108,6 @@ export default function Team({
           Invite staff member
         </Button>
       </div>
-      <Link href={permissions_url} className="text-sm underline">
-        View role permissions
-      </Link>
       {invitationUrl && (
         <Alert variant="success">
           <div className="space-y-3">

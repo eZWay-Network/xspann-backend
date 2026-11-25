@@ -1,8 +1,9 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
+
 export function Table({ className, ...props }: ComponentProps<"table">) {
   return (
-    <div className="relative overflow-x-auto">
+    <div className="relative w-full overflow-x-auto">
       <table
         className={cn(
           "w-full text-left text-sm whitespace-nowrap [&_tbody_tr:last-child_td]:border-b-0",
@@ -13,23 +14,25 @@ export function Table({ className, ...props }: ComponentProps<"table">) {
     </div>
   );
 }
+
 export function TableHead({ className, ...props }: ComponentProps<"th">) {
   return (
     <th
       scope="col"
       className={cn(
-        "border-y bg-muted/50 px-5 py-3.5 text-[11px] font-medium text-muted-foreground first:pl-6 last:pr-6",
+        "border-y border-border/80 bg-muted/40 px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground first:pl-6 last:pr-6",
         className,
       )}
       {...props}
     />
   );
 }
+
 export function TableCell({ className, ...props }: ComponentProps<"td">) {
   return (
     <td
       className={cn(
-        "border-b border-border/80 px-5 py-4 text-[13px] first:pl-6 last:pr-6",
+        "border-b border-border/60 px-5 py-3.5 text-[13px] first:pl-6 last:pr-6 align-middle",
         className,
       )}
       {...props}
